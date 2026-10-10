@@ -1,0 +1,16 @@
+{
+  "name": "bjoern-mods",
+  "owner": { "name": "Björn Müller" },
+  "metadata": { "description": "Die 10 Claude-Code-Mods aus dem Video 'Diese 10 Claude Code Mods solltest du unbedingt kennen' (Fremd-Mods direkt aus ihren Repos) plus das eigene Cache-Meter." },
+  "plugins": [
+    { "name": "savvy-progress", "source": { "source": "git-subdir", "url": "https://github.com/JohnnyVizz/claude-kit.git", "path": "plugins/savvy-progress" } },
+    { "name": "next-steps", "source": { "source": "git-subdir", "url": "https://github.com/hamzafer/claude-code-mods.git", "path": "mods/next-steps" } },
+    { "name": "filetree", "source": { "source": "github", "repo": "data-goblin/claude-code-filetree" } },
+    { "name": "cache-meter", "source": "./cache-meter", "description": "Cache-Countdown, Trefferquote und Kontext-Wetter mit Compact-Knopf (Eigenbau)" },
+    { "name": "cache-tax", "source": { "source": "github", "repo": "karanb192/cache-tax" } },
+    { "name": "visible-compact", "source": { "source": "github", "repo": "nvsravank/visible-compact" } },
+    { "name": "catch-me-up", "source": { "source": "github", "repo": "oliverow/catch-me-up" } },
+    { "name": "replay-theater", "source": { "source": "git-subdir", "url": "https://github.com/anthropics/claude-code-playground.git", "path": "claude-code/mods/replay-theater" } },
+    { "name": "blast-radius", "source": { "source": "git-subdir", "url": "https://github.com/anthropics/claude-code-playground.git", "path": "claude-code/mods/blast-radius" } }
+  ]
+}

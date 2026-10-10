@@ -1,0 +1,6 @@
+{
+  "name": "cache-meter",
+  "version": "0.1.0",
+  "description": "Leiste über dem Prompt: wie lange der Prompt-Cache noch warm ist, die Cache-Trefferquote der letzten Anfrage und das Kontext-Wetter mit Compact-Knopf.",
+  "types": "./types/index.d.ts"
+}
