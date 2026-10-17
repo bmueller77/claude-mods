@@ -178,6 +178,9 @@ const LABEL_WIDTH = 10
 const TICK_MS = 250
 // Calm mode redraws only to keep times current.
 const CALM_TICK_MS = 5000
+// With the night shift on, nobody is there to press Start: a waiting plan starts by itself this long after it began
+// to wait with the shift on.
+const NIGHT_SHIFT_START_MS = 30_000
 // A job shorter than this finishes without a sound.
 const LONG_JOB_MS = 60_000
 const COLLAPSE_MS = 5000
@@ -382,6 +385,11 @@ let tickerEvery = 0
 let hasSign = false
 let lastSignAt = 0
 let isStalled = false
+// The night shift's own Start: the waiting plan it counts down for and since when, the timer that starts it, and the
+// plan already started (by it or by Start), so a plan laid out again starts once. A reload counts down afresh.
+let nightStart: { plan: string; since: number } | null = null
+let nightTimer: Timer | undefined
+let nightStartedPlan: string | null = null
 
 const now = ($: $) => $.clock.now()
 
@@ -401,6 +409,7 @@ const syncTicker = ($: $, list: GlanceChecklist | null) => {
     ticker = $.clock.every(every, () => {
       void update($, tickAtom, tick => (tick ?? 0) + 1)
       void checkStall($)
+      void checkNightStart($)
     })
   }
 }
@@ -1657,6 +1666,8 @@ const holdForApproval = async ($: $): Promise<boolean> => {
     return false
   }
   await change($, list => ({ ...list, approval: 'waiting', phase: 'needsYou', needsYouReason: APPROVE }))
+  // With the night shift on, its count to Start begins now; the same plan laid out again keeps its count.
+  await armNightStart($)
 
   return true
 }
@@ -1676,11 +1687,90 @@ const planApproval = (list: GlanceChecklist | null, steps: string[]): GlanceChec
 /** A helper's kind as the person reads it: GlanceFlow's workers by their tier ("sorgfältig"), any other as named. */
 const helperType = (type: string): string => (isTierAgent(type) ? (TIERS.find(tier => tierAgent(tier) === type)?.label ?? type) : type)
 
-/** The person approves the plan: the same job starts. */
+/**
+ * A plan waiting for Start, as the night shift's Start tells plans apart: its job and its steps, the planned ones when
+ * there are any, as planApproval counts them. Null when no plan waits.
+ */
+const waitingPlanOf = (list: GlanceChecklist | null): string | null => {
+  if (list?.approval !== 'waiting') return null
+  const planned = list.tasks.filter(one => one.id.startsWith('plan#'))
+  return [list.jobId, ...(planned.length > 0 ? planned : list.tasks).map(one => one.name)].join('\n')
+}
+
+const stopNightStart = () => {
+  nightTimer?.cancel()
+  nightTimer = undefined
+  nightStart = null
+}
+
+/** The person approves the plan: the same job starts, and the night shift has nothing left to start for it. */
 const startPlan = async ($: $) => {
   if (await isCompactingNow($)) return false
-  return sendAsUser($, START_TEXT, () => $.ui.toast("Starten geht gerade nicht. Schreib: los"))
+  const plan = waitingPlanOf(await read($, checklistAtom))
+  const isSent = await sendAsUser($, START_TEXT, () => $.ui.toast("Starten geht gerade nicht. Schreib: los"))
+  if (isSent && plan !== null) {
+    nightStartedPlan = plan
+    stopNightStart()
+  }
+  return isSent
 }
+
+/**
+ * The night shift's count to Start: it runs while GlanceFlow is on, a plan waits for Start and the night shift is on,
+ * from the moment all three hold. A new plan starts it over; anything else ends it. Returns the plan counted for.
+ */
+const armNightStart = async ($: $): Promise<string | null> => {
+  const plan = waitingPlanOf((await read($, enabledAtom)) ? await read($, checklistAtom) : null)
+  if (plan === null) {
+    // Started once holds for one wait: a plan that waits again later is counted again.
+    nightStartedPlan = null
+    stopNightStart()
+    return null
+  }
+  const isOn = await isNightShiftOn($)
+  const at = await now($)
+  // Nothing is awaited from here on, so two checks at once agree.
+  if (!isOn || plan === nightStartedPlan) {
+    stopNightStart()
+    return null
+  }
+  if (nightStart?.plan !== plan) {
+    nightTimer?.cancel()
+    nightStart = { plan, since: at }
+    nightTimer = $.clock.after(NIGHT_SHIFT_START_MS, () => void checkNightStart($))
+  }
+  return plan
+}
+
+/**
+ * On each tick and when the count is up: with the night shift on, a plan that has waited NIGHT_SHIFT_START_MS for
+ * Start starts as if the person pressed it, once. Not while the chat is compacted; the first tick after it does.
+ */
+const checkNightStart = async ($: $) => {
+  const plan = await armNightStart($)
+  const since = plan !== null && nightStart?.plan === plan ? nightStart.since : null
+  if (since === null || (await now($)) - since < NIGHT_SHIFT_START_MS || (await read($, compactingAtom))) return
+  // Checked again with nothing awaited before the start: a plan changed, approved or switched off meanwhile, or one a
+  // check at the same moment started, does not start (again).
+  if (nightStart?.plan !== plan || plan === nightStartedPlan) return
+  nightStartedPlan = plan
+  stopNightStart()
+  // Not sent: the next check counts down afresh.
+  if (!(await startPlan($))) nightStartedPlan = null
+}
+
+/** Seconds until the night shift starts this waiting plan, in the steps the band redraws in; null when it won't. */
+const nightStartSeconds = (list: GlanceChecklist, at: number): number | null => {
+  const plan = waitingPlanOf(list)
+  if (plan === null || plan === nightStartedPlan) return null
+  // Not counted yet: the next check starts the count, at full length.
+  const left = nightStart?.plan === plan ? nightStart.since + NIGHT_SHIFT_START_MS - at : NIGHT_SHIFT_START_MS
+  return left > 0 ? Math.ceil(left / CALM_TICK_MS) * (CALM_TICK_MS / 1000) : null
+}
+
+/** What Claude reads about a waiting plan while the night shift is on: it starts without the person. Empty otherwise. */
+const nightStartNote = async ($: $) =>
+  (await isNightShiftOn($)) ? ` Die Nachtschicht startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.` : ''
 
 /** Picks Simple, Details, Minimal or Off directly, as the settings panel does. */
 const setView = async ($: $, view: 'simple' | 'detailed' | 'minimal' | 'off') => {
@@ -2428,7 +2518,8 @@ export function registerGlance(on: On): void {
         return {
           result:
             `${steps.length} Schritte geplant. Die Person gibt Pläne frei, bevor die Arbeit beginnt: Hör jetzt auf und warte auf ihre Antwort. ` +
-            'Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an.',
+            'Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an.' +
+            (await nightStartNote($)),
         }
       }
 
@@ -2490,7 +2581,7 @@ export function registerGlance(on: On): void {
     }
 
     if (isEnabled && list?.approval === 'waiting' && !ALWAYS_ALLOWED.has(tool)) {
-      return { deny: 'Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort.' }
+      return { deny: 'Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort.' + (await nightStartNote($)) }
     }
 
     if (isEnabled && (await read($, workModeAtom)) === 'dynamisch') {
@@ -3760,10 +3851,22 @@ export function registerGlance(on: On): void {
     const isLimitStuck = isStuck && /limit/i.test(list0?.stuckReason ?? '')
     // Beside "try again later" a usage limit's button checks whether it has lifted.
     const continueLabel = vector && isStuck ? (isLimitStuck ? 'Erneut prüfen' : 'Erneut versuchen') : 'Weiter'
+    // With the night shift on, a waiting plan starts by itself: beside Start, dim, how long until then. The terminal
+    // reads the night shift only while a plan waits, so its writes redraw nothing else there.
+    const nightStartIn =
+      !isCompacting && list0?.approval === 'waiting' && (vector ? nightShift : await isNightShiftOn($)) ? nightStartSeconds(list0, current) : null
+    const nightStartHint = nightStartIn !== null && (
+      <Text key="night-start" dimColor wrap="truncate-end">
+        {`startet in ${nightStartIn} s`}
+      </Text>
+    )
     const controls = isEnabled
       ? [
           canPause && action('pause', 'pause', pauseLabel, () => pauseJob($)),
+          // Elsewhere than the terminal Start, the main button, stays last; the hint goes before it.
+          vector && nightStartHint,
           !isCompacting && list0?.approval === 'waiting' && action('start', 'play', 'Start', () => startPlan($), undefined, true),
+          !vector && nightStartHint,
           !isCompacting && canContinue && action('continue', 'play', continueLabel, () => continueJob($), undefined, !(vector && isLimitStuck)),
         ].filter(Boolean)
       : []
@@ -3780,14 +3883,16 @@ export function registerGlance(on: On): void {
       (list0?.phase === 'done' || armed === 'ship') &&
       action('ship', 'ship', armed === 'ship' ? 'Noch mal drücken für Push' : 'Push', () => pressTwice($, 'ship', () => shipIt($)), undefined, armed !== 'ship')
     // Where to go from here: the plan, the history, the settings. Elsewhere than the terminal the settings are a gear
-    // beside the view, at the top right.
+    // beside the view, at the top right. On the terminal the night shift's hint takes its room from their long labels:
+    // a waiting plan's row with both needs 88 columns.
+    const isShortRow = columns < (nightStartIn !== null && !vector ? 88 : 63)
     const places = isEnabled
       ? [
           list0?.hasPlan && action('plan', 'plan', 'Plan', () => showPlan($)),
           // ≣, not ☰: Unicode 16 made ☰ two cells wide, and the row shifted in newer terminals.
           action('history', 'history', 'Verlauf', () => showHistory($, dayKey(current), true)),
-          !vector && action('settings', 'sliders', 'Einstellungen', () => showSettings($), columns < 63 ? '⚙' : undefined),
-          !vector && action('grill', 'spark', 'Grill mich', () => grillMe($), columns < 63 ? `${GLYPH.spark} Grill` : undefined),
+          !vector && action('settings', 'sliders', 'Einstellungen', () => showSettings($), isShortRow ? '⚙' : undefined),
+          !vector && action('grill', 'spark', 'Grill mich', () => grillMe($), isShortRow ? `${GLYPH.spark} Grill` : undefined),
           !vector && handoffItem,
           !vector && shipItem,
         ].filter(Boolean)

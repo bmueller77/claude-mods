@@ -5546,6 +5546,152 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
+  /**
+   * A plan that waits for Start in Gruppenarbeit, with the night shift on or off; what GlanceFlow sends as the
+   * person's words is kept. The turn that laid it out has ended, as Claude stops to wait.
+   */
+  const nightPlan = async ($: Engine, on: On, isNightShift: boolean) => {
+    const clock = world(on)
+    const sent: string[] = []
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      return { text: e.text }
+    })
+    if (isNightShift) await typeNightShift($)
+    await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    const planned = await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
+    await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    return { clock, sent, planned }
+  }
+  const START_WORDS = 'Der Plan sieht gut aus. Leg bitte los.'
+  const NIGHT_NOTE = 'Die Nachtschicht startet den Plan in 30 Sekunden von selbst.'
+  /** The night shift's hint beside Start as drawn, marked when dim; none while nothing counts down. */
+  const nightHint = async ($: Engine, surface: (typeof SURFACES)[number]) => {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const found = (await ui.findAll({ type: 'Text' })).filter(one => one.text.startsWith('startet in'))
+    await ui.unmount()
+    return found.map(one => `${one.text}${one.props.dimColor ? ' (gedimmt)' : ''}`)
+  }
+  const bash = ($: Engine) => callTool($, { tool: 'Bash', command: 'ls' })
+
+  test('Nachtschicht an: ein wartender Plan startet nach 30 s von selbst, genau einmal, und Claude weiß es', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { clock, sent, planned } = await nightPlan($, on, true)
+    expect(String(planned.result)).toContain(`warte auf ihre Antwort. Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ${NIGHT_NOTE}`)
+    expect((await bash($)).deny).toBe(`Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort. ${NIGHT_NOTE}`)
+    await clock.advance(29_000)
+    expect(sent).toEqual([])
+    await clock.advance(1000)
+    expect(sent).toEqual([START_WORDS])
+    // Until its turn begins the plan still waits: later ticks send nothing more.
+    await clock.advance(60_000)
+    expect(sent).toEqual([START_WORDS])
+    await $.turn.start({ text: sent[0]!, turnId: 't2' })
+    expect((await bash($)).deny).toBeUndefined()
+    await clock.advance(60_000)
+    expect(sent).toEqual([START_WORDS])
+  })
+
+  test('Nachtschicht nach 25 s aus: der Plan wartet weiter; wieder an, zählt sie volle 30 s', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { clock, sent } = await nightPlan($, on, true)
+    await clock.advance(25_000)
+    await typeNightShift($, 'aus')
+    expect(await nightHint($, 'desktop')).toEqual([])
+    expect((await bash($)).deny).not.toContain('Nachtschicht')
+    await clock.advance(60_000)
+    expect(sent).toEqual([])
+
+    await typeNightShift($, 'an')
+    await clock.advance(10_000)
+    expect(sent).toEqual([])
+    await clock.advance(30_000)
+    expect(sent).toEqual([START_WORDS])
+  })
+
+  test('Plan in den 30 s mit Start freigegeben: die Nachtschicht schickt nichts dazu, auch vor seiner Runde nicht', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { clock, sent } = await nightPlan($, on, true)
+    await clock.advance(10_000)
+    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    await band.press({ key: 'start' })
+    await band.unmount()
+    expect(sent).toEqual([START_WORDS])
+    expect(await nightHint($, 'desktop')).toEqual([])
+    // Claude's turn may still run, so the message waits: the count does not send it a second time.
+    await clock.advance(30_000)
+    expect(sent).toEqual([START_WORDS])
+    await $.turn.start({ text: START_WORDS, turnId: 't2' })
+    await clock.advance(60_000)
+    expect(sent).toEqual([START_WORDS])
+  })
+
+  test('ohne Nachtschicht wartet der Plan auch nach 60 s auf Start, ohne Hinweis, und Claude liest nichts von ihr', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { clock, sent, planned } = await nightPlan($, on, false)
+    expect(String(planned.result)).not.toContain('Nachtschicht')
+    expect((await bash($)).deny).not.toContain('Nachtschicht')
+    for (const surface of SURFACES) expect(await nightHint($, surface)).toEqual([])
+    await clock.advance(60_000)
+    expect(sent).toEqual([])
+  })
+
+  test('derselbe Plan, noch einmal gemeldet, startet einmal; ein anderer Plan bekommt volle 30 s', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { clock, sent } = await nightPlan($, on, true)
+    const same = ['Lies die Markennotizen', 'Baue die Preistabelle']
+    // Laid out again while it counts: the count goes on.
+    await clock.advance(20_000)
+    await callTool($, { tool: PLAN, steps: same })
+    await clock.advance(10_000)
+    expect(sent).toEqual([START_WORDS])
+    // Again, before the start's turn begins, as the night shift's rounds bring it: nothing more.
+    await callTool($, { tool: PLAN, steps: same })
+    await clock.advance(60_000)
+    expect(sent).toEqual([START_WORDS])
+
+    await callTool($, { tool: PLAN, steps: [...same, 'Prüfe die Seite'] })
+    await clock.advance(25_000)
+    expect(sent).toEqual([START_WORDS])
+    await clock.advance(5000)
+    expect(sent).toEqual([START_WORDS, START_WORDS])
+  })
+
+  test('während der Chat verdichtet wird, startet die Nachtschicht den Plan nicht, gleich danach schon', WITH_NIGHT_SHIFT, async ($, on) => {
+    let isCompacting = false
+    on('state.get', async (_, e, next) => {
+      // The read comes back as { value: { value, version } }: the inner value is the one GlanceFlow reads.
+      const result = (await next(e)) as { value: { value?: unknown; version: number } }
+      return (isCompacting && (e as { key?: string }).key === 'isCompacting' ? { value: { ...result.value, value: true } } : result) as never
+    })
+    const { clock, sent } = await nightPlan($, on, true)
+    isCompacting = true
+    await clock.advance(40_000)
+    expect(sent).toEqual([])
+    isCompacting = false
+    await clock.advance(5000)
+    expect(sent).toEqual([START_WORDS])
+  })
+
+  for (const surface of SURFACES) {
+    test(`Nachtschicht an: neben Start steht gedimmt, in wie vielen Sekunden der Plan startet (${surface})`, WITH_NIGHT_SHIFT, async ($, on) => {
+      const { clock } = await nightPlan($, on, true)
+      expect(await nightHint($, surface)).toEqual(['startet in 30 s (gedimmt)'])
+      // Right beside Start, as the row reads: in the app before it, Start staying last; on the terminal after it.
+      const ui = await $.ui.mount({ ...BAND, surface })
+      const row = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
+      await ui.unmount()
+      expect(row?.text ?? '').toContain(surface === 'terminal' ? '▶ Startstartet in 30 s' : 'startet in 30 sStart')
+      // On the terminal its room comes from the long labels of the settings and Grill mich: the row still fits.
+      if (surface === 'terminal' && row) expect(row.text.length + 2 * (row.children.length - 1) <= BAND.props.bodyColumns).toBe(true)
+
+      // In the steps the band redraws in, while Start holds still.
+      await clock.advance(5000)
+      expect(await nightHint($, surface)).toEqual(['startet in 25 s (gedimmt)'])
+      await clock.advance(20_000)
+      expect(await nightHint($, surface)).toEqual(['startet in 5 s (gedimmt)'])
+      // Started: nothing counts any more.
+      await clock.advance(5000)
+      expect(await nightHint($, surface)).toEqual([])
+    })
+  }
+
   /** /remote-control as the CLI lists it: its description says Disconnect while connected. */
   const remoteCommand = (isOn: boolean) => ({
     name: 'remote-control',

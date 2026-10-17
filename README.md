@@ -1,11 +1,13 @@
 # bjoern-mods
 
-Claude-Code-Marktplatz mit Björns eigenen Mods und den Fremd-Mods aus dem Video „Diese 10 Claude Code Mods solltest du unbedingt kennen“.
-Die eigenen Mods liegen hier im Repo, die Fremd-Mods kommen direkt aus ihren Original-Repos.
+Claude-Code-Marktplatz mit Björns eigenen Mods, dazu filetree und i-have-adhd.
+Die eigenen Mods liegen hier im Repo, die beiden fremden kommen direkt aus ihren Original-Repos.
 
 Neue Instanz einrichten:
 
     git clone https://github.com/bmueller77/claude-mods && claude-mods/install.sh
+
+Vorhandene Instanz umstellen (alte Mods raus, aktuelle rein): Prompt in [UMSTIEG.md](UMSTIEG.md).
 
 ## Installiert install.sh
 
@@ -21,9 +23,9 @@ Neue Instanz einrichten:
 | i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; Knopf 🧠 in GlanceFlow | nur der Skilltext im Kontext, solange der Modus an ist |
 | you-should-know | in Claude Code eingebaut | wird von install.sh eingeschaltet | ja |
 
-## Weiter im Katalog, ersetzt
+## Entfernt am 2026-10-18
 
-Diese Mods bleiben im Katalog und lassen sich einzeln installieren (`claude plugin install <mod>@bjoern-mods`). install.sh richtet sie nicht mehr ein und rührt vorhandene Installationen nicht an.
+Diese Mods aus dem Video sind nicht mehr im Katalog. Wo einer noch installiert ist: `claude plugin uninstall <mod>@bjoern-mods`.
 
 | Alter Mod | Ersetzt durch |
 |---|---|
@@ -35,7 +37,7 @@ Diese Mods bleiben im Katalog und lassen sich einzeln installieren (`claude plug
 | replay-theater (anthropics/claude-code-playground) | zusammenfassung |
 | blast-radius (anthropics/claude-code-playground) | nichts; riskante Bash-Befehle werden nicht mehr angehalten |
 
-visible-compact zeigt im Katalog jetzt auf die deutsche Fassung hier im Repo statt auf nvsravank/visible-compact.
+visible-compact zeigt im Katalog auf die deutsche Fassung hier im Repo statt auf nvsravank/visible-compact.
 
 ## Plattformen
 

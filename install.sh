@@ -3,9 +3,9 @@
 # Wiederholbar: bereits Installiertes wird übersprungen bzw. aktualisiert.
 set -u
 MARKET="${1:-bmueller77/claude-mods}"
-# Aktueller Satz für neue Instanzen. Die ersetzten Mods (savvy-progress, next-steps, cache-meter,
-# cache-tax, catch-me-up, replay-theater, blast-radius) bleiben im Katalog und lassen sich einzeln
-# installieren; vorhandene Installationen werden nicht angetastet.
+# Der ganze Katalog. Die älteren Mods (savvy-progress, next-steps, cache-meter, cache-tax,
+# catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; wo sie
+# noch installiert sind, entfernt man sie mit "claude plugin uninstall <mod>@bjoern-mods".
 PLUGINS="glanceflow statistik naechste-schritte zusammenfassung visible-compact nachtschicht filetree i-have-adhd"
 
 claude plugin marketplace add "$MARKET" 2>&1 | tail -1

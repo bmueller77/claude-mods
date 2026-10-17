@@ -1,7 +1,0 @@
-{
-  "name": "cache-meter",
-  "version": "0.2.0",
-  "description": "Leiste über dem Prompt: Cache-Restzeit mit Balken, Trefferquote, Kontext-Wetter, Füllung + Auto-Compact-Schwelle, Compact-Knopf, zuklappbar; Compact-Zusammenfassung im Chat.",
-  "author": { "name": "Björn Müller" },
-  "types": "./types/index.d.ts"
-}
