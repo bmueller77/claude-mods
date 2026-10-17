@@ -5428,6 +5428,124 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(state.toasts).toContain('nachtschicht ist in dieser Sitzung nicht verfügbar.')
   })
 
+  /**
+   * The Nachtschicht mod as far as GlanceFlow sees it, written inline: it keeps its shift in its own state, null when
+   * there is none. /nachtschicht with no argument ends a shift that is there, else starts one; `an` and `aus` say which.
+   * A turn that ends on its mark finishes the shift and a refusal halts it, both keeping it; Esc ends it.
+   */
+  const FAKE_NIGHT_SHIFT = {
+    name: 'nachtschicht',
+    register(on: On) {
+      type Shift = { seit: number; phase: 'laeuft' | 'fertig' | 'angehalten'; grund: string | null; geschoben: number; fragen: string[] }
+      // A hooks module spells $ at its call sites only, so each hook reads and writes the shift itself.
+      const ref = { plugin: 'nachtschicht', key: 'schicht' } as const
+      on('command.run', { command: 'nachtschicht' }, async ($, e) => {
+        const arg = String(e.args ?? '').trim().toLowerCase()
+        const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
+        const wants = arg === 'an' ? true : arg === 'aus' ? false : shift === null
+        const changed: Shift | null = wants ? { seit: 0, geschoben: 0, fragen: [], ...shift, phase: 'laeuft', grund: null } : null
+        await $.state.set(ref as never, changed as never)
+        return { text: wants ? 'Nachtschicht ist an.' : shift ? 'Nachtschicht ist aus.' : 'Die Nachtschicht war nicht an.' }
+      })
+      on('turn.complete', async ($, e, next) => {
+        const answer = await next(e)
+        const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
+        if (shift === null || e.agentId) return answer
+        const changed: Shift | null =
+          e.reason === 'aborted'
+            ? null
+            : e.reason === 'refusal'
+              ? { ...shift, phase: 'angehalten', grund: 'Claude hat abgelehnt' }
+              : e.answer.trim().endsWith('NACHTSCHICHT-FERTIG')
+                ? { ...shift, phase: 'fertig', grund: 'Claude meldet fertig' }
+                : shift
+        if (changed !== shift) await $.state.set(ref as never, changed as never)
+        return answer
+      })
+    },
+  }
+  const WITH_NIGHT_SHIFT = { plugins: [FAKE_NIGHT_SHIFT] }
+  /** The night shift button's variant in the app. */
+  const nightShiftVariant = async ($: Engine) => {
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'nightshift')
+    await ui.unmount()
+    return button?.props.variant
+  }
+  /** /nachtschicht as typed, with its argument. */
+  const typeNightShift = ($: Engine, args = '') => $.command.run({ command: 'nachtschicht', args } as never)
+
+  test('ohne den Mod Nachtschicht steht 🅰️ schlicht da, auch nach einem Druck', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    expect(await nightShiftVariant($)).toBe('secondary')
+    // Listed, but nobody keeps a shift: the run changes nothing.
+    state.commands = [skill('nachtschicht')]
+    await press('nightshift')
+    expect(state.runs).toHaveLength(1)
+    expect(await nightShiftVariant($)).toBe('secondary')
+    // Not there at all.
+    state.commands = []
+    await press('nightshift')
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
+  test('Nachtschicht per Knopf: ein Druck schaltet sie an und hebt 🅰️ hervor, der nächste aus', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('nachtschicht')]
+    expect(await nightShiftVariant($)).toBe('secondary')
+    await press('nightshift')
+    // The Nachtschicht answered its command itself.
+    expect(state.runs).toEqual([])
+    expect(await nightShiftVariant($)).toBe('primary')
+    await press('nightshift')
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
+  test('Nachtschicht getippt: /nachtschicht, /nachtschicht an und aus schalten 🅰️ mit', WITH_NIGHT_SHIFT, async ($, on) => {
+    await skillWorld($, on)
+    await typeNightShift($)
+    expect(await nightShiftVariant($)).toBe('primary')
+    await typeNightShift($, 'aus')
+    expect(await nightShiftVariant($)).toBe('secondary')
+    await typeNightShift($, 'an')
+    expect(await nightShiftVariant($)).toBe('primary')
+    await typeNightShift($)
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
+  test('Nachtschicht fertig oder angehalten: 🅰️ bleibt hervorgehoben, bis ein Druck sie beendet; Esc beendet sie', WITH_NIGHT_SHIFT, async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('nachtschicht')]
+    const end = (answer: string, reason: string) =>
+      $.turn.complete({ answer, durationMs: 1, isAborted: reason === 'aborted', turnId: 't1', reason } as never)
+
+    await typeNightShift($)
+    await end('Uebergabe: alles gebaut.\nNACHTSCHICHT-FERTIG', 'answer')
+    expect(await nightShiftVariant($)).toBe('primary')
+    await press('nightshift')
+    expect(await nightShiftVariant($)).toBe('secondary')
+
+    await typeNightShift($)
+    await end('', 'refusal')
+    expect(await nightShiftVariant($)).toBe('primary')
+    await end('', 'aborted')
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
+  test('Nachtschicht nach dem Neuladen: 🅰️ zeigt weiter, was die Nachtschicht hält', WITH_NIGHT_SHIFT, async ($, on) => {
+    on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+    on('process.run', () => ({ value: { exitCode: 2, stdout: '', stderr: '' } }) as never)
+    on('tool.register', () => ({ value: undefined }) as never)
+    on('command.register', () => ({ value: undefined }) as never)
+    await skillWorld($, on)
+    await typeNightShift($)
+    await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
+    expect(await nightShiftVariant($)).toBe('primary')
+    await typeNightShift($, 'aus')
+    await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
   /** /remote-control as the CLI lists it: its description says Disconnect while connected. */
   const remoteCommand = (isOn: boolean) => ({
     name: 'remote-control',
@@ -6159,6 +6277,29 @@ describe('Verdecken und Tresor', () => {
     await $.command.run({ command: 'glanceflow', args: 'privacy off' } as never)
     await $.command.run({ command: 'glanceflow', args: 'privacy on' } as never)
     expect(await bandButton($, 'privacy')).toBe(LOCK)
+  })
+
+  test('🔒 ist hervorgehoben, solange Verdecken an ist; 🔓 steht schlicht da, per Knopf und per Befehl', async ($, on) => {
+    await vaultWorld($, on)
+    const privacy = async () => {
+      const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const found = (await band.findAll({ type: 'Button' })).find(one => one.props.key === 'privacy')
+      await band.unmount()
+      return { label: found?.props.label, variant: found?.props.variant }
+    }
+    const locked = { label: LOCK, variant: 'primary' }
+    const open = { label: OPEN_LOCK, variant: 'secondary' }
+
+    // On by default.
+    expect(await privacy()).toEqual(locked)
+    await pressBand($, 'privacy')
+    expect(await privacy()).toEqual(open)
+    await pressBand($, 'privacy')
+    expect(await privacy()).toEqual(locked)
+    await $.command.run({ command: 'glanceflow', args: 'privacy off' } as never)
+    expect(await privacy()).toEqual(open)
+    await $.command.run({ command: 'glanceflow', args: 'privacy on' } as never)
+    expect(await privacy()).toEqual(locked)
   })
 
   const CHAT = [

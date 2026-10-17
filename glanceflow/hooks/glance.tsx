@@ -1413,6 +1413,27 @@ const runCommand = async ($: $, label: string, names: string[], args?: string): 
 /** Night shift: the Nachtschicht mod's command, which turns it on or off. */
 const toggleNightShift = ($: $) => runCommand($, 'nachtschicht', ['nachtschicht'])
 
+// The Nachtschicht keeps its shift in its own state: the shift while there is one, null once it is ended. Any plugin
+// reads any value, so GlanceFlow reads it straight from there and writes nothing of its own. Not a `dependencies`
+// entry in plugin.json: GlanceFlow would then not load where the Nachtschicht is not installed. There the value was
+// never written and reads as off.
+const NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
+
+/**
+ * Whether the night shift is on, as the Nachtschicht holds it: while there is a shift, be it running, finished or
+ * halted, since /nachtschicht then ends it. Read while drawing, the band draws again whenever the Nachtschicht writes
+ * it, however it was switched (this button, /nachtschicht typed, its own Beenden, Esc). Off on any error.
+ */
+const isNightShiftOn = async ($: $): Promise<boolean> => {
+  try {
+    // The value is the Nachtschicht's, declared in its contract and not in GlanceFlow's, so it is typed here.
+    const { value } = (await $.state.get(NIGHT_SHIFT_STATE as never)) as { value?: unknown }
+    return value !== undefined && value !== null
+  } catch {
+    return false
+  }
+}
+
 /** What turns ADHD mode off, as the person's own words. */
 const ADHD_STOP = 'stop adhd mode'
 // The skill's call, typed or in the transcript (`<command-name>/i-have-adhd:i-have-adhd</command-name>`); not a path.
@@ -3662,6 +3683,8 @@ export function registerGlance(on: On): void {
     const masks = await read($, maskAtom)
     const remote = remoteShown(await read($, remoteAtom))
     const adhd = await read($, adhdAtom)
+    // Read only where its button shows, so the Nachtschicht's writes redraw nothing else.
+    const nightShift = vector && isEnabled && (await isNightShiftOn($))
     const canShip = isEnabled && (await read($, shipOnGithubAtom)) && (await read($, hasGithubAtom))
     const columns = Math.max(20, e.props.bodyColumns)
     const current = await now($)
@@ -3905,8 +3928,8 @@ export function registerGlance(on: On): void {
               remote === 'missing' ? null : (
                 <Button key="remote" variant={remote === 'on' ? 'primary' : 'secondary'} label={REMOTE} onPress={() => toggleRemote($)} />
               ),
-              <Button key="nightshift" variant="secondary" label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />,
-              <Button key="privacy" variant="secondary" label={masks ? MASK_ON : MASK_OFF} onPress={() => toggleMasking($)} />,
+              <Button key="nightshift" variant={nightShift ? 'primary' : 'secondary'} label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />,
+              <Button key="privacy" variant={masks ? 'primary' : 'secondary'} label={masks ? MASK_ON : MASK_OFF} onPress={() => toggleMasking($)} />,
               <Button
                 key="vault"
                 variant="secondary"
