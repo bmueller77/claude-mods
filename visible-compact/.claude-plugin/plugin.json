@@ -1,0 +1,36 @@
+{
+  "name": "visible-compact",
+  "displayName": "Visible Compact",
+  "version": "0.3.0",
+  "description": "Zeigt den Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf Wunsch ins Deutsche übersetzt; /show-last-compact öffnet es wieder. Deutsche Fassung von visible-compact (MIT, Sravan).",
+  "author": {
+    "name": "Sravan",
+    "url": "https://github.com/nvsravank"
+  },
+  "homepage": "https://github.com/nvsravank/visible-compact",
+  "repository": "https://github.com/nvsravank/visible-compact",
+  "license": "MIT",
+  "keywords": [
+    "compact",
+    "compaction",
+    "context",
+    "summary",
+    "conversation",
+    "before-after"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "storage": {
+      "type": "string",
+      "title": "Wo Verdichtungen gespeichert werden",
+      "description": "temp oder home. temp (Standard): der Temp-Ordner des Systems, den das System aufräumt (weg nach einem Neustart oder ein paar Tagen ohne Nutzung). home: ~/.claude/visible-compact, bleibt, bis du es löschst. Jeder andere Wert gilt als temp.",
+      "default": "temp"
+    },
+    "modell": {
+      "type": "string",
+      "title": "Modell für die Übersetzung",
+      "description": "Welches Modell englische Abschnitte ins Deutsche übersetzt, wenn du im Fenster auf Übersetzen drückst. haiku ist günstig und reicht dafür.",
+      "default": "haiku"
+    }
+  }
+}

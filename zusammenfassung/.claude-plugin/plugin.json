@@ -1,0 +1,24 @@
+{
+  "name": "zusammenfassung",
+  "version": "0.4.0",
+  "description": "Nach jeder Arbeitsrunde eine kurze Zusammenfassung ueber dem Eingabefeld: was getan wurde und was man leicht uebersieht. Aufklappbar mit Erklaerung und Dateiliste, dazu ein Replay der Dateiaenderungen Schritt fuer Schritt. Ersetzt zweiter-blick und replay-theater.",
+  "author": {
+    "name": "Björn Müller",
+    "email": "bjoern@mueller.family"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "modell": {
+      "type": "string",
+      "title": "Modell fuer die Zusammenfassung",
+      "description": "Welches Modell die Runde liest und zusammenfasst. haiku ist guenstig und reicht dafuer.",
+      "default": "haiku"
+    },
+    "mindestSekunden": {
+      "type": "number",
+      "title": "Mindestdauer einer Runde",
+      "description": "Runden ohne Werkzeugaufruf werden nur zusammengefasst, wenn sie mindestens so viele Sekunden gedauert haben. Runden mit Werkzeugaufrufen immer.",
+      "default": 60
+    }
+  }
+}

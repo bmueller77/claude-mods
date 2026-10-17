@@ -1,16 +1,22 @@
 {
   "name": "bjoern-mods",
   "owner": { "name": "Björn Müller" },
-  "metadata": { "description": "Die 10 Claude-Code-Mods aus dem Video 'Diese 10 Claude Code Mods solltest du unbedingt kennen' (Fremd-Mods direkt aus ihren Repos) plus das eigene Cache-Meter." },
+  "metadata": { "description": "Björns eigene Claude-Code-Mods (GlanceFlow, Statistik, Nächste Schritte, Zusammenfassung, Nachtschicht, Visible Compact deutsch) plus die Fremd-Mods aus dem Video 'Diese 10 Claude Code Mods solltest du unbedingt kennen' und i-have-adhd. Die eigenen ersetzen ältere: GlanceFlow ersetzt savvy-progress, Statistik ersetzt cache-meter und cache-tax, Nächste Schritte ersetzt next-steps, Zusammenfassung ersetzt catch-me-up und replay-theater; für blast-radius gibt es keinen Ersatz. Die alten Mods bleiben im Katalog und lassen sich weiter einzeln installieren." },
   "plugins": [
     { "name": "savvy-progress", "source": { "source": "git-subdir", "url": "https://github.com/JohnnyVizz/claude-kit.git", "path": "plugins/savvy-progress" } },
     { "name": "next-steps", "source": { "source": "git-subdir", "url": "https://github.com/hamzafer/claude-code-mods.git", "path": "mods/next-steps" } },
     { "name": "filetree", "source": { "source": "github", "repo": "data-goblin/claude-code-filetree" } },
     { "name": "cache-meter", "source": "./cache-meter", "description": "Cache-Countdown, Trefferquote und Kontext-Wetter mit Compact-Knopf (Eigenbau)" },
     { "name": "cache-tax", "source": { "source": "github", "repo": "karanb192/cache-tax" } },
-    { "name": "visible-compact", "source": { "source": "github", "repo": "nvsravank/visible-compact" } },
+    { "name": "visible-compact", "source": "./visible-compact", "description": "Deutsche Fassung von visible-compact (MIT, Sravan): Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf Wunsch ins Deutsche übersetzt" },
     { "name": "catch-me-up", "source": { "source": "github", "repo": "oliverow/catch-me-up" } },
     { "name": "replay-theater", "source": { "source": "git-subdir", "url": "https://github.com/anthropics/claude-code-playground.git", "path": "claude-code/mods/replay-theater" } },
-    { "name": "blast-radius", "source": { "source": "git-subdir", "url": "https://github.com/anthropics/claude-code-playground.git", "path": "claude-code/mods/blast-radius" } }
+    { "name": "blast-radius", "source": { "source": "git-subdir", "url": "https://github.com/anthropics/claude-code-playground.git", "path": "claude-code/mods/blast-radius" } },
+    { "name": "glanceflow", "source": "./glanceflow", "description": "Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf und Teambericht; Arbeitsweisen Auto-Mode und Gruppenarbeit. Deutsche Fassung von GlanceFlow (MIT, Antreas-Strb)" },
+    { "name": "statistik", "source": "./statistik", "description": "Eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr, dazu Warmhalten, Compact und Kontext-Details (Eigenbau)" },
+    { "name": "naechste-schritte", "source": "./naechste-schritte", "description": "Nach jeder Antwort zwei oder drei Vorschläge für die nächste Eingabe, per Ziffer oder Knopf ins Feld (Eigenbau nach next-steps von Hamza Zafar)" },
+    { "name": "zusammenfassung", "source": "./zusammenfassung", "description": "Nach jeder Arbeitsrunde zwei Zeilen: was getan wurde und was man leicht übersieht, aufklappbar mit Dateiliste und Replay (Eigenbau)" },
+    { "name": "nachtschicht", "source": "./nachtschicht", "description": "Claude arbeitet ohne Rückfragen weiter, während du weg bist, und schreibt am Ende eine Übergabe; /nachtschicht schaltet ein und aus (Eigenbau)" },
+    { "name": "i-have-adhd", "source": { "source": "github", "repo": "ayghri/i-have-adhd" }, "description": "ADHS-Modus als Skill: zuerst die nächste Handlung, nummerierte Schritte, keine Abschweifungen (fremd, MIT; Knopf 🧠 in GlanceFlow)" }
   ]
 }

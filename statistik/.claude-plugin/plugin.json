@@ -1,0 +1,23 @@
+{
+  "name": "statistik",
+  "version": "0.12.0",
+  "description": "Statistik in einer Zeile ueber dem Eingabefeld: Nutzungslimits (SL, FL bei Fable, WL), Prompt-Cache und Kontext als Ringe, Kontext-Details je Kategorie in einem Fenster an der Seite, warm oder kalt, dazu die Knoepfe Warmhalten und Compact. Ersetzt cache-meter und cache-tax.",
+  "author": {
+    "name": "Björn Müller",
+    "email": "bjoern@mueller.family"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "cacheLaufzeit": {
+      "type": "string",
+      "title": "Cache-Laufzeit",
+      "description": "auto nimmt eine Stunde an (mit Fragezeichen), bis ein Cache-Treffer nach mehr als fuenf Minuten Pause sie belegt oder die Sitzung sie selbst meldet. 5m oder 1h legt sie fest.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "5m",
+        "1h"
+      ]
+    }
+  }
+}

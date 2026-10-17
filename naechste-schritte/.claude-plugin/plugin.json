@@ -1,0 +1,10 @@
+{
+  "name": "naechste-schritte",
+  "version": "0.2.3",
+  "description": "Nach jeder Antwort zwei oder drei naheliegende naechste Eingaben, ganz unten ueber dem Eingabefeld und unter einem Trennstrich. Im leeren Eingabefeld holt 1, 2 oder 3 einen Vorschlag als Entwurf; in der App holen ihn die Knoepfe 1 bis 3 ins Feld. Nach next-steps von Hamza Zafar.",
+  "author": {
+    "name": "Björn Müller",
+    "email": "bjoern@mueller.family"
+  },
+  "types": "./types/index.d.ts"
+}

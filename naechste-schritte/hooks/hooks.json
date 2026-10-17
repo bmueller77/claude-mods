@@ -1,0 +1,1 @@
+{ "description": "Die Hooks von Naechste-Schritte", "modules": ["./register.tsx"] }
