@@ -168,6 +168,8 @@ const VAULT = '\u{1F6E1}\uFE0F'
 const REMOTE = '\u{1F6DC}'
 /** The two work modes, as the person reads them. */
 const WORK_MODE_WORDS: Record<WorkMode, string> = { auto: 'Auto-Mode', dynamisch: 'Gruppenarbeit' }
+/** The work mode on its button: one person while Claude decides alone, two for the team. */
+const WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F464}', dynamisch: '\u{1F465}' }
 const HANDOFF_KEY = 'lastHandoff'
 // Below this width the mode button drops the name; below METER_MIN_COLUMNS the bars go, so step names keep their room.
 const NARROW = 60
@@ -4008,23 +4010,14 @@ export function registerGlance(on: On): void {
         onPress={() => cycleMode($, isEnabled, detail)}
       />
       )
-    // The work mode, while Leitstand is on (off, no work mode applies), leads the places at the bottom left
-    // elsewhere than the terminal: a menu where the surface has one, else a button that flips the two modes.
-    // The terminal keeps it in Settings and /leitstand modus.
-    const workModeItem = !isEnabled || !vector ? null : 'Select' in table && table.Select ? (
-      <table.Select
-        key="workmode"
-        value={workMode}
-        options={[
-          { value: 'auto', label: WORK_MODE_WORDS.auto },
-          { value: 'dynamisch', label: WORK_MODE_WORDS.dynamisch },
-        ]}
-        onSelect={value => void setWorkMode($, value === 'dynamisch' ? 'dynamisch' : 'auto')}
-      />
-    ) : (
+    // The work mode, while the Leitstand is on (off, no work mode applies), leads the places at the bottom left
+    // elsewhere than the terminal: one button with the mode's sign, lit in both modes (it shows which, it is never
+    // "off"); a press flips the two. The terminal keeps it in Settings and /leitstand arbeitsweise.
+    const workModeItem = !isEnabled || !vector ? null : (
       <Button
         key="workmode"
-        label={WORK_MODE_WORDS[workMode]}
+        variant="primary"
+        label={WORK_MODE_SIGNS[workMode]}
         onPress={() => void setWorkMode($, workMode === 'dynamisch' ? 'auto' : 'dynamisch')}
       />
     )

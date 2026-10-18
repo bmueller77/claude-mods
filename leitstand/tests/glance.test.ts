@@ -1348,7 +1348,9 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const working = await drawn()
-  expect(working.menus).toEqual(['Ausführlich / Einfach / Minimal', 'Auto-Mode / Gruppenarbeit'])
+  // Die Arbeitsweise ist kein Menü mehr, sondern der helle Knopf 👤/👥 unten links.
+  expect(working.menus).toEqual(['Ausführlich / Einfach / Minimal'])
+  expect(working.bottom).toContain('"key":"workmode"')
   expect(working.top).toContain('"type":"Select"')
   expect(working.top).not.toContain('Pause')
   expect(working.bottom).toContain('Pause')
@@ -6024,7 +6026,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(state.filled).toEqual(['/anthropic-skills:vermenschlichen Überarbeite deine letzte Antwort hier im Chat.'])
   })
 
-  test('auf dem Desktop steht das Modus-Menü ohne Wort davor unten links vor Verlauf und schaltet um', async ($, on) => {
+  test('auf dem Desktop steht die Arbeitsweise als heller Knopf 👤/👥 unten links vor Verlauf und schaltet um', async ($, on) => {
     world(on)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const boxes = await ui.findAll({ type: 'Box' })
@@ -6034,17 +6036,16 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(bottom).toContain('"key":"workmode"')
     // Erstes Element links, vor Verlauf.
     expect(bottom.indexOf('"key":"history"')).toBeGreaterThan(bottom.indexOf('"key":"workmode"'))
-    const menu = (await ui.findAll({ type: 'Select' })).find(one => one.props.key === 'workmode')
-    expect(menu?.props.label).toBeUndefined()
-    expect(menu?.props.value).toBe('auto')
-    expect(menu?.props.options).toEqual([
-      { value: 'auto', label: 'Auto-Mode' },
-      { value: 'dynamisch', label: 'Gruppenarbeit' },
-    ])
-    await $.ui.select({ plugin: 'leitstand', key: 'workmode', value: 'dynamisch' })
+    // Kein Menü mehr, ein Knopf mit dem Zeichen der Arbeitsweise, hell in beiden.
+    expect((await ui.findAll({ type: 'Select' })).some(one => one.props.key === 'workmode')).toBe(false)
+    const knopf = async () => (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'workmode')
+    expect((await knopf())?.props.label).toBe('\u{1F464}')
+    expect((await knopf())?.props.variant).toBe('primary')
+    await ui.press({ key: 'workmode' })
+    expect((await knopf())?.props.label).toBe('\u{1F465}')
+    expect((await knopf())?.props.variant).toBe('primary')
     await ui.unmount()
 
-    expect(await texts($, 'desktop')).toContain('Gruppenarbeit ▾')
     const asked = await $.command.run({ command: 'leitstand', args: 'arbeitsweise' } as never)
     // Ohne Wert schaltet der Befehl um: von Gruppenarbeit zurück auf Auto-Mode.
     expect(String(asked.text)).toContain('Auto-Mode:')
@@ -6125,7 +6126,7 @@ describe('Ansicht Minimal', () => {
       expect(line).toContain('Verlauf')
       expect(line).toContain('Pause')
       expect(line).toContain(surface === 'terminal' ? 'Grill' : '♨️')
-      if (surface === 'desktop') expect(shown).toContain('Auto-Mode ▾')
+      if (surface === 'desktop') expect(shown).toContain('\u{1F464}')
       expect(line).toContain(surface === 'terminal' ? 'Leitstand: Minimal' : 'Minimal ▾')
     }
   })
