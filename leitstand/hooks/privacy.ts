@@ -24,10 +24,11 @@ const SECRET_PATTERNS = [
 const ASSIGNMENT =
   /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|CLIENT[_-]?SECRET|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PASSWORT|KENNWORT|ZUGANGSDATEN|SCHLÜSSEL|SCHLUESSEL|AUTH)(?:[_.-][A-Za-z0-9_.-]*)?)(["']?\s*[=:]\s*["']?)([^\s"'`,;}{]{6,})/gi
 
-// "my password is X", "mein Passwort ist X", "das WLAN-Kennwort lautet X", "meine PIN ist 4821", "ο κωδικός μου είναι X".
+// "my password is X", "mein Passwort ist X", "das WLAN-Kennwort lautet X" (also "lautet: X"), "meine PIN ist 4821",
+// "ο κωδικός μου είναι X".
 // A German word may stand at the end of a compound (Datenbankpasswort, Lizenzschlüssel).
 const PHRASE =
-  /(?<!\p{L})((?:password|passcode|passphrase|pin|\p{L}*passw(?:ort|örter)|\p{L}*kennw(?:ort|örter)|\p{L}*zugangsdaten|\p{L}*schl(?:ü|ue)ssel|κωδικ[όο]ς(?: πρόσβασης)?|συνθηματικ[όο])(?:\s+(?:μου|is|my))?\s*(?:ist|lautet|heißt|heisst|is|είναι|ειναι|=|:)\s*["']?)([^\s"']{4,})/giu
+  /(?<!\p{L})((?:password|passcode|passphrase|pin|\p{L}*passw(?:ort|örter)|\p{L}*kennw(?:ort|örter)|\p{L}*zugangsdaten|\p{L}*schl(?:ü|ue)ssel|κωδικ[όο]ς(?: πρόσβασης)?|συνθηματικ[όο])(?:\s+(?:μου|is|my))?\s*(?:(?:ist|lautet|heißt|heisst|is|είναι|ειναι)(?:\s*[=:])?|=|:)\s*["']?)([^\s"']{4,})/giu
 
 // "IBAN: DE89 3704 0044 0532 0130 00", in any case and with its spaces, so no group of it stays in view.
 const IBAN_PHRASE = /(?<!\p{L})(iban(?:\s*(?:ist|lautet|is|=|:))?\s*["']?)([a-z]{2}\d{2}(?: ?[a-z0-9]{4}){2,7}(?: ?[a-z0-9]{1,3})?)(?![\p{L}\d])/giu

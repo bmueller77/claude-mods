@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
-import { activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
+import { activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, replaceSecrets } from '../hooks/privacy'
 import { OTHER_WAITING_MS, OTHER_WORKING_MS, askedMergeSha, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
@@ -308,6 +308,10 @@ describe('privacy', () => {
     expect(maskPrivate('Kennwort ist abc!9')).toBe('Kennwort ist ••••••••')
     expect(findSecrets('Mein WLAN-Passwort lautet sonne2024')).toContain('ein Passwort')
     expect(maskPrivate('Mein WLAN-Passwort lautet sonne2024')).toBe('Mein WLAN-Passwort lautet ••••••••')
+    // Mit Doppelpunkt nach dem Verb (so kam ein echter Test durch).
+    expect(findSecrets('Mein Passwort lautet: zo$febhj367!')).toContain('ein Passwort')
+    expect(maskPrivate('Mein Passwort lautet: zo$febhj367!')).toBe('Mein Passwort lautet: ••••••••')
+    expect(maskPrivate('Das Kennwort ist = geheim42')).toBe('Das Kennwort ist = ••••••••')
     expect(findSecrets('Meine PIN ist 4821')).toContain('ein Passwort')
     expect(findSecrets(`${['DB', 'PASSWORT'].join('_')}=letmein`)).toContain('ein Passwort oder einen Schlüssel')
     expect(findSecrets('IBAN: DE89 3704 0044 0532 0130 00')).toEqual(['eine Kontonummer'])
@@ -1369,6 +1373,35 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   expect(card.all).toContain('A card from another mod')
 })
 
+test("Autopilot's line stands over the band, wherever it comes in what other mods draw beneath", async ($, on) => {
+  world(on)
+  const line = {
+    type: 'Box',
+    props: { key: 'autopilot', flexDirection: 'column', paddingX: 1 },
+    children: [{ type: 'Box', props: { flexDirection: 'row', gap: 1 }, children: [{ type: 'Text', props: {}, children: ['Autopilot:'] }, { type: 'Text', props: {}, children: ['Claude arbeitet ohne Rueckfragen weiter'] }] }],
+  }
+  const card = { type: 'Text', props: {}, children: ['A card from another mod'] }
+  const column = (...children: unknown[]) => ({ type: 'Box', props: { flexDirection: 'column' }, children })
+  let beneath: unknown = null
+  on('ui.render', { component: 'AbovePrompt' }, () => beneath as never)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  // Under another mod's card, in the middle of a stack another mod built around it, and alone.
+  for (const shape of [column(card, line), column(card, column(line, { type: 'Text', props: {}, children: ['More from below'] })), line]) {
+    beneath = shape
+    for (const surface of SURFACES) {
+      const shown = await texts($, surface)
+      const at = (words: string) => shown.findIndex(one => one.includes(words))
+      expect(at('Autopilot:')).toBe(0)
+      expect(at('Autopilot:')).toBeLessThan(at('Write it'))
+      // Moved, not doubled, and its words still side by side.
+      expect(shown.filter(one => one.includes('Autopilot:'))).toHaveLength(1)
+      expect(at('Claude arbeitet ohne Rueckfragen weiter')).toBe(at('Autopilot:') + 1)
+      if (shape !== line) expect(at('Write it')).toBeLessThan(at('A card from another mod'))
+    }
+  }
+})
+
 test('in the Desktop app the welcome cards and the empty band keep that frame: the view on top, places left, actions right', async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
@@ -1733,6 +1766,32 @@ test('another mod that draws only buttons joins the actions; anything with words
   })
   expect(liftButtons({ type: 'Box', props: { flexDirection: 'column' }, children: [button('One'), button('Two')] }).buttons).toHaveLength(2)
   expect(liftButtons(null)).toEqual({ buttons: [], rest: null })
+})
+
+test("Autopilot's line comes out of what is beneath whole, wherever it sits, its words and its buttons together", () => {
+  const button = (label: string) => ({ type: 'Button', props: { key: label, label } })
+  const line = {
+    type: 'Box',
+    props: { key: 'autopilot', flexDirection: 'column', paddingX: 1 },
+    children: [
+      { type: 'Box', props: { flexDirection: 'row', gap: 1 }, children: [{ type: 'Text', props: {}, children: ['Autopilot:'] }, { type: 'Text', props: {}, children: ['Claude arbeitet ohne Rueckfragen weiter'] }] },
+      { type: 'Box', props: { flexDirection: 'row', gap: 2 }, children: [button('Fragen (1)'), button('Beenden')] },
+    ],
+  }
+  const card = { type: 'Text', props: {}, children: ['A card from another mod'] }
+  const column = (...children: unknown[]) => ({ type: 'Box', props: { flexDirection: 'column' }, children })
+  // At the bottom of what is beneath; in the middle of a stack another mod built around it, beside a lone button.
+  expect(takeOut(column(card, line), 'autopilot')).toEqual({ rest: column(card), taken: line })
+  const around = column(line, button('Replay 1 edit'))
+  expect(takeOut(column(card, around), 'autopilot')).toEqual({ rest: column(card, column(button('Replay 1 edit'))), taken: line })
+  // Alone, or not there at all.
+  expect(takeOut(line, 'autopilot')).toEqual({ rest: null, taken: line })
+  expect(takeOut(column(card), 'autopilot')).toEqual({ rest: column(card), taken: null })
+  expect(takeOut(null, 'autopilot')).toEqual({ rest: null, taken: null })
+  // Taken out before the buttons are lifted: the line keeps both its buttons, and the lone Replay still joins the actions.
+  const rest = takeOut(column(card, around), 'autopilot').rest
+  expect(liftButtons(rest).buttons).toEqual([button('Replay 1 edit')])
+  expect(JSON.stringify(takeOut(column(card, around), 'autopilot').taken)).toContain('"Beenden"')
 })
 
 /** Symbols Unicode 16 draws two cells wide (East Asian Width W) while Claude Code counts one, so a row holding one shifts. */
@@ -5221,6 +5280,8 @@ describe('Arbeitsweise und Grill mich', () => {
       messages: [] as { role: 'user' | 'assistant'; text: string; toolUses: never[] }[],
       filled: [] as string[],
       runFails: false,
+      // A run that never comes through, as while a running Autopilot keeps the session busy.
+      runHangs: false,
       // The app's Remote Control switch as get_session reports it; null while the session has no ccd_session_mgmt.
       app: null as 'on' | 'off' | 'connecting' | 'unavailable' | null,
       appSets: [] as boolean[],
@@ -5241,6 +5302,7 @@ describe('Arbeitsweise und Grill mich', () => {
     on('command.run', (_, e) => {
       if (state.runFails) throw new Error('no command with that name is available')
       state.runs.push({ command: e.command, args: e.args === '' ? undefined : e.args })
+      if (state.runHangs) return new Promise<never>(() => {})
       return { text: '' }
     })
     on('prompt.fill', (_, e) => {
@@ -5268,7 +5330,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
-    const order = ['workmode', 'grill', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
+    const order = ['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
@@ -5296,7 +5358,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('in der App trennen Striche die Gruppen unten links: hinter ADHS, hinter Filetree und vor Plan, im Terminal keine', async ($, on) => {
     await skillWorld($, on)
-    expect(await leftRow($)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'plan', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'plan', 'history'])
 
     for (const bodyColumns of [50, 80, 140]) {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
@@ -5308,7 +5370,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'history'])
   })
 
   test('ADHS (🧠) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
@@ -5328,6 +5390,18 @@ describe('Arbeitsweise und Grill mich', () => {
     await ui.unmount()
     expect(button?.props.label).toBe('\u{1F333}')
     expect(button?.props.variant).toBe('secondary')
+  })
+
+  test('ein Druck auf 🧹 hinter ♨️ startet den Skill clean-code; fehlt er, sagt der Leitstand das', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('clean-code')]
+    await press('cleancode')
+    expect(state.runs).toEqual([{ command: 'clean-code', args: undefined }])
+    state.runs.length = 0
+    state.commands = []
+    await press('cleancode')
+    expect(state.runs).toEqual([])
+    expect(state.toasts).toContain('clean-code ist in dieser Sitzung nicht verfügbar.')
   })
 
   test('ein Druck auf 🌳 startet den Befehl filetree; fehlt er, sagt der Leitstand das', async ($, on) => {
@@ -5446,7 +5520,8 @@ describe('Arbeitsweise und Grill mich', () => {
     const { state, press } = await skillWorld($, on)
     state.commands = [skill('autopilot')]
     await press('nightshift')
-    expect(state.runs).toEqual([{ command: 'autopilot', args: undefined }])
+    // Off, so the press says on: a bare /autopilot that came through late could switch the wrong way.
+    expect(state.runs).toEqual([{ command: 'autopilot', args: 'an' }])
 
     // Another plugin's copy counts too.
     state.runs.length = 0
@@ -5526,6 +5601,48 @@ describe('Arbeitsweise und Grill mich', () => {
     },
   }
   const WITH_AUTOPILOT = { plugins: [FAKE_AUTOPILOT] }
+  /**
+   * Autopilot while Claude works: it pushes the next round as each one ends, so the session is never idle and a
+   * command Leitstand runs never comes through; here it never settles. As a round ends it reads Leitstand's wish to
+   * end it, as the real one does, and ends a run that began before the wish.
+   */
+  const FAKE_BUSY_AUTOPILOT = {
+    name: 'autopilot',
+    register(on: On) {
+      type Shift = { seit: number; phase: 'laeuft'; grund: null; geschoben: number; fragen: string[] }
+      const ref = { plugin: 'autopilot', key: 'schicht' } as const
+      on('command.run', { command: 'autopilot' }, async ($, e) => {
+        // Leitstand's run waits in the queue behind the rounds Autopilot keeps pushing.
+        if ((e.origin as { name?: string } | undefined)?.name === 'leitstand') return new Promise<never>(() => {})
+        const shift: Shift = { seit: await $.clock.now(), phase: 'laeuft', grund: null, geschoben: 0, fragen: [] }
+        await $.state.set(ref as never, (String(e.args ?? '').trim() === 'aus' ? null : shift) as never)
+        return { text: '' }
+      })
+      on('turn.complete', async ($, e, next) => {
+        const answer = await next(e)
+        const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
+        const wish = ((await $.state.get({ plugin: 'leitstand', key: 'autopilotStop' } as never)) as { value?: unknown }).value
+        if (shift !== null && typeof wish === 'number' && wish > shift.seit) await $.state.set(ref as never, null as never)
+        return answer
+      })
+    },
+  }
+  /** Reads Leitstand's wish to end Autopilot as Autopilot does, from another plugin: /wish answers with it. */
+  const WISH_READER = {
+    name: 'wish-reader',
+    register(on: On) {
+      on('command.run', { command: 'wish' }, async $ => {
+        const { value } = (await $.state.get({ plugin: 'leitstand', key: 'autopilotStop' } as never)) as { value?: unknown }
+        return { text: String(value ?? null) }
+      })
+    },
+  }
+  const wishOf = async ($: Engine) => String((await $.command.run({ command: 'wish', args: '' } as never)).text)
+  /** A press that comes back within two seconds of real time (the kit's clock is mocked), or `waits`. */
+  const pressBack = (press: (key: string) => Promise<void>, key: string) => {
+    const { setTimeout: later } = globalThis as unknown as { setTimeout: (done: () => void, ms: number) => unknown }
+    return Promise.race([press(key).then(() => 'back'), new Promise<string>(done => later(() => done('waits'), 2000))])
+  }
   /** The Autopilot button's variant in the app. */
   const nightShiftVariant = async ($: Engine) => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -5561,6 +5678,32 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('primary')
     await press('nightshift')
     expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
+  test('Autopilot läuft: ein Druck auf 🅰️ kommt sofort zurück, legt den Wunsch zum Ausschalten ab und sagt es; 🅰️ bleibt hell bis zum Ende der Runde', { plugins: [FAKE_BUSY_AUTOPILOT, WISH_READER] }, async ($, on) => {
+    const { state, press, clock } = await skillWorld($, on)
+    state.commands = [skill('autopilot')]
+    await typeNightShift($, 'an')
+    expect(await nightShiftVariant($)).toBe('primary')
+    await clock.advance(5000)
+    // Autopilot's command never comes through while it runs; the press does not wait for it.
+    expect(await pressBack(press, 'nightshift')).toBe('back')
+    expect(state.toasts).toContain('Der Autopilot geht nach dieser Runde aus.')
+    expect(await wishOf($)).toBe('1005000')
+    // Lit while the run goes on; dark once Autopilot has ended it as the round ends.
+    expect(await nightShiftVariant($)).toBe('primary')
+    await $.turn.complete({ answer: 'Teil B steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
+  test('Autopilot aus: 🅰️ startet ihn mit /autopilot an, ohne auf den Befehl zu warten, und legt keinen Wunsch ab', { plugins: [WISH_READER] }, async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('autopilot')]
+    state.runHangs = true
+    expect(await pressBack(press, 'nightshift')).toBe('back')
+    expect(state.runs).toEqual([{ command: 'autopilot', args: 'an' }])
+    expect(state.toasts).not.toContain('Der Autopilot geht nach dieser Runde aus.')
+    expect(await wishOf($)).toBe('null')
   })
 
   test('Autopilot getippt: /autopilot, /autopilot an und aus schalten 🅰️ mit', WITH_AUTOPILOT, async ($, on) => {
@@ -5802,7 +5945,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 9)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote', 'nightshift'])
+    expect(row.slice(0, 10)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote', 'nightshift'])
     expect(row.filter(one => one === 'dim|')).toHaveLength(3)
   })
 
@@ -5824,7 +5967,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 8)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift'])
+    expect(row.slice(0, 9)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)

@@ -1,6 +1,6 @@
 {
   "name": "autopilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Autopilot: Claude arbeitet ohne Rueckfragen weiter, waehrend du weg bist. Fragen entscheidet es selbst, eine Runde ohne Abschluss wird angeschoben, am Ende steht eine Uebergabe. /autopilot schaltet ihn ein und aus.",
   "author": {
     "name": "Björn Müller",

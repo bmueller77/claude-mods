@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 
-import { FERTIG, FRAGE_ABGELEHNT, KONTEXT, WEITER, istFertig } from '../hooks/register'
+import { FERTIG, FRAGE_ABGELEHNT, GRUND_KNOPF, KONTEXT, WEITER, istFertig } from '../hooks/register'
 
 const BAND = { plugin: 'autopilot', component: 'AbovePrompt' } as const
 
@@ -22,9 +22,10 @@ type Eingang = { text: string; context: readonly string[]; origin: string }
  * Der Boden unter dem Mod: was die Engine sonst beantworten wuerde.
  *
  * Zurueck kommt die Liste der Prompts, die unten ankamen, mit ihrem Kontext
- * und woher sie kamen, damit ein Test das Anschieben sieht.
+ * und woher sie kamen, damit ein Test das Anschieben sieht. Mit `spalte`
+ * zeichnet darunter mehr als ein Teil, wie wenn weitere Mods im Band stehen.
  */
-function boden(on: On) {
+function boden(on: On, x?: { spalte?: boolean }) {
     const eingang: Eingang[] = []
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
     on('turn.start', (_$, e, _next) => ({ turnId: e.turnId }))
@@ -37,7 +38,10 @@ function boden(on: On) {
         return { text: e.text, context: e.context, origin: e.origin }
     })
     on('ui.render', { component: 'AbovePrompt' }, ($, e, _next) => {
-        const { Text } = $.ui.resolve(e)
+        const { Box, Text } = $.ui.resolve(e)
+        if (x?.spalte) {
+            return h(Box, { flexDirection: 'column' }, h(Text, {}, 'engine'), h(Text, {}, 'unten')) as RenderElement
+        }
         return h(Text, {}, 'engine') as RenderElement
     })
     return eingang
@@ -76,6 +80,34 @@ async function runde($: Test$, id: string, antwort: string, x?: { werkzeuge?: nu
 }
 
 const angeschoben = (eingang: Eingang[]) => eingang.filter(p => p.origin === 'plugin:autopilot')
+
+/**
+ * Der Leitstand, so weit der Autopilot ihn sieht: Ein Druck auf 🅰️ legt seine
+ * Zeit als Wunsch, die Schicht zu beenden, in den eigenen Zustand. Hier loest
+ * ihn ein Befehl aus, die Zeit als Argument. Das /autopilot aus, das der
+ * Leitstand danach anstoesst, wartet, bis die Sitzung still ist; wo es darauf
+ * ankommt, schickt ein Test es selbst hinterher.
+ */
+const LEITSTAND = {
+    name: 'leitstand',
+    register(on: On) {
+        on('command.run', { command: 'leitstand-druck' }, async ($, e) => {
+            await $.state.set({ plugin: 'leitstand', key: 'autopilotStop' } as never, Number(e.args) as never)
+            return { text: '' }
+        })
+        // Ein Wert, der keine Zeit ist: so, wie er kommt, als Text.
+        on('command.run', { command: 'leitstand-text' }, async ($, e) => {
+            await $.state.set({ plugin: 'leitstand', key: 'autopilotStop' } as never, e.args as never)
+            return { text: '' }
+        })
+    },
+}
+const MIT_LEITSTAND = { plugins: [LEITSTAND] }
+
+/** Ein Druck auf 🅰️ im Leitstand, zur Zeit `wann`. */
+async function druck($: Test$, wann: number) {
+    await $.command.run({ command: 'leitstand-druck', args: String(wann) } as never)
+}
 
 async function leiste(ui: { findAll: (q: { type: string }) => Promise<{ text: string; children: unknown[] }[]> }) {
     return (await ui.findAll({ type: 'Text' }))
@@ -314,4 +346,140 @@ test('bei einer Umfrage weicht die Leiste', async ($, on) => {
     await befehl($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ hasSurvey: true }) })
     expect(await leiste(ui as never)).toBe('engine')
+})
+
+test('die Zeile traegt den Schluessel autopilot und steht vor allem, was darunter kommt', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on, { spalte: true })
+    await start($ as never)
+    await befehl($ as never)
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        const text = await leiste(ui as never)
+        expect(text.indexOf('Autopilot:')).toBe(0)
+        expect(text.indexOf('Autopilot:')).toBeLessThan(text.indexOf('engine'))
+        expect(text.indexOf('engine')).toBeLessThan(text.indexOf('unten'))
+        // Leitstand und Statistik finden die Zeile an ihrem Schluessel; der Knopf steht
+        // darin, so dass er mitkommt, wenn sie sie versetzen.
+        const zeile = (await ui.findAll({ type: 'Box' })).find(b => b.props.key === 'autopilot')
+        expect(zeile).toBeDefined()
+        expect(JSON.stringify(zeile)).toContain('ap-beenden')
+    }
+})
+
+test('ein Druck auf 🅰️ im Leitstand beendet die Schicht am Ende der Runde, statt anzuschieben', MIT_LEITSTAND, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Teil A steht.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+
+    // In der angeschobenen Runde drueckt die Person 🅰️; ihr /autopilot aus haengt in der Schlange.
+    await clock.advance(60_000)
+    await druck($ as never, 1_060_000)
+    await runde($ as never, 't2', 'Teil B steht.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_KNOPF}, nach 1 min: 1x angeschoben`)
+        expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
+    }
+
+    // Eine neue Nachricht bekommt keinen Kontext mehr, und nach ihrer Runde schiebt nichts an.
+    await person($ as never, 'Noch eine Frage.')
+    expect(eingang.at(-1)?.context).toEqual([])
+    await runde($ as never, 't3', 'Antwort.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+
+    // Das aus des Leitstands kommt an, sobald die Sitzung still ist, und meldet die beendete Schicht.
+    expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus: 1x angeschoben.')
+
+    // Eine neue Schicht beginnt nach dem Druck: Der alte Wunsch gilt ihr nicht.
+    await befehl($ as never, 'an')
+    await person($ as never, 'Weiter mit Teil C.')
+    expect(eingang.at(-1)?.context).toContain(KONTEXT)
+    await runde($ as never, 't4', 'Teil C halb.')
+    expect(angeschoben(eingang)).toHaveLength(2)
+})
+
+test('schreibt die Person nach dem Druck auf 🅰️, geht ihre Nachricht ohne Kontext raus, und die Schicht ist vorbei', MIT_LEITSTAND, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await clock.advance(1000)
+    await druck($ as never, 1_001_000)
+    await person($ as never, 'Bau das.')
+    expect(eingang[0]?.context).toEqual([])
+    await runde($ as never, 't1', 'Halb fertig.')
+    expect(angeschoben(eingang)).toHaveLength(0)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain(GRUND_KNOPF)
+})
+
+test('kam 🅰️ in der Pause nach einem API-Fehler, endet die Schicht, statt anzuschieben', MIT_LEITSTAND, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', '', { reason: 'error' })
+    await clock.advance(30_000)
+    await druck($ as never, 1_030_000)
+    await clock.advance(30_000)
+    expect(angeschoben(eingang)).toHaveLength(0)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await leiste(ui as never)).toContain(GRUND_KNOPF)
+})
+
+test('ein Wunsch aus dem Leitstand, der nicht nach dem Beginn der Schicht liegt, zaehlt nicht', MIT_LEITSTAND, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    // Gedrueckt, als noch keine Schicht lief, etwa um eine fruehere zu beenden.
+    await druck($ as never, 1_000_000)
+    await clock.advance(1000)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    expect(eingang[0]?.context).toContain(KONTEXT)
+    await runde($ as never, 't1', 'Weiter?')
+    // Im selben Augenblick wie der Beginn ist nicht juenger.
+    await druck($ as never, 1_001_000)
+    await runde($ as never, 't2', 'Weiter?')
+    expect(angeschoben(eingang)).toHaveLength(2)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain('2x angeschoben')
+    expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeDefined()
+})
+
+test('ohne Leitstand schiebt der Autopilot weiter an wie bisher', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    expect(eingang[0]?.context).toContain(KONTEXT)
+    await runde($ as never, 't1', 'Weiter?')
+    await runde($ as never, 't2', 'Weiter?')
+    expect(angeschoben(eingang)).toHaveLength(2)
+    expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus: 2x angeschoben.')
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain('du hast ihn beendet')
+})
+
+test('ist der Wert des Leitstands keine Zeit, gibt es keinen Wunsch', MIT_LEITSTAND, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await clock.advance(1000)
+    // Keine Zahl, als Text aber spaeter als der Beginn der Schicht.
+    await $.command.run({ command: 'leitstand-text', args: '9999999999999' } as never)
+    await runde($ as never, 't1', 'Weiter?')
+    expect(angeschoben(eingang)).toHaveLength(1)
+    expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus: 1x angeschoben.')
 })

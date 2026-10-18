@@ -8,6 +8,10 @@
  * Ein Lauf heisst hier weiter Schicht, wie zu der Zeit, als der Mod
  * Nachtschicht hiess: Der Leitstand liest `schicht`, `bericht` und
  * `zeigeFragen` unter diesen Namen.
+ *
+ * Umgekehrt liest der Autopilot `leitstand.autopilotStop`: wann die Person
+ * den Autopilot-Knopf im Leitstand gedrueckt hat, um die laufende Schicht zu
+ * beenden.
  */
 
 /** Wie es um die Schicht steht. */

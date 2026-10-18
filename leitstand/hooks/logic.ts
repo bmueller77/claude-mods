@@ -1272,6 +1272,32 @@ export function liftButtons(tree: unknown, isWhole = true): { buttons: unknown[]
   return { buttons, rest: kept.length === 0 ? null : { ...(tree as object), children: kept } }
 }
 
+/**
+ * Takes the drawing under `key` out of what other mods draw beneath, wherever it sits in their boxes (another mod may
+ * have built around it): the rest without it, null when nothing is left, and the drawing itself, whole, null when it
+ * is not there. The engine lets a mod move a part of another's drawing that `next(e)` handed it. Only boxes are
+ * searched; a text holds no box.
+ */
+export function takeOut(tree: unknown, key: string): { rest: unknown; taken: unknown } {
+  if (tree === null || typeof tree !== 'object') return { rest: tree, taken: null }
+  const { type, props, children } = tree as { type?: unknown; props?: { key?: unknown }; children?: unknown }
+  if (props?.key === key) return { rest: null, taken: tree }
+  if (type !== 'Box') return { rest: tree, taken: null }
+  let taken: unknown = null
+  const kept: unknown[] = []
+  for (const kid of childrenOf(children)) {
+    if (taken !== null) {
+      kept.push(kid)
+      continue
+    }
+    const part = takeOut(kid, key)
+    taken = part.taken
+    if (part.rest !== null && part.rest !== undefined) kept.push(part.rest)
+  }
+  if (taken === null) return { rest: tree, taken: null }
+  return { rest: kept.length === 0 ? null : { ...(tree as object), children: kept }, taken }
+}
+
 /** The person's own words: notes an app adds around a prompt (<system-reminder>…) are not the request. */
 export function ownWords(text: string): string {
   return text.replace(/<([A-Za-z][\w-]*)\b[^>]*>[\s\S]*?<\/\1>/g, ' ').trim()

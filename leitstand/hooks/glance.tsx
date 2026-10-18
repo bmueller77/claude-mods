@@ -93,6 +93,7 @@ import {
   todosToTasks,
   tokenNote,
   tourNeeds,
+  takeOut,
   wholePieces,
   widthOf,
   fit,
@@ -112,7 +113,7 @@ import type { WorkMode } from './dynamisch'
 import { GLYPH } from './look'
 import type { IconName } from './look'
 
-export { activityOf, asksQuestion, carryTokens, cleanName, fit, formatCost, formatTokens, headerDetails, isButtonsOnly, isContinueWords, isGermanText, isLatinText, isStartWords, liftButtons, localTimes, ownWords, prettyModel, questionOf, resetTime, sentenceCase, tokenNote, wholePieces } from './logic'
+export { activityOf, asksQuestion, carryTokens, cleanName, fit, formatCost, formatTokens, headerDetails, isButtonsOnly, isContinueWords, isGermanText, isLatinText, isStartWords, liftButtons, localTimes, ownWords, prettyModel, questionOf, resetTime, sentenceCase, takeOut, tokenNote, wholePieces } from './logic'
 const PLAN_TOOL = `mcp__${PLUGIN}__plan_steps`
 const PROGRESS_TOOL = `mcp__${PLUGIN}__report_progress`
 const ALWAYS_ALLOWED = new Set([
@@ -160,6 +161,8 @@ const ADHD = '\u{1F9E0}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
 /** The opener for Filetree's side pane, after ADHD mode: a tree. */
 const FILETREE = '\u{1F333}'
+/** The clean-code skill, right behind Grill mich: a broom. */
+const CLEAN_CODE = '\u{1F9F9}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
 const MASK_ON = '\u{1F512}'
 const MASK_OFF = '\u{1F513}'
@@ -263,6 +266,8 @@ type RemoteSides = { app: RemoteSide; command: RemoteSide }
 const remoteAtom = atom({ plugin: 'leitstand', key: 'remoteControl' } as const, { app: 'missing', command: 'missing' } as RemoteSides)
 // Whether the i-have-adhd skill's mode is on: it stays on until the person says "stop adhd mode" or "normal mode".
 const adhdAtom = atom({ plugin: 'leitstand', key: 'adhdMode' } as const, false)
+// When 🅰️ was last pressed to end a running Autopilot, for Autopilot to read as a round ends (see toggleNightShift).
+const autopilotStopAtom = atom({ plugin: 'leitstand', key: 'autopilotStop' } as const, null)
 const HANDOFF_CONFIRM_MS = 8000
 // What the Continue button sends, as the person's own words; turn.start knows it and keeps the job going.
 const CONTINUE_TEXT = 'Mach bitte da weiter, wo du aufgehört hast.'
@@ -1423,11 +1428,30 @@ const runCommand = async ($: $, label: string, names: string[], args?: string): 
   }
 }
 
-/** Autopilot: its mod's command, which turns it on or off; the old Nachtschicht's where only that is there. */
-const toggleNightShift = ($: $) => runCommand($, 'Autopilot', ['autopilot', 'nachtschicht'])
+/**
+ * Autopilot: its mod's command, the old Nachtschicht's where only that is there; `an` while it is off, `aus` while it
+ * is on. Started, not waited for: a command a plugin runs waits until the session is idle, and a running Autopilot
+ * pushes on round after round, so a press that waited ran past its budget and Autopilot stayed on. A press that ends
+ * it first leaves a wish in Leitstand's own state, the time of the press; Autopilot reads it as the round ends and
+ * ends instead of pushing on. Until then 🅰️ stays lit, as it shows Autopilot's own state. The command still goes: an
+ * idle session runs it at once, and an Autopilot that reads no wish ends by it. Named, not a bare toggle: it may come
+ * through only after Autopilot ended by the wish, and a bare /autopilot would then start it again.
+ */
+const toggleNightShift = async ($: $) => {
+  const isOn = await isNightShiftOn($)
+  if (isOn) {
+    const pressed = await now($)
+    await update($, autopilotStopAtom, () => pressed)
+    $.ui.toast('Der Autopilot geht nach dieser Runde aus.')
+  }
+  void runCommand($, 'Autopilot', ['autopilot', 'nachtschicht'], isOn ? 'aus' : 'an').catch(() => undefined)
+}
 
 /** Filetree: the filetree plugin's command, which opens its side pane. Only Filetree closes it, so this opens, never toggles. */
 const openFiletree = ($: $) => runCommand($, 'Filetree', ['filetree'])
+
+/** Clean code: the clean-code skill (functions, names, nesting, error handling), run as if typed. */
+const runCleanCode = ($: $) => runCommand($, 'clean-code', ['clean-code'])
 
 // Autopilot keeps its run in its own state, under the key from its days as the Nachtschicht (names here still say
 // night shift): the run while there is one, null once it is ended. Any plugin reads any value, so Leitstand reads it
@@ -1436,6 +1460,8 @@ const openFiletree = ($: $) => runCommand($, 'Filetree', ['filetree'])
 const NIGHT_SHIFT_STATE = { plugin: 'autopilot', key: 'schicht' } as const
 // The same value as the mod kept it while it was called Nachtschicht.
 const OLD_NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
+// The key Autopilot draws its line under, in the band above the prompt; it keeps it fixed for the mods that move it.
+const AUTOPILOT_LINE = 'autopilot'
 
 /**
  * Whether Autopilot is on, as it holds it: while there is a run, be it running, finished or halted, since /autopilot
@@ -3762,15 +3788,19 @@ export function registerGlance(on: On): void {
     // Minimal: one line, with what is happening, how far, the time left and the tokens; the view menu on its right,
     // and under it the row of places and actions, as in the other views.
     const isMinimal = isEnabled && detail === 'minimal'
+    // Autopilot's line stands at the very top, over the band, wherever it comes in what is beneath (another mod may have
+    // built around it). Taken out whole before any buttons are lifted, so its Beenden stays beside its words.
+    const { rest: underneath, taken: autopilotLine } = takeOut(beneath, AUTOPILOT_LINE)
     // Another mod's buttons (Replay, say) sit with Leitstand's own actions at the bottom right, in every state of the
     // band; anything else it draws stays under it.
-    const lifted = vector && isEnabled ? liftButtons(beneath) : { buttons: [], rest: beneath }
+    const lifted = vector && isEnabled ? liftButtons(underneath) : { buttons: [], rest: underneath }
     const kept = lifted.rest as RenderElement | null
     // Over the band a thin line, as the other mods in it draw one over theirs.
     const rule = kit.rule(e.props.bodyColumns)
     // What is beneath may be the engine's own node, which can't sit under a Box with a width: wrap, don't nest.
     const withBeneath = (tree: RenderElement): RenderElement => (
       <Box flexDirection="column">
+        {autopilotLine as RenderElement | null}
         {rule}
         {tree}
         {kept}
@@ -4023,6 +4053,12 @@ export function registerGlance(on: On): void {
     )
     // Grill mich right after it, as the steam sign.
     const grillItem = !isEnabled || !vector ? null : <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
+    // The broom right behind it: the clean-code skill. The press does not wait for the command, which runs once the
+    // session is idle; waiting would run the press past its budget while Claude works.
+    const cleanItem =
+      !isEnabled || !vector ? null : (
+        <Button key="cleancode" variant="secondary" label={CLEAN_CODE} onPress={() => void runCleanCode($).catch(() => undefined)} />
+      )
     // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
     // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it), Autopilot,
     // masking on screen and the shield that moves the chat's secrets into the .env.
@@ -4054,7 +4090,7 @@ export function registerGlance(on: On): void {
     // before the plan and the history. One stands only between two groups that show a button, so never at an end or
     // two side by side.
     const leftGroups = [
-      { bar: '', items: [workModeItem, grillItem, ...(skillItems?.beside ?? [])] },
+      { bar: '', items: [workModeItem, grillItem, cleanItem, ...(skillItems?.beside ?? [])] },
       { bar: 'sep-files', items: skillItems?.files ?? [] },
       { bar: 'sep-skills', items: skillItems?.past ?? [] },
       { bar: 'sep-places', items: places },

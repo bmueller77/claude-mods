@@ -24,6 +24,18 @@ const FEHLER_PAUSE_MS = 60_000
  */
 const START_PAUSE_MS = 1000
 
+/** Der Grund im Bericht, wenn die Person den Autopiloten mit 🅰️ im Leitstand beendet hat. */
+export const GRUND_KNOPF = 'du hast ihn über 🅰️ beendet'
+
+/**
+ * Wo der Leitstand den Wunsch ablegt, die Schicht zu beenden: die Zeit des
+ * Drucks auf 🅰️. Sein /autopilot aus wartet, bis die Sitzung still ist, und das
+ * wird sie nicht, solange die Schicht Runde um Runde anschiebt. Darum liest die
+ * Schicht den Wunsch selbst; jeder Mod darf fremden Zustand lesen, schreiben nur
+ * seinen eigenen.
+ */
+const LEITSTAND_STOPP = { plugin: 'leitstand', key: 'autopilotStop' } as const
+
 const schicht = atom({ plugin: 'autopilot', key: 'schicht' } as const, null as Schicht | null)
 const bericht = atom({ plugin: 'autopilot', key: 'bericht' } as const, null as Bericht | null)
 const zeigeFragen = atom({ plugin: 'autopilot', key: 'zeigeFragen' } as const, false)
@@ -116,6 +128,21 @@ function zaehlerAuf0(): void {
     warte = null
 }
 
+/**
+ * Ob der Leitstand diese Schicht beenden will: ein Wunsch, juenger als ihr
+ * Beginn. Ein aelterer galt einer frueheren Schicht. Ohne Leitstand, oder wenn
+ * das Lesen scheitert, gibt es keinen Wunsch.
+ */
+async function sollAus($: EngineInterface, s: Schicht): Promise<boolean> {
+    try {
+        // Der Wert steht im Vertrag des Leitstands, nicht in diesem: darum hier getypt.
+        const { value } = (await $.state.get(LEITSTAND_STOPP as never)) as { value?: unknown }
+        return typeof value === 'number' && value > s.seit
+    } catch {
+        return false
+    }
+}
+
 async function anschieben($: EngineInterface): Promise<void> {
     runden += 1
     await update($, schicht, s => (s ? { ...s, geschoben: s.geschoben + 1 } : s))
@@ -133,6 +160,11 @@ async function anschiebenWennNoetig($: EngineInterface): Promise<void> {
     warte = null
     const s = await read($, schicht)
     if (s?.phase === 'laeuft' && !laeuft) {
+        // Kam in der Pause 🅰️ im Leitstand, endet die Schicht, statt anzuschieben.
+        if (await sollAus($, s)) {
+            await beenden($, GRUND_KNOPF)
+            return
+        }
         await anschieben($)
     }
 }
@@ -220,8 +252,20 @@ export const register: Register = (on, options) => {
         const soll = arg === 'an' || arg === 'ein' ? true : arg === 'aus' ? false : s === null
 
         if (!soll) {
-            const b = await beenden($, 'du hast ihn beendet')
-            return { text: b ? `Der Autopilot ist aus: ${zahlen(b.geschoben, b.fragen.length)}.` : 'Der Autopilot war nicht an.' }
+            // Kommt das aus vom Knopf 🅰️ im Leitstand, sagt der Bericht das.
+            const b = await beenden($, s && (await sollAus($, s)) ? GRUND_KNOPF : 'du hast ihn beendet')
+            if (b) {
+                return { text: `Der Autopilot ist aus: ${zahlen(b.geschoben, b.fragen.length)}.` }
+            }
+            // Den Druck auf 🅰️ hat die Schicht meist schon am Ende der Runde erledigt;
+            // das /autopilot aus des Leitstands kommt erst danach, wenn die Sitzung still ist.
+            const vorher = await read($, bericht)
+            return {
+                text:
+                    vorher?.grund === GRUND_KNOPF
+                        ? `Der Autopilot ist aus: ${zahlen(vorher.geschoben, vorher.fragen.length)}.`
+                        : 'Der Autopilot war nicht an.',
+            }
         }
         if (s?.phase === 'laeuft') {
             return { text: 'Der Autopilot laeuft schon. /autopilot aus beendet ihn.' }
@@ -252,6 +296,12 @@ export const register: Register = (on, options) => {
         // Die Person hat selbst geschrieben: ein neuer Auftrag, die Zaehler beginnen von vorn.
         angeschoben = false
         zaehlerAuf0()
+        // Sie hat vorher 🅰️ im Leitstand gedrueckt: Die Schicht ist vorbei, die
+        // Nachricht geht ohne den Kontext des Autopiloten raus.
+        if (await sollAus($, s)) {
+            await beenden($, GRUND_KNOPF)
+            return next(e)
+        }
         if (s.phase !== 'laeuft') {
             await update($, schicht, x => (x ? { ...x, phase: 'laeuft' as const, grund: null } : x))
         }
@@ -301,6 +351,12 @@ export const register: Register = (on, options) => {
         if (e.reason === 'aborted') {
             // Wer unterbricht, ist da.
             await beenden($, 'du hast unterbrochen')
+            return r
+        }
+        // 🅰️ im Leitstand: Die Person will die Schicht beenden. Das geht vor,
+        // auch vor dem naechsten Anschieben.
+        if (await sollAus($, s)) {
+            await beenden($, GRUND_KNOPF)
             return r
         }
         if (s.phase !== 'laeuft') {
@@ -362,6 +418,8 @@ export const register: Register = (on, options) => {
             </Text>
         )
 
+        // Der Schluessel `autopilot` ist fest: Leitstand und Statistik holen die Zeile
+        // daran ganz nach oben, wenn sie den Teil des Autopiloten in ihren einbauen.
         const eigene = (
             <Box key="autopilot" flexDirection="column" paddingX={1}>
                 <Box flexDirection="row" gap={1}>
@@ -396,6 +454,7 @@ export const register: Register = (on, options) => {
                 </Box>
             </Box>
         )
+        // Die eigene Zeile vor allem, was darunter kommt: Sie steht ganz oben im Band.
         return rest ? (
             <Box flexDirection="column">
                 {eigene}

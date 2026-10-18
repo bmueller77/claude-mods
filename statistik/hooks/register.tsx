@@ -69,6 +69,8 @@ const WARM_IMMER = 'immer'
 
 /** Der Block von Naechste-Schritte: er steht immer ganz unten, unter der Statistik. */
 const BLOCK_UNTEN = 'naechste-schritte'
+/** Die Zeile des Autopiloten: sie steht immer ganz oben, ueber allem anderen im Band. */
+const BLOCK_OBEN = 'autopilot'
 
 /** So viele Eintraege liefert `$.session.messages()` hoechstens; eine volle Liste kann gekappt sein. */
 const NACHRICHTEN_GRENZE = 4096
@@ -1676,11 +1678,16 @@ export const register: Register = (on, options) => {
             </Box>
         )
 
+        // Die Zeile des Autopiloten gehoert ganz nach oben. Steht jener Mod in der Kette
+        // unter der Statistik, kommt sie hier mit `rest` an, irgendwo darin, auch in
+        // dem, was ein Mod dazwischen um sie gebaut hat: herausnehmen, als Ganzes, und
+        // vor alles andere setzen.
+        const { oben: ohneZeile, unten: zeile } = rest ? nimmHeraus(rest, BLOCK_OBEN) : { oben: null, unten: null }
         // Die Vorschlaege von Naechste-Schritte gehoeren ganz nach unten. Steht jener
         // Mod in der Kette unter der Statistik, kommt sein Block hier mit `rest` an:
         // herausnehmen und unter die eigene Zeile setzen.
-        const { oben, unten } = rest ? nimmHeraus(rest, BLOCK_UNTEN) : { oben: null, unten: null }
-        if (!oben) {
+        const { oben, unten } = ohneZeile ? nimmHeraus(ohneZeile, BLOCK_UNTEN) : { oben: null, unten: null }
+        if (!oben && !zeile) {
             return unten ? (
                 <Box flexDirection="column">
                     {eigene}
@@ -1704,7 +1711,8 @@ export const register: Register = (on, options) => {
         )
         return (
             <Box flexDirection="column">
-                <Box key="von-unten">{oben}</Box>
+                {zeile}
+                {oben ? <Box key="von-unten">{oben}</Box> : null}
                 {trennlinie}
                 {eigene}
                 {unten}

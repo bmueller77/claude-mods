@@ -50,6 +50,11 @@ type Stand = {
     abgelehnt?: string[]
     /** Was Naechste-Schritte von unten mitbringt: neben anderem oder allein. */
     unten?: 'mit-anderen' | 'allein'
+    /**
+     * Wo die Zeile des Autopiloten von unten kommt: unter allem anderen, mitten
+     * drin (in einem Block, den ein anderer Mod um sie gebaut hat) oder allein.
+     */
+    autopilot?: 'unten' | 'mitte' | 'allein'
     /** Der Verlauf fuer `$.session.messages()`; "fehler" laesst das Lesen scheitern. */
     nachrichten?: unknown[] | 'fehler'
 }
@@ -136,6 +141,19 @@ function boden(on: On, stand: Stand) {
     on('ui.render', { component: 'AbovePrompt' }, ($, e, _next) => {
         const { Box, Text } = $.ui.resolve(e)
         const vorschlag = h(Box, { key: 'naechste-schritte' }, h(Text, {}, 'Vorschlag')) as RenderElement
+        const zeile = h(
+            Box,
+            { key: 'autopilot', flexDirection: 'column', paddingX: 1 },
+            h(Box, { flexDirection: 'row', gap: 1 }, h(Text, {}, 'Autopilot:'), h(Text, {}, 'Claude arbeitet ohne Rueckfragen weiter')),
+        ) as RenderElement
+        if (stand.autopilot === 'allein') {
+            return zeile
+        }
+        if (stand.autopilot) {
+            const mitte = h(Box, { flexDirection: 'column' }, zeile, h(Text, {}, 'Leitstand')) as RenderElement
+            const kinder = stand.autopilot === 'mitte' ? [h(Text, {}, 'engine'), mitte] : [h(Text, {}, 'engine'), zeile]
+            return h(Box, { flexDirection: 'column' }, ...kinder, ...(stand.unten ? [vorschlag] : [])) as RenderElement
+        }
         if (stand.unten === 'allein') {
             return vorschlag
         }
@@ -1163,6 +1181,50 @@ test('die Vorschlaege von Naechste-Schritte stehen unter der Statistik, auch wen
     expect(text.indexOf('min?')).toBeLessThan(text.indexOf('Vorschlag'))
     // Versetzt, nicht verdoppelt.
     expect(text.split('Vorschlag')).toHaveLength(2)
+})
+
+test('die Zeile des Autopiloten steht ganz oben, auch wenn sie von unten oder mitten aus dem Band kommt', async ($, on) => {
+    mock.clock(on, { now: JETZT })
+    mock.store(on, {})
+    const stand: Stand = { tokens: 40_000, fenster: 200_000, schwelle: 166_000, unten: 'mit-anderen' }
+    boden(on, stand)
+    await start($ as never)
+    await runde($ as never)
+
+    for (const wo of ['unten', 'mitte'] as const) {
+        stand.autopilot = wo
+        for (const surface of FLAECHEN) {
+            const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+            const text = await leiste(ui as never)
+            // Erst der Autopilot, dann die anderen Mods, der Strich, die Statistik, ganz unten die Vorschlaege.
+            expect(text.indexOf('Autopilot:')).toBe(0)
+            expect(text.indexOf('Autopilot:')).toBeLessThan(text.indexOf('engine'))
+            if (wo === 'mitte') {
+                expect(text.indexOf('engine')).toBeLessThan(text.indexOf('Leitstand'))
+            }
+            expect(text.indexOf('engine')).toBeLessThan(text.indexOf('min?'))
+            expect(text.indexOf('min?')).toBeLessThan(text.indexOf('Vorschlag'))
+            // Versetzt, nicht verdoppelt, und als Ganzes: die Worte bleiben in ihrer Zeile.
+            expect(text.split('Autopilot:')).toHaveLength(2)
+            const boxen = await ui.findAll({ type: 'Box' })
+            const zeile = boxen.find(b => b.props.key === 'autopilot')
+            expect(JSON.stringify(zeile)).toContain('Claude arbeitet ohne Rueckfragen weiter')
+            expect(JSON.stringify(boxen[0]?.children?.[0] ?? null)).toContain('"autopilot"')
+        }
+    }
+})
+
+test('kommt nur die Zeile des Autopiloten von unten, steht sie ueber dem Strich und der Statistik', async ($, on) => {
+    mock.clock(on, { now: JETZT })
+    mock.store(on, {})
+    boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000, autopilot: 'allein' })
+    await start($ as never)
+    await runde($ as never)
+
+    const text = await leiste((await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })) as never)
+    expect(text.indexOf('Autopilot:')).toBe(0)
+    expect(text.indexOf('Autopilot:')).toBeLessThan(text.indexOf('───'))
+    expect(text.indexOf('───')).toBeLessThan(text.indexOf('min?'))
 })
 
 test('kommen nur die Vorschlaege von unten, steht kein Strich ueber der Statistik', async ($, on) => {

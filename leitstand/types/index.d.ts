@@ -228,6 +228,11 @@ declare module 'claude-code' {
       remoteControl: { app: 'on' | 'off' | 'missing'; command: 'on' | 'off' | 'missing' }
       /** Whether the i-have-adhd skill's mode is on, until "stop adhd mode" or "normal mode". */
       adhdMode: boolean
+      /**
+       * When the Autopilot button was last pressed to end a running Autopilot, in ms since the epoch; null until then.
+       * Autopilot reads it as a round ends and ends a run that began before it, instead of pushing on.
+       */
+      autopilotStop: number | null
     }
   }
 }
