@@ -493,6 +493,46 @@ test('nur vom Handy geht eine Nachricht mit Passwort ohne Zurückhalten durch; v
   expect(entered).toEqual(['log in with password: [Passwort entfernt]'])
 })
 
+test('ein Slash-Befehl vom Handy mit Passwort läuft, aber ohne das Passwort; vom Computer wird er wie bisher zurückgehalten', async ($, on) => {
+  world(on)
+  const entered: string[] = []
+  on('prompt.submit', (_, e) => {
+    entered.push(e.text)
+    return { text: e.text }
+  })
+  const ran: { command: string; args: string }[] = []
+  on('command.run', (_, e) => {
+    ran.push({ command: e.command, args: e.args })
+    return { text: 'ok' }
+  })
+  const args = `log in with password: ${SAMPLE_PASSWORD}`
+  const typed = (kind: string) =>
+    ({ text: `/deploy ${args}`, command: { name: 'deploy', args }, wait: false, origin: { kind } }) as never
+
+  // From the phone the command is not held back...
+  const phone = await $.prompt.submit(typed('bridge'))
+  expect((phone as { drop?: string }).drop).toBeUndefined()
+  expect(entered).toEqual([`/deploy ${args}`])
+  // ...and runs without the password, with the note for Claude.
+  const run = await $.command.run({ command: 'deploy', args, origin: { kind: 'bridge' } } as never)
+  expect(ran).toEqual([{ command: 'deploy', args: 'log in with password: [Passwort entfernt]' }])
+  expect(JSON.stringify(ran)).not.toContain(SAMPLE_PASSWORD)
+  expect(run.text).toBe('ok')
+  expect((run.context ?? []).join('\n')).toContain('Remote Control')
+
+  // Typed at the computer it is held back as before, and runs as typed.
+  const computer = await $.prompt.submit(typed('composer'))
+  expect((computer as { drop?: string }).drop).toContain('zurückgehalten')
+  expect(entered).toHaveLength(1)
+  await $.command.run({ command: 'deploy', args, origin: { kind: 'composer' } } as never)
+  expect(ran[1]).toEqual({ command: 'deploy', args })
+
+  // From the phone without a secret it runs unchanged, with no note.
+  const plain = await $.command.run({ command: 'deploy', args: 'staging', origin: { kind: 'bridge' } } as never)
+  expect(ran[2]).toEqual({ command: 'deploy', args: 'staging' })
+  expect(plain.context ?? []).toEqual([])
+})
+
 test('overall progress, time left and a grown plan show in the header and footer', async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.store(on)
@@ -954,7 +994,7 @@ test('each step shows its tokens and how much came from the cache', async ($, on
   expect((await texts($, 'terminal', 120)).join('\n')).toMatch(/✓ Fertig .* · 2,4k neu · 10k aus Cache/)
 })
 
-test('plan usage shows all the time, not only near the limit', async ($, on) => {
+test('the details view shows no usage line under the limit, as the mod Statistik does; near the limit it warns', async ($, on) => {
   world(on)
   on('session.measure', (_, e) => ({ changed: e.changed }))
   await detailsOn($)
@@ -969,15 +1009,24 @@ test('plan usage shows all the time, not only near the limit', async ($, on) => 
 
   for (const surface of SURFACES) {
     const shown = (await texts($, surface)).join('\n')
-    // "Plan" is a button on the desktop; its usage line says "Nutzung" so the two don't read as one.
-    const usageLine = '5 Std. 42% · Woche 18%'
-    if (surface === 'terminal') expect(shown).toContain(`Plan-Nutzung: ${usageLine}`)
-    else {
-      expect(shown).toMatch(/(^|[^-])Nutzung: 5 Std\. 42% · Woche 18%/m)
-      expect(shown).not.toContain('Plan-Nutzung')
-    }
+    expect(shown).not.toContain('Nutzung')
+    expect(shown).not.toContain('42%')
     expect(shown).not.toContain('Chat zu')
     expect(shown).not.toContain('⚠')
+  }
+
+  await $.session.measure({
+    context: { window: 200_000, tokens: 68_000, percent: 34 },
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 85 },
+      { kind: 'seven_day', percentUsed: 18 },
+    ],
+    changed: ['context', 'rateLimits'],
+  })
+  for (const surface of SURFACES) {
+    const shown = (await texts($, surface, 120)).join('\n')
+    expect(shown).toContain('Du hast 85% deines Limits (5 Std.) verbraucht')
+    expect(shown).not.toContain('Nutzung')
   }
 })
 
@@ -1020,7 +1069,7 @@ test('the simple view hides models, tokens and low plan usage; the Details butto
   expect(detailed).toContain('Leitstand: Details')
   expect(detailed).toContain('Explore · Haiku 4.5')
   expect(detailed).toContain('2,4k neu · 10k aus Cache')
-  expect(detailed).toContain('Plan-Nutzung: 5 Std. 42%')
+  expect(detailed).not.toContain('Nutzung')
 })
 
 test('the simple view still warns near a plan limit', async ($, on) => {
@@ -1615,18 +1664,21 @@ test('in the Desktop app a step row keeps whole words: in a narrow band the name
   expect((await texts($, 'desktop', 80)).some(one => one.endsWith('Tidied the footer links'))).toBe(true)
 })
 
-test('in the Desktop app the Plan panel says Usage, as the band does, so it does not read as the Plan button', async ($, on) => {
+test('in the details view the Plan panel shows no usage line: the mod Statistik shows limits and context', async ($, on) => {
   world(on)
   on('session.measure', (_, e) => ({ changed: e.changed }))
   await $.command.run({ command: 'leitstand', args: 'details on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await $.session.measure({ context: { window: 200_000, tokens: 68_000, percent: 34 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42 }], changed: ['context', 'rateLimits'] } as never)
-  const ui = await $.ui.mount({ ...PLAN_PANE, surface: 'desktop' })
-  const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
-  await ui.unmount()
-  expect(words).toContain('Nutzung: 5 Std. 42%')
-  expect(words).not.toContain('Plan-Nutzung')
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...PLAN_PANE, surface })
+    const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
+    await ui.unmount()
+    expect(words).toContain('Write it')
+    expect(words).not.toContain('Nutzung')
+    expect(words).not.toContain('Chat zu')
+  }
 })
 
 test('in the Desktop app History reads every time one way, as the report does, and the report puts Copy report last', async ($, on) => {
@@ -1788,11 +1840,12 @@ test('in the Desktop app no mark says again what the words beside it say, in the
   band = await drawn({ ...BAND, surface: 'desktop' })
   expect(echoes(band)).toEqual([])
   expect(JSON.stringify(noticeOf(band))).toContain('"alt":"Hinweis"')
+  // Details under the limit show no usage line either: limits and context are the Statistik mod's.
   await detailsOn($)
   await measure(10, 20)
   band = await drawn({ ...BAND, surface: 'desktop' })
   expect(echoes(band)).toEqual([])
-  expect(JSON.stringify(noticeOf(band))).toContain('"alt":"Hinweis"')
+  expect(noticeOf(band)).toBeUndefined()
 
   // History with nothing saved says so in words; its mark says Notice, History being the panel's title, read just before.
   await $.command.run({ command: 'leitstand', args: 'history' } as never)

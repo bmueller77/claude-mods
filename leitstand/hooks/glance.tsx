@@ -2012,7 +2012,7 @@ const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed'
   await setView($, next)
   $.ui.toast(
     next === 'detailed'
-      ? 'Leitstand Details: Modelle, Zeit, Tokens, Cache und Plan-Nutzung'
+      ? 'Leitstand Details: Modelle, Zeit, Tokens und Cache'
       : next === 'minimal'
         ? 'Leitstand minimal: eine Zeile mit Stand, Fortschritt, Restzeit und Tokens'
         : 'Leitstand einfach: nur die Schritte und der Fortschritt',
@@ -2023,7 +2023,7 @@ const setDetail = async ($: $, isDetailed: boolean) => {
   await update($, detailAtom, () => (isDetailed ? 'detailed' : 'simple'))
   await keepForChat($, { detail: isDetailed ? 'detailed' : 'simple' })
   $.ui.toast(
-    isDetailed ? 'Details an: Modelle, Tokens, Cache und Plan-Nutzung' : 'Details aus: nur die Schritte und der Fortschritt',
+    isDetailed ? 'Details an: Modelle, Tokens und Cache' : 'Details aus: nur die Schritte und der Fortschritt',
   )
 }
 
@@ -2430,8 +2430,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     if (kinds.length === 0) {
       return send()
     }
-    // A slash command keeps its text whatever a hook rewrites, so one from the phone is held back as before.
-    if (e.origin.kind === 'bridge' && !e.command) {
+    // A slash command keeps its text whatever a hook rewrites: one from the phone goes on here, and its arguments lose
+    // the secret at command.run, before the command runs.
+    if (e.origin.kind === 'bridge') {
+      if (e.command) return send()
       return send({ ...e, text: removeSecrets(e.text), context: [...(e.context ?? []), SECRET_REMOVED_NOTE] })
     }
     const held = heldMessage
@@ -2442,6 +2444,25 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     await holdSecretMessage($, e.text, kinds)
 
     return { drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel, deshalb hat der Leitstand sie zurückgehalten.' }
+  })
+
+  // A slash command from the phone (Remote Control) runs without the password in its arguments, and Claude says so.
+  on('command.run', async ($, e, next) => {
+    if (e.origin?.kind !== 'bridge' || findSecrets(e.args).length === 0 || !(await read($, guardAtom))) {
+      return next(e)
+    }
+    const result = await next({ ...e, args: removeSecrets(e.args) })
+    return { ...result, context: [...(result.context ?? []), SECRET_REMOVED_NOTE] }
+  }).catch(($, e, next) => {
+    // Should the hook fail, a command from the phone still runs without the password.
+    if (e.origin?.kind !== 'bridge') return next(e)
+    let args: string
+    try {
+      args = removeSecrets(e.args)
+    } catch {
+      return next(e)
+    }
+    return next({ ...e, args })
   })
 
   // While the shield tidies up, what the main chat's compaction leaves has the moved secrets as placeholders only: the
@@ -3630,12 +3651,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       const spent = jobCost(list, usage)
       const job = [tokenNote(tokens, cached), spent === null ? '' : formatCost(spent)].filter(Boolean).join(' · ')
       if (job) footer.push(`Dieser Auftrag: ${job}`)
-      const plan = [
-        ...usage.limits.map(one => `${one.label} ${Math.round(one.percent)}%`),
-        usage.contextPercent === null ? '' : `Chat zu ${Math.round(usage.contextPercent)}% voll`,
-      ].filter(Boolean)
-      // Elsewhere than the terminal "Plan" is a button: the line says Usage, as the band does.
-      if (plan.length > 0) footer.push(`${vector ? 'Nutzung' : 'Plan-Nutzung'}: ${plan.join(' · ')}`)
+      // No usage line: the mod Statistik shows limits and how full the chat is further down.
     }
 
     const isDone = list.phase === 'done'
@@ -4134,33 +4150,27 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const isHigh = top >= LIMIT_WARN
     const reset = isHigh ? resetTime(usage.limitResetsAt, await now($)) : null
     if (vector) {
-      // One quiet row: the details view always shows usage; the simple view only near a limit. The icon carries the
-      // colour, as the app's own notices do.
-      if (usageParts.length > 0 && (isDetailed || isHigh)) {
-        const words = isHigh
-          ? [`Du hast ${Math.round(top)}% deines ${usage.limitLabel ? `Limits (${usage.limitLabel})` : 'Plan-Limits'} verbraucht`, reset === null ? '' : `wird ${reset} zurückgesetzt`]
-          : [`Nutzung: ${usageParts[0] ?? ''}`, ...usageParts.slice(1)]
+      // One row, in every view, only near a limit: the mod Statistik shows limits and context further down. The icon
+      // carries the colour, as the app's own notices do.
+      if (usageParts.length > 0 && isHigh) {
+        const words = [`Du hast ${Math.round(top)}% deines ${usage.limitLabel ? `Limits (${usage.limitLabel})` : 'Plan-Limits'} verbraucht`, reset === null ? '' : `wird ${reset} zurückgesetzt`]
         warnings.push(
           line(
             'limit',
-            isHigh ? kit.icon('alert', top >= LIMIT_ALERT ? 'alert' : 'warn', NOTICE) : kit.icon('clock', 'quiet', NOTICE),
+            kit.icon('alert', top >= LIMIT_ALERT ? 'alert' : 'warn', NOTICE),
             // Whole pieces, as in the header: about 0.8 of a cell a character, less the mark.
-            <Text wrap="truncate-end" dimColor={!isHigh}>
-              {wholePieces(words, Math.floor(columns / 0.8) - 3)}
-            </Text>,
+            <Text wrap="truncate-end">{wholePieces(words, Math.floor(columns / 0.8) - 3)}</Text>,
           ),
         )
       }
-    } else if (usageParts.length > 0 && (isDetailed || isHigh)) {
-      // The simple view speaks up only near a limit; the detailed view always shows usage.
-      const color = top >= LIMIT_ALERT ? 'red' : isHigh ? 'yellow' : undefined
-      const words = isHigh
-        ? `Du hast ${Math.round(top)}% deines ${usage.limitLabel ? `Limits (${usage.limitLabel})` : 'Plan-Limits'} verbraucht${reset === null ? '' : ` · wird ${reset} zurückgesetzt`} · ${usageParts.join(' · ')}`
-        : `Plan-Nutzung: ${usageParts.join(' · ')}`
+    } else if (usageParts.length > 0 && isHigh) {
+      // Every view speaks up only near a limit: the mod Statistik shows limits and context further down.
+      const color = top >= LIMIT_ALERT ? 'red' : 'yellow'
+      const words = `Du hast ${Math.round(top)}% deines ${usage.limitLabel ? `Limits (${usage.limitLabel})` : 'Plan-Limits'} verbraucht${reset === null ? '' : ` · wird ${reset} zurückgesetzt`} · ${usageParts.join(' · ')}`
       warnings.push(
         <Box key="limit" width={columns}>
-          <Text wrap="truncate-end" color={color} dimColor={!isHigh}>
-            {isHigh ? `⚠ ${words}` : words}
+          <Text wrap="truncate-end" color={color}>
+            {`⚠ ${words}`}
           </Text>
         </Box>,
       )
