@@ -74,11 +74,15 @@ describe('das Fenster', () => {
     props: { title: 'Verdichtungen des Chats', isFocused: false, bodyColumns: 120, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
   } as const
 
-  // On Windows the engine hands paths over as C:\tmp\...: compare them as /tmp/...
-  const plain = (path: string) => path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
+  // On Windows the engine hands paths over as C:\tmp\...: compare them as /tmp/... Every chat sees the same compaction.
+  const plain = (path: string) =>
+    path
+      .replace(/\\/g, '/')
+      .replace(/^[A-Za-z]:/, '')
+      .replace(/\/sessions\/[^/]+\//, '/sessions/sitzung-1/')
 
   /** Disk, store and model from memory; the model answers every request with the same German. */
-  function world(on: On) {
+  function world(on: On, chat = { id: 'sitzung-1' }, store?: Map<string, unknown>) {
     const files = new Map<string, string>([
       [`${DIR}/index.json`, JSON.stringify([META])],
       [
@@ -91,10 +95,24 @@ describe('das Fenster', () => {
       [`${DIR}/v1.before.0.json`, JSON.stringify([{ m: 0, role: 'user', i: 0, n: 1, text: GERMAN }])],
     ])
     const prompts: string[] = []
-    mock.store(on)
+    if (store === undefined) mock.store(on)
+    else {
+      // A store the test reads back.
+      on('store.get', (_, e) => ({ value: store.get(e.key) }) as never)
+      on('store.set', (_, e) => {
+        store.set(e.key, e.value)
+        return { value: undefined } as never
+      })
+      on('store.delete', (_, e) => {
+        store.delete(e.key)
+        return { value: undefined } as never
+      })
+      on('store.keys', () => ({ value: [...store.keys()] }) as never)
+    }
+    const clock = mock.clock(on, { now: Date.UTC(2026, 9, 18) })
     on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
     on('command.register', () => ({ value: undefined }) as never)
-    on('session.id', () => ({ value: 'sitzung-1' }) as never)
+    on('session.id', () => ({ value: chat.id }) as never)
     on('env.get', () => ({ value: undefined }) as never)
     on('fs.exists', (_, e) => ({ value: files.has(plain(e.path)) }) as never)
     on('fs.read', (_, e) => ({ value: files.get(plain(e.path)) ?? '' }) as never)
@@ -108,7 +126,7 @@ describe('das Fenster', () => {
         value: { isAnswered: true, text: '<uebersetzung>Das ist die Zusammenfassung.\n\n@@CODE1@@\n\nDanach im Browser getestet.</uebersetzung>', usage: {} },
       } as never
     })
-    return { files, prompts }
+    return { files, prompts, chat, clock }
   }
 
   async function look($: Engine) {
@@ -173,5 +191,65 @@ describe('das Fenster', () => {
     await press($, 'translate')
     expect(prompts).toHaveLength(1)
     expect((await look($)).markdown).toContain('Das ist die Zusammenfassung.\n\n```json\n{"a": 1}\n```\n\nDanach im Browser getestet.')
+  })
+  const start = ($: Engine) => $.session.start({ cwd: '/work', surface: 'desktop' } as never)
+  const isGerman = async ($: Engine) => (await look($)).buttons.includes('Original zeigen')
+
+  test('Übersetzen in Chat A schaltet Chat B nicht mit; A behält seine Wahl beim Fortsetzen', async ($, on) => {
+    const { chat } = world(on)
+    await start($)
+    expect(await isGerman($)).toBe(false)
+    await press($, 'translate')
+    expect(await isGerman($)).toBe(true)
+
+    chat.id = 'sitzung-2'
+    await start($)
+    expect(await isGerman($)).toBe(false)
+
+    // Chat A wird fortgesetzt: dieselbe ID, ein neuer Sitzungsstart.
+    chat.id = 'sitzung-1'
+    await start($)
+    expect(await isGerman($)).toBe(true)
+  })
+
+  test('ein neuer Chat beginnt mit dem Standard aus den Einstellungen', { options: { uebersetzen: true } }, async ($, on) => {
+    const { chat } = world(on)
+    await start($)
+    expect(await isGerman($)).toBe(true)
+    await press($, 'translate')
+    expect(await isGerman($)).toBe(false)
+
+    chat.id = 'sitzung-2'
+    await start($)
+    expect(await isGerman($)).toBe(true)
+    chat.id = 'sitzung-1'
+    await start($)
+    expect(await isGerman($)).toBe(false)
+  })
+
+  test('translate und theme von früher gelten nicht mehr und bleiben liegen; fremde Chats gehen nach 30 Tagen', async ($, on) => {
+    const TAG = 24 * 60 * 60_000
+    const jetzt = Date.UTC(2026, 9, 18)
+    const store = new Map<string, unknown>([
+      ['translate', true],
+      ['theme', 'dark'],
+      ['translate:alt', { at: jetzt - 31 * TAG, isOn: true }],
+      ['translate:jung', { at: jetzt - 29 * TAG, isOn: true }],
+    ])
+    const { clock } = world(on, { id: 'sitzung-1' }, store)
+    await start($)
+    expect(await isGerman($)).toBe(false)
+    const keys = async () => [...store.keys()].sort()
+    expect(await keys()).toEqual(['theme', 'tidied', 'translate', 'translate:jung'])
+
+    // Am selben Tag wird nicht noch einmal aufgeräumt, am nächsten schon.
+    store.set('translate:alt', { at: 0, isOn: true })
+    await start($)
+    expect(await keys()).toContain('translate:alt')
+    await clock.advance(TAG)
+    await start($)
+    expect(await keys()).not.toContain('translate:alt')
+    expect(store.get('translate')).toBe(true)
+    expect(store.get('theme')).toBe('dark')
   })
 })

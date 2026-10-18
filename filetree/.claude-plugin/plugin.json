@@ -1,0 +1,68 @@
+{
+  "name": "filetree",
+  "version": "0.3.0",
+  "description": "Dateibaum wie in einer IDE als Seitenfenster: zeigt, welche Dateien Claude gerade liest, schreibt oder committet. Deutsche Fassung von data-goblin/claude-code-filetree (MIT), übersetzt von Björn Müller.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Kurt Buhler"
+  },
+  "repository": "https://github.com/data-goblin/claude-code-filetree",
+  "keywords": [
+    "file-tree",
+    "git",
+    "mod",
+    "pane"
+  ],
+  "userConfig": {
+    "activity": {
+      "type": "string",
+      "title": "Claude-Aktivität",
+      "description": "Welche Dateiaktivität von Claude im Baum aufleuchtet: reads and writes = Lesen und Schreiben, writes = nur Schreiben, reads = nur Lesen, none = nichts. Gelesenes (Read-Werkzeug oder Bash-Leser wie rg, grep, find, cat) leuchtet Lila, Geschriebenes Orange, Git-Aktionen Grün.",
+      "default": "reads and writes",
+      "options": [
+        "reads and writes",
+        "writes",
+        "reads",
+        "none"
+      ]
+    },
+    "glyphs": {
+      "type": "string",
+      "title": "Symbole",
+      "description": "Symbolsatz: auto nimmt Nerd-Font-Symbole, wenn hier eine Nerd Font installiert ist (nicht in der Desktop-App); nerd erzwingt Nerd-Font-Symbole, plain nimmt nur Unicode.",
+      "default": "auto",
+      "options": [
+        "auto",
+        "nerd",
+        "plain"
+      ]
+    },
+    "follow": {
+      "type": "string",
+      "title": "Claude folgen",
+      "description": "on (an): Der Baum scrollt zu dem, was Claude liest, schreibt oder committet. off (aus): Die Ansicht bleibt, wo du sie hingestellt hast, nur dein eigenes Scrollen bewegt sie; die Markierungen erscheinen trotzdem.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    },
+    "column": {
+      "type": "string",
+      "title": "Rechte Spalte",
+      "description": "Was die rechte Spalte anfangs zeigt: date = Datum der letzten Änderung, size = Größe (Dateien in Bytes, Ordner als Plattenbelegung, im Hintergrund berechnet). Der Knopf Σ oben schaltet um.",
+      "default": "date",
+      "options": [
+        "date",
+        "size"
+      ]
+    },
+    "open": {
+      "type": "string",
+      "title": "Öffnen mit",
+      "description": "Was ein Doppelklick oder Enter mit einer Datei macht. Leer: die Standard-App. preview oder Vorschau: zeigt die Datei im Fenster (Pfeil links geht zurück). Alles andere ist ein Befehl, der stattdessen läuft: {path} ist die Datei, {dir} ihr Ordner; ohne {path} kommt der Pfad ans Ende. Wörter werden an Leerzeichen getrennt, Anführungszeichen halten ein Wort zusammen, es läuft keine Shell. Der Befehl soll den Betrachter starten und zurückkehren; unter Linux läuft er losgelöst.",
+      "default": ""
+    }
+  },
+  "license": "MIT"
+}

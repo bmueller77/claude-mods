@@ -45,8 +45,9 @@ function fensterProps() {
  * `antworten` ist, was das Modell nacheinander sagt; zurueck kommen die
  * gestellten Fragen und die geoeffneten Fenster, damit ein Test zaehlen kann.
  */
-function boden(on: On, antworten: string[]) {
+function boden(on: On, antworten: string[], chat = { id: 'chat-a' }) {
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
+    on('session.id', (_$, _e, _next) => ({ value: chat.id }))
     on('session.cwd', (_$, _e, _next) => ({ value: '/projekt' }))
     on('fs.exists', (_$, _e, _next) => ({ value: false }))
     on('turn.start', (_$, e, _next) => ({ turnId: e.turnId }))
@@ -69,7 +70,7 @@ function boden(on: On, antworten: string[]) {
         const text = antworten[Math.min(fragen.length - 1, antworten.length - 1)] ?? 'NONE'
         return { value: { isAnswered: true, text, usage: USAGE } }
     })
-    return { fragen, fenster }
+    return { fragen, fenster, chat }
 }
 
 type T$ = {
@@ -539,4 +540,96 @@ test('der Kreispfeil steht auch ohne Aenderungen da, das Fenster sagt dann, dass
         props: fensterProps(),
     })
     expect(await leiste(seite as never)).toContain('Keine Dateiänderungen in der letzten Runde.')
+})
+
+test('/zusammenfassung in Chat A schaltet Chat B nicht mit; A behaelt seinen Wert beim Fortsetzen', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fragen, chat } = boden(on, [ANTWORT_MODELL])
+
+    await start($ as never)
+    const aus = await $.command.run({ command: 'zusammenfassung', args: '' } as never)
+    expect(String(aus.text)).toContain('aus')
+
+    // Ein anderer Chat beginnt mit dem Standard: an.
+    chat.id = 'chat-b'
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+
+    // Chat A wird fortgesetzt: dieselbe ID, ein neuer Sitzungsstart. Er bleibt aus.
+    chat.id = 'chat-a'
+    await start($ as never)
+    await runde($ as never, 't2', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+
+    // Und B bleibt an.
+    chat.id = 'chat-b'
+    await start($ as never)
+    await runde($ as never, 't3', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(2)
+})
+
+test('ein neuer Chat bekommt den Standard aus den Einstellungen: an ist aus', { options: { an: false } }, async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fragen, chat } = boden(on, [ANTWORT_MODELL])
+
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(0)
+
+    // Im Chat eingeschaltet, gilt es nur dort.
+    const an = await $.command.run({ command: 'zusammenfassung', args: '' } as never)
+    expect(String(an.text)).toContain('an')
+    await runde($ as never, 't2', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+
+    chat.id = 'chat-b'
+    await start($ as never)
+    await runde($ as never, 't3', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+})
+
+test('der alte Schluessel fuer alle Chats wird nicht gelesen und nicht geloescht; alte fremde Chats fliegen nach 30 Tagen raus', async ($, on) => {
+    const TAG = 24 * 60 * 60_000
+    const clock = mock.clock(on, { now: 100 * TAG })
+    const speicher = new Map<string, unknown>([
+        ['zusammenfassung.aus', true],
+        ['zusammenfassung.aus:chat-alt', { at: 100 * TAG - 31 * TAG, aus: true }],
+        ['zusammenfassung.aus:chat-jung', { at: 100 * TAG - 29 * TAG, aus: true }],
+    ])
+    on('store.get', (_$, e, _next) => ({ value: speicher.get(e.key) }))
+    on('store.set', (_$, e, _next) => {
+        speicher.set(e.key, e.value)
+        return { value: undefined }
+    })
+    on('store.delete', (_$, e, _next) => {
+        speicher.delete(e.key)
+        return { value: undefined }
+    })
+    on('store.keys', (_$, _e, _next) => ({ value: [...speicher.keys()] }))
+    const { fragen } = boden(on, [ANTWORT_MODELL])
+
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+    expect(speicher.get('zusammenfassung.aus')).toBe(true)
+    expect(speicher.has('zusammenfassung.aus:chat-alt')).toBe(false)
+    expect(speicher.has('zusammenfassung.aus:chat-jung')).toBe(true)
+
+    // Am selben Tag raeumt ein zweiter Start nicht noch einmal auf.
+    speicher.set('zusammenfassung.aus:chat-alt', { at: 0, aus: true })
+    await start($ as never)
+    expect(speicher.has('zusammenfassung.aus:chat-alt')).toBe(true)
+    await clock.advance(TAG)
+    await start($ as never)
+    expect(speicher.has('zusammenfassung.aus:chat-alt')).toBe(false)
 })

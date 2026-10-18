@@ -20,7 +20,7 @@ export type Phase =
     | 'laeuft'
     /** Claude hat gemeldet, dass alles erledigt ist, was ohne die Person geht. */
     | 'fertig'
-    /** Die Schicht schiebt nicht mehr an: Limit, Leerlauf, Fehler oder Ablehnung. */
+    /** Die Schicht schiebt nicht mehr an: Leerlauf, Fehler oder Ablehnung. */
     | 'angehalten'
 
 /** Eine laufende Schicht. */
@@ -32,6 +32,18 @@ export type Schicht = {
     grund: string | null
     /** Wie oft sie Claude insgesamt angeschoben hat. */
     geschoben: number
+    /**
+     * Angeschobene Runden seit der letzten Nachricht der Person; bei maxRunden endet
+     * die Schicht. Fehlt bei Schichten, die eine Version vor 0.5.0 begann: dann 0.
+     */
+    runden?: number
+    /**
+     * Ob die laufende oder naechste Runde von der Schicht angeschoben wurde. Steht im
+     * Zustand, nicht im Modul, damit ein Neuladen die Leerlauf-Bremse nicht aushebelt.
+     */
+    angeschoben?: boolean
+    /** Angeschobene Runden in Folge ohne Werkzeugaufruf; bei 2 haelt die Schicht an. */
+    leerlauf?: number
     /** Die Rueckfragen, die Claude stellen wollte und selbst entscheiden musste. */
     fragen: string[]
 }

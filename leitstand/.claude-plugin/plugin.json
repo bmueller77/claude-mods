@@ -1,10 +1,75 @@
 {
   "name": "leitstand",
-  "version": "0.50.1",
+  "version": "0.51.0",
   "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Mode und Gruppenarbeit. In der Knopfzeile Schalter für ADHS-Modus, Remote Control, Autopilot und Verdecken, dazu ein Öffner für Filetree. Läuft der Autopilot, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT).",
   "author": {
     "name": "Antreas-Strb"
   },
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "ansicht": {
+      "type": "string",
+      "title": "Ansicht",
+      "description": "Wie viel der Leitstand zeigt: einfach (Schritte und Fortschritt), ausfuehrlich (dazu Modelle, Zeit und Tokens), minimal (eine Zeile) oder aus. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": "minimal",
+      "options": ["einfach", "ausfuehrlich", "minimal", "aus"]
+    },
+    "arbeitsweise": {
+      "type": "string",
+      "title": "Arbeitsweise",
+      "description": "auto: Claude entscheidet selbst über Helfer. gruppenarbeit: Claude leitet, Arbeiter in sechs Stufen setzen um, jeder Plan wartet auf deine Freigabe. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": "auto",
+      "options": ["auto", "gruppenarbeit"]
+    },
+    "toene": {
+      "type": "string",
+      "title": "Töne",
+      "description": "Ein Signalton, auf Wunsch mit Stimme, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": "aus",
+      "options": ["aus", "signalton", "stimme"]
+    },
+    "benachrichtigungen": {
+      "type": "boolean",
+      "title": "Desktop-Benachrichtigungen",
+      "description": "Eine Benachrichtigung auf deinem Computer, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": false
+    },
+    "andereChats": {
+      "type": "boolean",
+      "title": "Andere Chats",
+      "description": "Die Leiste nennt andere Chats auf diesem Computer, die dich brauchen oder arbeiten. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": false
+    },
+    "ruhemodus": {
+      "type": "boolean",
+      "title": "Ruhemodus",
+      "description": "Nichts auf dem Bildschirm bewegt sich, und der Status steht fett. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": false
+    },
+    "passwortschutz": {
+      "type": "boolean",
+      "title": "Passwortschutz",
+      "description": "Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten, bis du sie noch mal sendest. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": true
+    },
+    "verdecken": {
+      "type": "boolean",
+      "title": "Verdecken",
+      "description": "Passwörter, Schlüssel und persönliche Daten erscheinen auf dem Bildschirm als Punkte. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": true
+    },
+    "planFreigeben": {
+      "type": "boolean",
+      "title": "Plan zuerst freigeben",
+      "description": "Claude zeigt seinen Plan und wartet auf Start oder eine Änderung; in der Gruppenarbeit gilt das immer. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": false
+    },
+    "githubAbschluss": {
+      "type": "boolean",
+      "title": "Auf GitHub abschließen",
+      "description": "Ein fertiger Auftrag in einem GitHub-Projekt bietet den Knopf Push an: Commit, Pull Request und Merge nach deiner Freigabe. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "default": false
+    }
+  }
 }

@@ -63,6 +63,10 @@ const SPEICHER_QUELLE = 'statistik.ttlSource'
 /** Alte Einstellung, mit der jede Sitzung warm begann; wird beim Sitzungsstart geloescht. */
 const SPEICHER_IMMER = 'statistik.warmImmer'
 const SPEICHER_WARM_BIS = 'statistik.warmBis'
+/** Wann zuletzt abgelaufene Fristen fremder Chats weggeraeumt wurden. */
+const SPEICHER_AUFGERAEUMT = 'statistik.aufgeraeumt'
+/** Hoechstens so oft werden fremde Chats aufgeraeumt. */
+const AUFRAEUMEN_ABSTAND_MS = 24 * 60 * 60_000
 
 /** Steht statt einer Frist unter dem Schluessel der Sitzung: warm ohne Ende in diesem Chat. */
 const WARM_IMMER = 'immer'
@@ -1055,6 +1059,22 @@ async function raeumeAuf($: EngineInterface, jetzt: number): Promise<void> {
     if (bis !== undefined && bis !== WARM_IMMER && !(typeof bis === 'number' && bis > jetzt)) {
         await $.store.delete(warmSchluessel())
     }
+    // Abgelaufene Fristen anderer Chats, hoechstens einmal am Tag. "immer" und
+    // laufende Fristen bleiben: der Chat kann fortgesetzt werden.
+    const zuletzt = await $.store.get(SPEICHER_AUFGERAEUMT)
+    if (typeof zuletzt === 'number' && jetzt - zuletzt < AUFRAEUMEN_ABSTAND_MS) {
+        return
+    }
+    await $.store.set(SPEICHER_AUFGERAEUMT, jetzt)
+    for (const schluessel of await $.store.keys()) {
+        if (!schluessel.startsWith(`${SPEICHER_WARM_BIS}:`) || schluessel === warmSchluessel()) {
+            continue
+        }
+        const frist = await $.store.get(schluessel)
+        if (typeof frist === 'number' && frist <= jetzt) {
+            await $.store.delete(schluessel)
+        }
+    }
 }
 
 // --- Compact ---
@@ -1473,6 +1493,9 @@ export const register: Register = (on, options) => {
 
     on('turn.start', async ($, e, next) => {
         if (!e.agentId) {
+            // Nach /clear laeuft der Chat unter einer neuen ID weiter, ohne neuen
+            // Sitzungsstart: die ID hier auffrischen, sonst landet Warmhalten beim alten Chat.
+            z.sid = await $.session.id()
             z.vorRunde = z.letzteAnfrage
             z.rundeBeginn = await $.clock.now()
         }

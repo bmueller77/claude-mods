@@ -124,6 +124,31 @@ export type GlanceOtherChat = {
   needsYou: boolean
 }
 
+/**
+ * One chat's settings: kept under the chat's own key (`settings:<session id>`), so a change in one chat never reaches
+ * another. A new chat starts from the defaults set in the config menu.
+ */
+export type GlanceChatSettings = {
+  /** Leitstand on or off. */
+  enabled: boolean
+  detail: 'simple' | 'detailed' | 'minimal'
+  workMode: 'auto' | 'dynamisch'
+  sound: 'off' | 'chime' | 'voice'
+  /** Desktop notices. */
+  notice: boolean
+  /** Whether the band names the other chats. */
+  others: boolean
+  calm: boolean
+  /** The password guard. */
+  guard: boolean
+  /** Masking on screen. */
+  mask: boolean
+  /** Approve the plan first. */
+  approve: boolean
+  /** Finish on GitHub. */
+  ship: boolean
+}
+
 /** How a job ended, as the history shows it. */
 export type GlanceOutcome = 'done' | 'stopped' | 'stuck' | 'waiting' | 'background' | 'working'
 
@@ -190,6 +215,8 @@ declare module 'claude-code' {
       handoffState: 'idle' | 'working'
       /** The main chat is being compacted: Start and Continue wait until it is through. */
       isCompacting: boolean
+      /** The plan Start was pressed for while its message is on its way, as the band names it; null otherwise. */
+      startingPlan: string | null
       /** The button that waits for a second press to confirm, if any. */
       armedButton: 'handoff' | 'ship' | 'vault' | null
       /** Alerts: `chime` plays a short sound when Claude needs you, gets stuck or finishes a long job; `voice` also says it. */
@@ -233,6 +260,11 @@ declare module 'claude-code' {
        * Autopilot reads it as a round ends and ends a run that began before it, instead of pushing on.
        */
       autopilotStop: number | null
+      /**
+       * This chat's own settings: the chat they belong to, whether they move to the next chat id (after /clear), and
+       * the values the person changed in it; anything left out follows the defaults from the config menu.
+       */
+      ownSettings: { sid: string | null; carry: boolean; values: Partial<GlanceChatSettings> }
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { GlanceChecklist, GlanceHelper, GlanceHistoryView, GlanceOtherChat, GlanceTask, GlanceTaskSize, GlanceUsage } from '../types'
+import type { GlanceChatSettings, GlanceChecklist, GlanceHelper, GlanceHistoryView, GlanceOtherChat, GlanceTask, GlanceTaskSize, GlanceUsage } from '../types'
 import { SIZE_WEIGHT, teamReport, weekSummary } from './history'
 import { maskPrivate } from './privacy'
 
@@ -1418,6 +1418,129 @@ export function otherChats(saved: readonly (SavedChecklist | undefined)[], at: n
     })
     .sort((a, b) => Number(isNeeding(b)) - Number(isNeeding(a)) || b.at - a.at)
     .map(one => ({ title: one.list.title, needsYou: isNeeding(one) }))
+}
+
+// Each chat's settings sit under a key of their own (`settings:<session id>`, `{ at, values }`), as does the checkpoint
+// saved before it was tidied up (`checkpoint:<session id>`, `{ at, note }`): a change in one chat never reaches another.
+export const SETTINGS_PREFIX = 'settings:'
+export const CHECKPOINT_PREFIX = 'checkpoint:'
+// Another chat's settings and checkpoint are tidied away once it has not used them for this many days.
+export const SETTINGS_DAYS = 30
+
+/** One chat's settings; see GlanceChatSettings. */
+export type ChatSettings = GlanceChatSettings
+
+/** The settings a chat starts with when the config menu gives none: the manifest's own defaults. */
+export const FACTORY_SETTINGS: ChatSettings = {
+  enabled: true,
+  detail: 'minimal',
+  workMode: 'auto',
+  sound: 'off',
+  notice: false,
+  others: false,
+  calm: false,
+  guard: true,
+  mask: true,
+  approve: false,
+  ship: false,
+}
+
+const isFlag = (value: unknown): value is boolean => typeof value === 'boolean'
+const oneOf =
+  <T extends string>(...values: T[]) =>
+  (value: unknown): value is T =>
+    typeof value === 'string' && (values as string[]).includes(value)
+
+// What each setting may hold; a value of another kind counts as unset.
+const SETTING_CHECKS: { [K in keyof ChatSettings]: (value: unknown) => value is ChatSettings[K] } = {
+  enabled: isFlag,
+  detail: oneOf('simple', 'detailed', 'minimal'),
+  workMode: oneOf('auto', 'dynamisch'),
+  sound: oneOf('off', 'chime', 'voice'),
+  notice: isFlag,
+  others: isFlag,
+  calm: isFlag,
+  guard: isFlag,
+  mask: isFlag,
+  approve: isFlag,
+  ship: isFlag,
+}
+const SETTING_KEYS = Object.keys(SETTING_CHECKS) as (keyof ChatSettings)[]
+const isSetting = (key: keyof ChatSettings, value: unknown) => (SETTING_CHECKS[key] as (value: unknown) => boolean)(value)
+
+// The config menu's words for the view, and what they set.
+const MENU_VIEWS = new Map<unknown, Pick<ChatSettings, 'enabled' | 'detail'>>([
+  ['einfach', { enabled: true, detail: 'simple' }],
+  ['ausfuehrlich', { enabled: true, detail: 'detailed' }],
+  ['minimal', { enabled: true, detail: 'minimal' }],
+  ['aus', { enabled: false, detail: 'simple' }],
+])
+const MENU_SOUNDS = new Map<unknown, ChatSettings['sound']>([
+  ['aus', 'off'],
+  ['signalton', 'chime'],
+  ['stimme', 'voice'],
+])
+const MENU_MODES = new Map<unknown, ChatSettings['workMode']>([
+  ['auto', 'auto'],
+  ['gruppenarbeit', 'dynamisch'],
+])
+
+/** The settings a new chat starts with, from the config menu's values; a value missing or of another kind keeps the manifest's default. */
+export function defaultSettings(options: Readonly<Record<string, unknown>> = {}): ChatSettings {
+  const flag = (name: string, fallback: boolean) => {
+    const value = options[name]
+    return typeof value === 'boolean' ? value : fallback
+  }
+  const view = MENU_VIEWS.get(options.ansicht) ?? { enabled: FACTORY_SETTINGS.enabled, detail: FACTORY_SETTINGS.detail }
+  return {
+    ...view,
+    workMode: MENU_MODES.get(options.arbeitsweise) ?? FACTORY_SETTINGS.workMode,
+    sound: MENU_SOUNDS.get(options.toene) ?? FACTORY_SETTINGS.sound,
+    notice: flag('benachrichtigungen', FACTORY_SETTINGS.notice),
+    others: flag('andereChats', FACTORY_SETTINGS.others),
+    calm: flag('ruhemodus', FACTORY_SETTINGS.calm),
+    guard: flag('passwortschutz', FACTORY_SETTINGS.guard),
+    mask: flag('verdecken', FACTORY_SETTINGS.mask),
+    approve: flag('planFreigeben', FACTORY_SETTINGS.approve),
+    ship: flag('githubAbschluss', FACTORY_SETTINGS.ship),
+  }
+}
+
+/** A chat's settings: its own values where they are of the right kind, the defaults for the rest. */
+export function chatSettings(defaults: ChatSettings, own: unknown): ChatSettings {
+  const values = typeof own === 'object' && own !== null ? (own as Record<string, unknown>) : {}
+  const picked: Record<string, unknown> = { ...defaults }
+  for (const key of SETTING_KEYS) {
+    if (isSetting(key, values[key])) picked[key] = values[key]
+  }
+  return picked as ChatSettings
+}
+
+/** The values a chat changed, from what its settings key holds (`{ at, values }`); anything of the wrong kind is left out. */
+export function ownValues(stored: unknown): Partial<ChatSettings> {
+  const values = typeof stored === 'object' && stored !== null ? (stored as { values?: unknown }).values : undefined
+  if (typeof values !== 'object' || values === null) return {}
+  const own: Record<string, unknown> = {}
+  for (const key of SETTING_KEYS) {
+    const value = (values as Record<string, unknown>)[key]
+    if (isSetting(key, value)) own[key] = value
+  }
+  return own as Partial<ChatSettings>
+}
+
+/**
+ * The settings and checkpoint keys of other chats, `[key, stored]`, not used for more than SETTINGS_DAYS days; never
+ * this chat's own (`mine`). A key whose value names no time counts as old.
+ */
+export function staleSettingsKeys(saved: readonly (readonly [string, unknown])[], now: number, mine: string | null): string[] {
+  const own = mine === null ? [] : [`${SETTINGS_PREFIX}${mine}`, `${CHECKPOINT_PREFIX}${mine}`]
+  return saved
+    .filter(([key, stored]) => {
+      if (!(key.startsWith(SETTINGS_PREFIX) || key.startsWith(CHECKPOINT_PREFIX)) || own.includes(key)) return false
+      const at = typeof stored === 'object' && stored !== null ? (stored as { at?: unknown }).at : undefined
+      return now - (typeof at === 'number' ? at : 0) > SETTINGS_DAYS * 24 * 60 * 60_000
+    })
+    .map(([key]) => key)
 }
 
 /** What the band says of the other chats, in whole pieces: who needs the person first, then how many are at work. */

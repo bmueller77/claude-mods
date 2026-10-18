@@ -59,6 +59,8 @@ type Stand = {
     autopilot?: 'unten' | 'mitte' | 'allein'
     /** Der Verlauf fuer `$.session.messages()`; "fehler" laesst das Lesen scheitern. */
     nachrichten?: unknown[] | 'fehler'
+    /** Die Sitzungs-ID; ohne Angabe sitzung-1. */
+    sid?: string
 }
 type Ping = { read: number; write: number }
 
@@ -75,7 +77,7 @@ function boden(on: On, stand: Stand) {
     const eingaben: string[] = []
     const befehle: string[] = []
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
-    on('session.id', (_$, _e, _next) => ({ value: 'sitzung-1' }))
+    on('session.id', (_$, _e, _next) => ({ value: stand.sid ?? 'sitzung-1' }))
     on('session.model', (_$, _e, _next) => ({ value: stand.modell ?? 'claude-opus-5' }))
     on('session.messages', (_$, _e, _next) => {
         if (stand.nachrichten === 'fehler') {
@@ -1416,3 +1418,60 @@ test('ein Countdown, der beim Neuladen laeuft, fuehrt nie aus; danach geht ein n
     expect(b.befehle).toEqual(['compact'])
 })
 
+/** Ein Speicher, den der Test zurueckliest. */
+function eigenerSpeicher(on: On, speicher: Map<string, unknown>) {
+    on('store.get', (_$, e, _next) => ({ value: speicher.get(e.key) }))
+    on('store.set', (_$, e, _next) => {
+        speicher.set(e.key, e.value)
+        return { value: undefined }
+    })
+    on('store.delete', (_$, e, _next) => {
+        speicher.delete(e.key)
+        return { value: undefined }
+    })
+    on('store.keys', (_$, _e, _next) => ({ value: [...speicher.keys()] }))
+}
+
+test('nach /clear gilt die neue Sitzungs-ID ab der naechsten Runde, auch ohne neuen Sitzungsstart', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
+    const stand: Stand = { tokens: 40_000, fenster: 200_000, schwelle: 166_000 }
+    boden(on, stand)
+    await start($ as never)
+    await runde($ as never)
+
+    // /clear: neue ID, kein session.end und kein session.start.
+    stand.sid = 'sitzung-2'
+    await runde($ as never)
+    await befehl($ as never, 'warmhalten', '90m')
+    expect(speicher.has('statistik.warmBis:sitzung-2')).toBe(true)
+    expect(speicher.has('statistik.warmBis:sitzung-1')).toBe(false)
+})
+
+test('abgelaufene Fristen fremder Chats werden hoechstens einmal am Tag weggeraeumt; immer und laufende bleiben', async ($, on) => {
+    const TAG = 24 * 60 * MIN
+    const clock = mock.clock(on, { now: 100 * TAG })
+    const speicher = new Map<string, unknown>([
+        ['statistik.warmBis:abgelaufen', 100 * TAG - 1],
+        ['statistik.warmBis:laeuft', 100 * TAG + 60 * MIN],
+        ['statistik.warmBis:ohne-ende', 'immer'],
+        ['statistik.zeigeDetails', true],
+    ])
+    eigenerSpeicher(on, speicher)
+    boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    await start($ as never)
+
+    expect(speicher.has('statistik.warmBis:abgelaufen')).toBe(false)
+    expect(speicher.get('statistik.warmBis:laeuft')).toBe(100 * TAG + 60 * MIN)
+    expect(speicher.get('statistik.warmBis:ohne-ende')).toBe('immer')
+    expect(speicher.get('statistik.zeigeDetails')).toBe(true)
+
+    // Am selben Tag nicht noch einmal, am naechsten schon.
+    speicher.set('statistik.warmBis:abgelaufen', 1)
+    await start($ as never)
+    expect(speicher.has('statistik.warmBis:abgelaufen')).toBe(true)
+    await clock.advance(TAG)
+    await start($ as never)
+    expect(speicher.has('statistik.warmBis:abgelaufen')).toBe(false)
+})

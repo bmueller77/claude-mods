@@ -5,12 +5,17 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, replaceSecrets } from '../hooks/privacy'
-import { OTHER_WAITING_MS, OTHER_WORKING_MS, askedMergeSha, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
+import { FACTORY_SETTINGS, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 
 const PLAN = 'mcp__leitstand__plan_steps'
 const PROGRESS = 'mcp__leitstand__report_progress'
+const START_TEXT = 'Der Plan sieht gut aus. Leg bitte los.'
 const SURFACES = ['terminal', 'desktop'] as const
+// A new chat starts as the config menu says (minimal view, no other chats named); tests of the full band and of the
+// other chats line say what they start with.
+const VIEW_SIMPLE = { options: { ansicht: 'einfach' } }
+const OTHERS_ON = { options: { ansicht: 'einfach', andereChats: true } }
 const BAND = {
   plugin: 'leitstand',
   component: 'AbovePrompt',
@@ -500,7 +505,7 @@ test('a quick answer that ends with a question also says Needs you', async ($, o
   expect((await texts($, 'terminal')).join('\n')).toContain('Braucht dich')
 })
 
-test('the reply to that question starts a new job, and the History keeps the first one as done', async ($, on) => {
+test('the reply to that question starts a new job, and the History keeps the first one as done', VIEW_SIMPLE, async ($, on) => {
   world(on)
   historyWorld(on, { cwd: '/work/landing-site' })
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
@@ -1402,7 +1407,7 @@ test("Autopilot's line stands over the band, wherever it comes in what other mod
   }
 })
 
-test('in the Desktop app the welcome cards and the empty band keep that frame: the view on top, places left, actions right', async ($, on) => {
+test('in the Desktop app the welcome cards and the empty band keep that frame: the view on top, places left, actions right', VIEW_SIMPLE, async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -1450,7 +1455,7 @@ test('in the Desktop app a job that stops on a question offers no Continue, whic
   expect(asked).not.toContain('Weiter')
 })
 
-test('the second welcome card says where the yellow is: in the words on the terminal, a bell beside them in the Desktop app', async ($, on) => {
+test('the second welcome card says where the yellow is: in the words on the terminal, a bell beside them in the Desktop app', VIEW_SIMPLE, async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -1567,7 +1572,7 @@ test('in the Desktop app the bold words of a header are never cut: a narrow band
   }
 })
 
-test('in the Desktop app the welcome card says Welcome whole in a narrow band and once to a screen reader, and its words sit in empty room', async ($, on) => {
+test('in the Desktop app the welcome card says Welcome whole in a narrow band and once to a screen reader, and its words sit in empty room', VIEW_SIMPLE, async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -1617,7 +1622,7 @@ test('in the Desktop app a line under a step starts in empty room as wide as a m
   expect(planAlts).not.toContain('Detail')
 })
 
-test('in the Desktop app no mark says again what the words beside it say, in the band, the Plan or History', async ($, on) => {
+test('in the Desktop app no mark says again what the words beside it say, in the band, the Plan or History', VIEW_SIMPLE, async ($, on) => {
   world(on)
   historyWorld(on, { cwd: '/work/landing-site' })
   on('session.measure', (_, e) => ({ changed: e.changed }))
@@ -2678,7 +2683,7 @@ async function shipping($: Engine, on: On) {
   return { ask, tries, failMerges, ends }
 }
 
-test('Ship it merges once at the exact approved head commit, and a merge that works ends Ship it', async ($, on) => {
+test('Ship it merges once at the exact approved head commit, and a merge that works ends Ship it', VIEW_SIMPLE, async ($, on) => {
   const { ask, tries } = await shipping($, on)
   expect(await tries(mergeAt(SHA))).toContain('Merge freigeben')
 
@@ -2767,7 +2772,7 @@ test('a new merge request for a moved head replaces the pending one, and an appr
 
 // Ship it asks in German now; the English line and reply of before still count, in any mix, and only exactly.
 for (const [asked, reply] of [['English', 'English'], ['German', 'English'], ['English', 'German']] as const) {
-  test(`a merge asked for in ${asked} is approved by the exact ${reply} reply, and only at that head commit`, async ($, on) => {
+  test(`a merge asked for in ${asked} is approved by the exact ${reply} reply, and only at that head commit`, VIEW_SIMPLE, async ($, on) => {
     const { ask, tries } = await shipping($, on)
     if (asked === 'German') await ask(SHA, 't2')
     else {
@@ -2812,7 +2817,7 @@ for (const reply of [
   })
 }
 
-test('Ship it stays guarded through its own first turn, background turns, slash commands and pasted text', async ($, on) => {
+test('Ship it stays guarded through its own first turn, background turns, slash commands and pasted text', VIEW_SIMPLE, async ($, on) => {
   const { ask, tries, ends } = await shipping($, on)
   // The Ship it turn ends while the checks run in the background.
   await ends('t2', 'Waiting for the checks in the background.')
@@ -3525,7 +3530,7 @@ test('desktop notices are off until turned on; then the computer says why Claude
   expect(shown).toEqual([])
 })
 
-test('on Linux and Windows the chime and the words play through the computer\'s own player and voice', async ($, on) => {
+test('on Linux and Windows the chime and the words play through the computer\'s own player and voice', VIEW_SIMPLE, async ($, on) => {
   const { clock, heard } = soundWorld(on, false)
   const world = { system: 'Linux' }
   const ran: string[] = []
@@ -3820,7 +3825,7 @@ test('when /compact fails too, Tidy it up says why', async ($, on) => {
   expect(toasts.join('\n')).toMatch(/Der Chat ließ sich nicht aufräumen \(.+\)\. Schreib \/compact, um es noch mal zu versuchen\./)
 })
 
-test("once, Leitstand brings over Glance's settings and history; another mod's store is left alone", async ($, on) => {
+test("once, Leitstand brings over Glance's history, not its settings; another mod's store is left alone", async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const store = new Map<string, unknown>()
   on('store.get', (_, e) => ({ value: store.get(e.key) }) as never)
@@ -3856,14 +3861,15 @@ test("once, Leitstand brings over Glance's settings and history; another mod's s
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
 
   expect(store.get('history:2026-10-06:glance')).toEqual([job])
-  expect(store.get('glanceDetail')).toBe('detailed')
-  expect(store.get('glanceSound')).toBe('chime')
+  // Settings are kept per chat since 0.51: Glance's are not brought over.
+  expect(store.get('glanceDetail')).toBeUndefined()
+  expect(store.get('glanceSound')).toBeUndefined()
   expect(store.get('glanceEnabled')).toBeUndefined()
   expect(store.get('glanceCalm')).toBeUndefined()
   expect(reads).toHaveLength(2)
 })
 
-test("where only USERPROFILE is set (Windows), Leitstand still finds Glance's store and brings over its settings and history", async ($, on) => {
+test("where only USERPROFILE is set (Windows), Leitstand still finds Glance's store and brings over its history", async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const store = new Map<string, unknown>()
   on('store.get', (_, e) => ({ value: store.get(e.key) }) as never)
@@ -3899,8 +3905,9 @@ test("where only USERPROFILE is set (Windows), Leitstand still finds Glance's st
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
 
   expect(store.get('history:2026-10-06:glance')).toEqual([job])
-  expect(store.get('glanceDetail')).toBe('detailed')
-  expect(store.get('glanceSound')).toBe('chime')
+  // Settings are kept per chat since 0.51: Glance's are not brought over.
+  expect(store.get('glanceDetail')).toBeUndefined()
+  expect(store.get('glanceSound')).toBeUndefined()
   expect(store.get('glanceEnabled')).toBeUndefined()
   expect(store.get('glanceCalm')).toBeUndefined()
   expect(reads).toHaveLength(2)
@@ -4146,7 +4153,7 @@ test('the Plan shows long step names whole in a narrow panel', async ($, on) => 
   expect(pane).not.toContain('priva…')
 })
 
-test('someone new gets a three-card welcome once; /leitstand tour shows it again', async ($, on) => {
+test('someone new gets a three-card welcome once; /leitstand tour shows it again', VIEW_SIMPLE, async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -4299,8 +4306,11 @@ test('each step shows the files Claude added or changed, in the Plan and in Hist
 function resumeWorld(on: On, entries: Record<string, unknown> = {}, failsToDelete = false) {
   const clock = mock.clock(on, { now: 1_000_000 })
   const store = new Map(Object.entries(entries))
+  // Keys a test makes the store refuse to save.
+  const fails = { set: null as RegExp | null }
   on('store.get', (_, e) => ({ value: store.get((e as { key: string }).key) }) as never)
   on('store.set', (_, e) => {
+    if (fails.set?.test((e as { key: string }).key)) throw new Error('disk full')
     store.set((e as { key: string }).key, (e as { value: unknown }).value)
     return { value: undefined } as never
   })
@@ -4326,7 +4336,7 @@ function resumeWorld(on: On, entries: Record<string, unknown> = {}, failsToDelet
     return { value: undefined } as never
   })
   on('command.register', () => ({ value: undefined }) as never)
-  return { clock, store, registered, session }
+  return { clock, store, registered, session, fails }
 }
 
 test("a chat's checklist is kept as it changes, for when the chat is resumed", async ($, on) => {
@@ -4340,7 +4350,7 @@ test("a chat's checklist is kept as it changes, for when the chat is resumed", a
   expect(kept?.list.tasks.map(one => `${one.name}:${one.status}`)).toEqual(['Write the page:done', 'Check it:active'])
 })
 
-test('a resumed chat gets its checklist back, paused, and Continue picks it up', async ($, on) => {
+test('a resumed chat gets its checklist back, paused, and Continue picks it up', VIEW_SIMPLE, async ($, on) => {
   const task = (name: string, status: string) => ({
     id: name, name, status, percent: status === 'done' ? 100 : 40, hasReported: true, size: 'M', summary: status === 'done' ? 'Wrote the page' : null,
     tokens: 0, cachedTokens: 0, startedAt: 1_000_000, finishedAt: status === 'done' ? 1_060_000 : null,
@@ -4431,7 +4441,7 @@ test('the other chats worth a word: those that need you first, then those at wor
   expect(otherChatsWords([])).toEqual([])
 })
 
-test('the band names another chat that needs you, on every surface, and keeps up as the other chats change', async ($, on) => {
+test('the band names another chat that needs you, on every surface, and keeps up as the other chats change', OTHERS_ON, async ($, on) => {
   const saved = (title: string, phase: string) => ({
     at: 1_000_000, isOpen: true, list: { title, phase, tasks: [], helpers: [], startedAt: 1_000_000, finishedAt: null },
   })
@@ -4514,7 +4524,7 @@ test('a resumed chat that still waits on the person is saved as open again, so t
   expect(kept.list.phase).toBe('needsYou')
 })
 
-test('the other chats line can be turned off in Settings or with /leitstand others off', async ($, on) => {
+test('the other chats line can be turned off in Settings or with /leitstand others off', OTHERS_ON, async ($, on) => {
   const saved = { at: 1_000_000, isOpen: true, list: { title: 'Build the pricing page', phase: 'needsYou', tasks: [], helpers: [], startedAt: 1_000_000, finishedAt: null } }
   const { clock, store } = resumeWorld(on, { 'resume:chat-2': saved })
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
@@ -4522,7 +4532,8 @@ test('the other chats line can be turned off in Settings or with /leitstand othe
   expect((await texts($, 'desktop')).join('\n')).toContain('Ein anderer Chat braucht dich')
   const result = await $.command.run({ command: 'leitstand', args: 'others off' } as never)
   expect(result.text).toContain('erwähnt keine anderen Chats mehr')
-  expect(store.get('glanceOthers')).toBe(false)
+  expect((store.get('settings:chat-1') as { values: { others?: boolean } }).values.others).toBe(false)
+  expect(store.get('glanceOthers')).toBeUndefined()
   for (const surface of SURFACES) {
     expect((await texts($, surface)).join('\n')).not.toContain('Ein anderer Chat')
   }
@@ -4530,7 +4541,7 @@ test('the other chats line can be turned off in Settings or with /leitstand othe
   expect((await texts($, 'desktop')).join('\n')).toContain('Ein anderer Chat braucht dich')
 })
 
-test('in a narrow band the chat that needs you is named, never left out for the count of chats at work', async ($, on) => {
+test('in a narrow band the chat that needs you is named, never left out for the count of chats at work', OTHERS_ON, async ($, on) => {
   const saved = (title: string, phase: string) => ({
     at: 1_000_000, isOpen: true, list: { title, phase, tasks: [], helpers: [], startedAt: 1_000_000, finishedAt: null },
   })
@@ -6731,7 +6742,7 @@ describe('Verdecken und Tresor', () => {
     { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'u1', text: `Karte ${CARD}`, isError: false }] },
   ]
 
-  test('🛡️ wartet beim ersten Druck, schreibt beim zweiten die .env und verdichtet mit Platzhaltern', async ($, on) => {
+  test('🛡️ wartet beim ersten Druck, schreibt beim zweiten die .env und verdichtet mit Platzhaltern', VIEW_SIMPLE, async ($, on) => {
     const state = await vaultWorld($, on, {
       messages: CHAT,
       files: { 'C:\\work\\shop\\.env': 'DB_PASSWORD=letmein!\nGITHUB_TOKEN=old\n', 'C:\\work\\shop\\.git\\HEAD': 'ref' },
@@ -6759,7 +6770,7 @@ describe('Verdecken und Tresor', () => {
     expect(state.forks[0]).toContain('${GITHUB_TOKEN_2}')
     expect(state.compacts).toHaveLength(1)
     for (const name of ['DB_PASSWORD', 'GITHUB_TOKEN_2', 'KARTENNUMMER']) expect(state.compacts[0]).toContain(`\${${name}}`)
-    const saved = JSON.stringify(state.store.get('lastCheckpoint'))
+    const saved = JSON.stringify(state.store.get('checkpoint:chat-1'))
     expect(saved).toContain('${DB_PASSWORD}')
     expect(saved).toContain('${GITHUB_TOKEN_2}')
     for (const value of ['letmein!', GITHUB, CARD]) {
@@ -7070,6 +7081,158 @@ for (const surface of SURFACES) {
     await clock.advance(2000)
     expect(await tick()).toBeGreaterThan(working)
   })
+
+  // A new plan waits for Start while a helper of the one before still runs (group work): the band holds still there too.
+  test(`a plan waiting for Start holds still while a helper runs, and one press starts it (${surface})`, async ($, on) => {
+    const clock = world(on)
+    on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'w1' }) as never)
+    const sent: string[] = []
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      return { text: e.text }
+    })
+    let ticks = 0
+    on('state.set', (_, e, next) => {
+      if ((e as { key?: string }).key === 'tick') ticks += 1
+      return next(e)
+    })
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await $.turn.start({ text: START_TEXT, turnId: 't2' })
+    await $.agent.spawn({
+      tool_use_id: 'tu1',
+      prompt: 'Look at the settings',
+      description: 'Look at the settings',
+      subagentType: 'leitstand:schwer',
+      provider: { plugin: 'leitstand', tier: 'user' },
+      parentModel: 'claude-opus-5-5',
+      background: true,
+      fork: false,
+    } as never)
+    await $.turn.complete({ answer: 'Der Arbeiter läuft.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await $.turn.start({ text: 'Fix the autopilot too', turnId: 't3' })
+    const planned = await callTool($, { tool: PLAN, steps: ['Find the bug', 'Fix the bug', 'Check it'] })
+    expect(String(planned.result)).toContain('warte auf ihre Antwort')
+    await $.turn.complete({ answer: 'Gib den Plan mit Start frei.', durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' })
+
+    const before = ticks
+    await clock.advance(2000)
+    expect(ticks).toBe(before)
+
+    const band = await $.ui.mount({ ...BAND, surface })
+    await band.press({ key: 'start' })
+    await band.unmount()
+    await clock.advance(10)
+    expect(sent).toEqual([START_TEXT])
+  })
+
+  // Start pressed while Claude still writes: the message waits for its turn, and so did the press. Pressed again and
+  // again, it sends once.
+  test(`a second press on Start while the first waits for its turn sends nothing more (${surface})`, async ($, on) => {
+    const clock = world(on)
+    const sent: string[] = []
+    on('prompt.submit', async (_, e) => {
+      sent.push(e.text)
+      await clock.sleep(15_000)
+      return { text: e.text }
+    })
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    const band = await $.ui.mount({ ...BAND, surface })
+    const first = band.press({ key: 'start' })
+    await clock.advance(3000)
+    const second = band.press({ key: 'start' })
+    await clock.advance(3000)
+    const third = band.press({ key: 'start' })
+    await clock.advance(20_000)
+    await Promise.all([first, second, third])
+    await band.unmount()
+    expect(sent).toEqual([START_TEXT])
+  })
+
+  test(`while its message is on its way, Start reads Startet gleich… and a press on it sends nothing (${surface})`, async ($, on) => {
+    const clock = world(on)
+    const sent: string[] = []
+    on('prompt.submit', async (_, e) => {
+      sent.push(e.text)
+      await clock.sleep(15_000)
+      return { text: e.text }
+    })
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    const startButton = async () => {
+      const ui = await $.ui.mount({ ...BAND, surface })
+      const found = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'start')
+      await ui.unmount()
+      return found
+    }
+    const band = await $.ui.mount({ ...BAND, surface })
+    await band.press({ key: 'start' })
+    await band.unmount()
+    await clock.advance(10)
+    const starting = await startButton()
+    expect(starting?.text).toContain('Startet gleich…')
+    if (surface === 'desktop') expect(starting?.props.variant).toBe('secondary')
+    const again = await $.ui.mount({ ...BAND, surface })
+    await again.press({ key: 'start' })
+    await again.unmount()
+    await clock.advance(10)
+    expect(sent).toEqual([START_TEXT])
+
+    // Its turn begins: the plan runs and the button is gone.
+    await $.turn.start({ text: START_TEXT, turnId: 't2' })
+    await clock.advance(20_000)
+    expect(await startButton()).toBeUndefined()
+  })
+
+  test(`a Start a hook drops reads Start again, and the next press sends (${surface})`, async ($, on) => {
+    // The world beneath, as world() lays it, with the toasts kept.
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on)
+    on('model.complete', () => ({ value: { isAnswered: true, text: 'Build my landing page', usage: {} } as never }))
+    const toasts: string[] = []
+    on('ui.toast', (_, e) => {
+      toasts.push(String((e as { text: string }).text))
+      return { value: undefined } as never
+    })
+    on('tool.call', (() => ({ result: {} })) as never)
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', () => ({ text: '' }))
+    on('classic.Notification', () => ({}) as never)
+    const sent: string[] = []
+    let drops = 1
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      if (drops > 0) {
+        drops -= 1
+        return { drop: 'nicht jetzt' } as never
+      }
+      return { text: e.text }
+    })
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const press = async () => {
+      const band = await $.ui.mount({ ...BAND, surface })
+      await band.press({ key: 'start' })
+      await band.unmount()
+      await clock.advance(10)
+    }
+    await press()
+    expect(sent).toEqual([START_TEXT])
+    // Dropped counts as not sent: the person reads what to do instead.
+    expect(toasts).toContain('Starten geht gerade nicht. Schreib: los')
+    const labels = (await texts($, surface)).join('\n')
+    expect(labels).not.toContain('Startet gleich…')
+    expect(labels).toMatch(/^(\S+ )?Start$/m)
+    await press()
+    expect(sent).toEqual([START_TEXT, START_TEXT])
+  })
 }
 
 describe('Verdichtung des Chats', () => {
@@ -7185,6 +7348,39 @@ describe('Verdichtung des Chats', () => {
     await again.press({ key: 'start' })
     await again.unmount()
     expect(sent).toEqual(['Der Plan sieht gut aus. Leg bitte los.'])
+  })
+
+  test('eine Start-Nachricht, die beim Verdichten verloren geht, gibt Start wieder frei', async ($, on) => {
+    const clock = world(on)
+    const sent: string[] = []
+    on('prompt.submit', async (_, e) => {
+      sent.push(e.text)
+      // The first waits in the queue, which the compaction loses: it never returns.
+      if (sent.length === 1) await new Promise(() => undefined)
+      return { text: e.text }
+    })
+    on('session.compact', () => ({ messages: [{ role: 'user', text: 'Zusammenfassung.', toolUses: [] }] }) as never)
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const press = async () => {
+      const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      await band.press({ key: 'start' })
+      await band.unmount()
+      await clock.advance(10)
+    }
+    await press()
+    for (const surface of SURFACES) expect((await texts($, surface)).join('\n')).toContain('Startet gleich…')
+
+    await $.session.compact({ trigger: 'manual', messages: COMPACT_MESSAGES } as never)
+    for (const surface of SURFACES) {
+      const after = (await texts($, surface)).join('\n')
+      expect(after).not.toContain('Startet gleich…')
+      expect(after).toMatch(START_LINE)
+    }
+    await press()
+    expect(sent).toEqual([START_TEXT, START_TEXT])
   })
 })
 
@@ -7433,4 +7629,324 @@ test('nach einer Runde mit turn.complete liest Leitstand den Verlauf nicht mehr 
   expect(reads.count).toBe(1)
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+})
+
+describe('Einstellungen je Chat', () => {
+  const START = { cwd: '/work', surface: 'terminal' } as never
+  const SETTINGS = {
+    plugin: 'leitstand',
+    component: 'Pane',
+    requestId: 'leitstand-settings',
+    props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  } as const
+  // Each setting, as the settings panel shows it picked: its group there, and how the pick reads as the setting's value.
+  const READS: Record<string, [string, (picked: string) => unknown]> = {
+    glanceEnabled: ['view', picked => picked !== 'off'],
+    detailLevel: ['view', picked => picked],
+    workMode: ['mode', picked => picked],
+    soundMode: ['sound', picked => picked],
+    isNoticing: ['notice', picked => picked === 'on'],
+    showsOthers: ['others', picked => picked === 'on'],
+    isCalm: ['calm', picked => picked === 'on'],
+    isGuarded: ['guard', picked => picked === 'on'],
+    masksPrivate: ['privacy', picked => picked === 'on'],
+    approvePlan: ['approve', picked => picked === 'on'],
+    shipsOnGithub: ['ship', picked => picked === 'on'],
+  }
+  /** A setting as this chat has it, read from the settings panel. */
+  const stateOf = async ($: Engine, key: string) => {
+    const [group, reads] = READS[key]!
+    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const buttons = await ui.findAll({ type: 'Button' })
+    await ui.unmount()
+    const picked = buttons.find(one => String(one.props.key).startsWith(`${group}-`) && one.props.variant === 'primary')
+    return reads(String(picked?.props.key).slice(group.length + 1))
+  }
+  /** Opens a chat: the id the session reports, then the session's start. */
+  const openChat = async ($: Engine, session: { id: string }, id: string) => {
+    session.id = id
+    await $.session.start(START)
+  }
+  const settingsPress = async ($: Engine, key: string) => {
+    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    await ui.press({ key })
+    await ui.unmount()
+  }
+  const settingsTexts = async ($: Engine) => {
+    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const found = [...(await ui.findAll({ type: 'Text' })), ...(await ui.findAll({ type: 'Button' }))].map(one => one.text).join('\n')
+    await ui.unmount()
+    return found
+  }
+  const DAY = 24 * 60 * 60_000
+  const oldGlobal = (store: Map<string, unknown>) => [...store.keys()].filter(key => key.startsWith('glance') && key !== 'glanceTour')
+
+  test('jede Einstellung, in einem Chat geändert, bleibt in diesem Chat: ein anderer startet mit dem Standard', OTHERS_ON, async ($, on) => {
+    const { store, session } = resumeWorld(on)
+    const cases: [string, string, unknown, unknown][] = [
+      ['off', 'glanceEnabled', false, true],
+      ['details on', 'detailLevel', 'detailed', 'simple'],
+      ['arbeitsweise dynamisch', 'workMode', 'dynamisch', 'auto'],
+      ['sound on', 'soundMode', 'chime', 'off'],
+      ['notify on', 'isNoticing', true, false],
+      ['others off', 'showsOthers', false, true],
+      ['calm on', 'isCalm', true, false],
+      ['guard off', 'isGuarded', false, true],
+      ['privacy off', 'masksPrivate', false, true],
+      ['approve on', 'approvePlan', true, false],
+      ['ship on', 'shipsOnGithub', true, false],
+    ]
+    for (const [args, key, changed, standard] of cases) {
+      await openChat($, session, 'chat-1')
+      expect(await stateOf($, key)).toEqual(standard)
+      await $.command.run({ command: 'leitstand', args } as never)
+      expect(await stateOf($, key)).toEqual(changed)
+      // Another chat, opened after the change, starts with the default.
+      await openChat($, session, 'chat-2')
+      expect(await stateOf($, key)).toEqual(standard)
+      // The first chat, resumed, has its own value again.
+      await openChat($, session, 'chat-1')
+      expect(await stateOf($, key)).toEqual(changed)
+      expect(oldGlobal(store)).toEqual([])
+      // Back to the default in chat-1 for the next setting.
+      await settingsPress($, 'reset')
+      expect(store.has('settings:chat-1')).toBe(false)
+    }
+    expect(store.has('settings:chat-2')).toBe(false)
+  })
+
+  test('im Desktop ändern 👥 und 🔒 nur diesen Chat', VIEW_SIMPLE, async ($, on) => {
+    // Past the welcome, so the band shows its buttons.
+    const { store, session } = resumeWorld(on, { glanceTour: true })
+    await openChat($, session, 'chat-1')
+    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    await band.press({ key: 'workmode' })
+    await band.press({ key: 'privacy' })
+    await band.unmount()
+    expect(await stateOf($, 'workMode')).toBe('dynamisch')
+    expect(await stateOf($, 'masksPrivate')).toBe(false)
+    expect((store.get('settings:chat-1') as { values: unknown }).values).toEqual({ workMode: 'dynamisch', mask: false })
+
+    await openChat($, session, 'chat-2')
+    expect(await stateOf($, 'workMode')).toBe('auto')
+    expect(await stateOf($, 'masksPrivate')).toBe(true)
+    expect(store.has('settings:chat-2')).toBe(false)
+    expect(oldGlobal(store)).toEqual([])
+  })
+
+  test(
+    'ein neuer Chat startet mit dem Standard aus dem Einstellungsmenü; die eigene Änderung geht vor',
+    { options: { ansicht: 'minimal', arbeitsweise: 'gruppenarbeit', verdecken: false } },
+    async ($, on) => {
+      const { session } = resumeWorld(on)
+      await openChat($, session, 'chat-1')
+      expect(await stateOf($, 'detailLevel')).toBe('minimal')
+      expect(await stateOf($, 'glanceEnabled')).toBe(true)
+      expect(await stateOf($, 'workMode')).toBe('dynamisch')
+      expect(await stateOf($, 'masksPrivate')).toBe(false)
+      await $.command.run({ command: 'leitstand', args: 'privacy on' } as never)
+      await $.command.run({ command: 'leitstand', args: 'arbeitsweise auto' } as never)
+
+      await openChat($, session, 'chat-2')
+      expect(await stateOf($, 'masksPrivate')).toBe(false)
+      expect(await stateOf($, 'workMode')).toBe('dynamisch')
+      await openChat($, session, 'chat-1')
+      expect(await stateOf($, 'masksPrivate')).toBe(true)
+      expect(await stateOf($, 'workMode')).toBe('auto')
+      expect(await stateOf($, 'detailLevel')).toBe('minimal')
+    },
+  )
+
+  test('Zurücksetzen nimmt nur die Werte dieses Chats zurück', VIEW_SIMPLE, async ($, on) => {
+    const { store, session } = resumeWorld(on)
+    await openChat($, session, 'chat-2')
+    await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    await openChat($, session, 'chat-1')
+    await $.command.run({ command: 'leitstand', args: 'sound on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'details on' } as never)
+    expect(store.has('settings:chat-1')).toBe(true)
+
+    await settingsPress($, 'reset')
+    expect(store.has('settings:chat-1')).toBe(false)
+    expect(store.has('settings:chat-2')).toBe(true)
+    expect(await stateOf($, 'soundMode')).toBe('off')
+    expect(await stateOf($, 'detailLevel')).toBe('simple')
+    await openChat($, session, 'chat-2')
+    expect(await stateOf($, 'isCalm')).toBe(true)
+  })
+
+  test('scheitert das Speichern, behält ein Neuladen die Werte des Chats', VIEW_SIMPLE, async ($, on) => {
+    const { store, session, fails } = resumeWorld(on)
+    await openChat($, session, 'chat-1')
+    fails.set = /^settings:/
+    await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'details on' } as never)
+    expect(store.has('settings:chat-1')).toBe(false)
+    // A reload starts the module afresh; this chat's state still holds its values.
+    await $.session.start(START)
+    expect(await stateOf($, 'isCalm')).toBe(true)
+    expect(await stateOf($, 'detailLevel')).toBe('detailed')
+  })
+
+  test('nach /clear behält der Chat seine Werte, nach der nächsten Runde unter der neuen Chat-Id', VIEW_SIMPLE, async ($, on) => {
+    const { store, session } = resumeWorld(on)
+    on('session.end', () => ({ sessionId: 'chat-1' }) as never)
+    await openChat($, session, 'chat-1')
+    await $.command.run({ command: 'leitstand', args: 'sound voice' } as never)
+    await $.session.end({ reason: 'clear', sessionId: 'chat-1' } as never)
+    session.id = 'chat-3'
+    await $.turn.start({ text: 'Fix the footer', turnId: 't2' })
+    // A change after /clear lands under the new id too, after the carried values.
+    await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    expect(await stateOf($, 'soundMode')).toBe('voice')
+    expect((store.get('settings:chat-3') as { values: unknown }).values).toEqual({ sound: 'voice', calm: true })
+    expect((store.get('settings:chat-1') as { values: unknown }).values).toEqual({ sound: 'voice' })
+  })
+
+  test('alte globale glance-Schlüssel werden nicht mehr gelesen und bleiben stehen; die Begrüßung bleibt aus', VIEW_SIMPLE, async ($, on) => {
+    const old = { glanceSound: 'chime', glanceDetail: 'detailed', glanceWorkMode: 'dynamisch', glanceCalm: true, glanceEnabled: false }
+    const { store, session } = resumeWorld(on, old)
+    await openChat($, session, 'chat-1')
+    expect(await stateOf($, 'soundMode')).toBe('off')
+    expect(await stateOf($, 'detailLevel')).toBe('simple')
+    expect(await stateOf($, 'workMode')).toBe('auto')
+    expect(await stateOf($, 'isCalm')).toBe(false)
+    expect(await stateOf($, 'glanceEnabled')).toBe(true)
+    for (const [key, value] of Object.entries(old)) expect(store.get(key)).toEqual(value)
+    expect(store.has('settings:chat-1')).toBe(false)
+    // Someone with old settings already knows their way: no welcome.
+    expect(store.get('glanceTour')).toBe(true)
+    expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
+  })
+
+  test('Einstellungen und Sicherungspunkte anderer Chats gehen nach 30 Tagen, die eigenen bleiben', VIEW_SIMPLE, async ($, on) => {
+    const long = 1_000_000 - 31 * DAY
+    const { store, session } = resumeWorld(on, {
+      'settings:chat-old': { at: long, values: { calm: true } },
+      'checkpoint:chat-old': { at: long, note: 'Sicherungspunkt: alt' },
+      'settings:chat-new': { at: 1_000_000 - DAY, values: { calm: true } },
+      'settings:chat-1': { at: long, values: { sound: 'chime' } },
+      'checkpoint:chat-1': { at: long, note: 'Sicherungspunkt: meiner' },
+    })
+    await openChat($, session, 'chat-1')
+    expect(store.has('settings:chat-old')).toBe(false)
+    expect(store.has('checkpoint:chat-old')).toBe(false)
+    expect(store.has('settings:chat-new')).toBe(true)
+    expect(store.has('checkpoint:chat-1')).toBe(true)
+    // Its own settings are in use again: kept for another 30 days.
+    expect((store.get('settings:chat-1') as { at: number }).at).toBe(1_000_000)
+    expect(await stateOf($, 'soundMode')).toBe('chime')
+    expect(store.get('settingsTidiedAt')).toBe(1_000_000)
+
+    // At most once a day.
+    store.set('settings:chat-older', { at: long, values: {} })
+    await openChat($, session, 'chat-2')
+    expect(store.has('settings:chat-older')).toBe(true)
+  })
+
+  test('der Letzte Stand gehört zum Chat: Aufräumen in einem anderen Chat lässt ihn stehen', VIEW_SIMPLE, async ($, on) => {
+    const { store, session } = resumeWorld(on, { 'checkpoint:chat-1': { at: 900_000, note: 'Sicherungspunkt: Preisseite' } })
+    on('model.fork', () => ({ value: { isAnswered: true, text: 'Sicherungspunkt: Fußzeile', usage: {} } }) as never)
+    on('session.compact', () => {
+      throw new Error('not now')
+    })
+    on('command.run', () => ({ text: '' }))
+    on('ui.log', () => ({ value: undefined }) as never)
+    await openChat($, session, 'chat-1')
+    expect(await settingsTexts($)).toContain('Letzter Stand')
+
+    await openChat($, session, 'chat-2')
+    expect(await settingsTexts($)).not.toContain('Letzter Stand')
+    await settingsPress($, 'tidy-now')
+    expect((store.get('checkpoint:chat-2') as { note: string }).note).toBe('Sicherungspunkt: Fußzeile')
+    expect((store.get('checkpoint:chat-1') as { note: string }).note).toBe('Sicherungspunkt: Preisseite')
+    expect(store.has('lastCheckpoint')).toBe(false)
+
+    await openChat($, session, 'chat-1')
+    // Its own checkpoint, saved at 900_000, not the one chat-2 saved at 1_000_000.
+    const at = new Date(900_000)
+    const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+    expect(await settingsTexts($)).toContain(`Letzter Sicherungspunkt um ${time} gespeichert.`)
+  })
+
+  test('der Letzte Stand von vor dem Umbau kommt zum Chat, dem er gehört, und nur zu ihm', VIEW_SIMPLE, async ($, on) => {
+    const old = { sessionId: 'chat-1', at: 900_000, note: 'Sicherungspunkt: Preisseite' }
+    const { store, session } = resumeWorld(on, { lastCheckpoint: old })
+    await openChat($, session, 'chat-2')
+    expect(await settingsTexts($)).not.toContain('Letzter Stand')
+    expect(store.has('checkpoint:chat-2')).toBe(false)
+
+    await openChat($, session, 'chat-1')
+    expect(await settingsTexts($)).toContain('Letzter Stand')
+    expect(store.get('checkpoint:chat-1')).toEqual({ at: 900_000, note: 'Sicherungspunkt: Preisseite' })
+    expect(store.get('lastCheckpoint')).toEqual(old)
+  })
+
+  test('in der Gruppenarbeit steht Plan zuerst freigeben fest auf An; ein Druck ändert und speichert nichts', VIEW_SIMPLE, async ($, on) => {
+    const { store, session } = resumeWorld(on)
+    await openChat($, session, 'chat-1')
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+    const shown = await settingsTexts($)
+    expect(shown).toContain('An (in der Gruppenarbeit immer)')
+    expect(shown).toContain('Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.')
+    await settingsPress($, 'approve-off')
+    await settingsPress($, 'approve-on')
+    expect((store.get('settings:chat-1') as { values: unknown }).values).toEqual({ workMode: 'dynamisch' })
+
+    // In Auto-Mode the row switches as before; the presses in Gruppenarbeit left it off.
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise auto' } as never)
+    expect(await settingsTexts($)).not.toContain('in der Gruppenarbeit immer')
+    expect(await stateOf($, 'approvePlan')).toBe(false)
+    await settingsPress($, 'approve-on')
+    expect(await stateOf($, 'approvePlan')).toBe(true)
+    expect((store.get('settings:chat-1') as { values: unknown }).values).toEqual({ workMode: 'auto', approve: true })
+  })
+
+  test('die Menüwerte werden zu den Einstellungen eines neuen Chats', () => {
+    expect(defaultSettings({})).toEqual(FACTORY_SETTINGS)
+    expect(FACTORY_SETTINGS).toEqual({
+      enabled: true, detail: 'minimal', workMode: 'auto', sound: 'off', notice: false, others: false,
+      calm: false, guard: true, mask: true, approve: false, ship: false,
+    })
+    expect(defaultSettings({ ansicht: 'einfach' })).toMatchObject({ enabled: true, detail: 'simple' })
+    expect(defaultSettings({ ansicht: 'ausfuehrlich' })).toMatchObject({ enabled: true, detail: 'detailed' })
+    expect(defaultSettings({ ansicht: 'aus' })).toMatchObject({ enabled: false, detail: 'simple' })
+    expect(defaultSettings({ ansicht: 'bunt' })).toMatchObject({ enabled: true, detail: 'minimal' })
+    expect(defaultSettings({ arbeitsweise: 'gruppenarbeit' }).workMode).toBe('dynamisch')
+    expect(defaultSettings({ toene: 'signalton' }).sound).toBe('chime')
+    expect(defaultSettings({ toene: 'stimme' }).sound).toBe('voice')
+    expect(
+      defaultSettings({
+        benachrichtigungen: true, andereChats: true, ruhemodus: true, passwortschutz: false, verdecken: false, planFreigeben: true, githubAbschluss: true,
+      }),
+    ).toMatchObject({ notice: true, others: true, calm: true, guard: false, mask: false, approve: true, ship: true })
+    expect(defaultSettings({ ruhemodus: 'ja' }).calm).toBe(false)
+  })
+
+  test('eigene Werte gehen vor, ein Wert vom falschen Typ gilt als ungesetzt', () => {
+    expect(chatSettings(FACTORY_SETTINGS, { calm: true, detail: 'detailed' })).toEqual({ ...FACTORY_SETTINGS, calm: true, detail: 'detailed' })
+    expect(chatSettings(FACTORY_SETTINGS, { calm: 'yes', detail: 'huge', sound: 3, workMode: 'dynamisch' })).toEqual({ ...FACTORY_SETTINGS, workMode: 'dynamisch' })
+    expect(chatSettings(FACTORY_SETTINGS, null)).toEqual(FACTORY_SETTINGS)
+    expect(ownValues({ at: 1, values: { others: false, mask: 'no', extra: 1 } })).toEqual({ others: false })
+    expect(ownValues(undefined)).toEqual({})
+    expect(ownValues({ at: 1 })).toEqual({})
+    expect(ownValues('settings')).toEqual({})
+  })
+
+  test('veraltet sind nur fremde settings:- und checkpoint:-Schlüssel, älter als 30 Tage', () => {
+    const now = 100 * DAY
+    const saved: [string, unknown][] = [
+      ['settings:a', { at: now - 31 * DAY }],
+      ['checkpoint:a', { at: now - 31 * DAY, note: 'x' }],
+      ['settings:b', { at: now - 29 * DAY }],
+      ['settings:me', { at: 0 }],
+      ['checkpoint:me', { at: 0 }],
+      ['settings:broken', 'x'],
+      ['resume:a', { at: 0 }],
+    ]
+    expect(staleSettingsKeys(saved, now, 'me')).toEqual(['settings:a', 'checkpoint:a', 'settings:broken'])
+    expect(staleSettingsKeys(saved, now, null)).toEqual(['settings:a', 'checkpoint:a', 'settings:me', 'checkpoint:me', 'settings:broken'])
+    expect(SETTINGS_PREFIX).toBe('settings:')
+    expect(SETTINGS_DAYS).toBe(30)
+  })
 })

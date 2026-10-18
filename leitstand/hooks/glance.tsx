@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On, RenderChildren, RenderElement, RenderSurface, Timer } from 'claude-code'
+import type { EngineInterface, On, PluginOptions, RenderChildren, RenderElement, RenderSurface, Timer } from 'claude-code'
 
 import type {
   GlanceFile,
@@ -37,9 +37,16 @@ import {
 import { extractSecrets, findSecrets, gitignoreWithEnv, mapStrings, maskDeep, maskPrivate, mergeEnv, replaceSecrets } from './privacy'
 import type { Secret } from './privacy'
 import {
+  CHECKPOINT_PREFIX,
+  FACTORY_SETTINGS,
   MAX_DETAIL,
   MAX_NAME,
   PLUGIN,
+  SETTINGS_PREFIX,
+  chatSettings,
+  defaultSettings,
+  ownValues,
+  staleSettingsKeys,
   QUESTION,
   RESUME_PREFIX,
   WAITING,
@@ -106,7 +113,7 @@ import {
   unsafePowerShellMerge,
 } from './logic'
 
-import type { SavedChecklist } from './logic'
+import type { ChatSettings, SavedChecklist } from './logic'
 import { kitOf } from './kit'
 import { DYNAMIC_ALSO, DYNAMIC_SECTION, TIERS, isTierAgent, tierAgent, tierDescription, workerPrompt } from './dynamisch'
 import type { WorkMode } from './dynamisch'
@@ -128,21 +135,14 @@ const ALWAYS_ALLOWED = new Set([
   PLAN_TOOL,
   PROGRESS_TOOL,
 ])
-const STORE_KEY = 'glanceEnabled'
-const DETAIL_KEY = 'glanceDetail'
-const SOUND_KEY = 'glanceSound'
-const CALM_KEY = 'glanceCalm'
-const GUARD_KEY = 'glanceGuard'
-// Masking on screen: on unless turned off.
-const MASK_KEY = 'glanceMask'
-const APPROVE_KEY = 'glanceApprove'
-/** Arbeitsweise: auto oder dynamisch. */
-const WORK_MODE_KEY = 'glanceWorkMode'
-const SHIP_KEY = 'glanceShip'
-const NOTICE_KEY = 'glanceNotice'
-// Whether the band names the other chats that need the person; on unless turned off.
-const OTHERS_KEY = 'glanceOthers'
+// Up to 0.50 the settings sat under global keys (glanceEnabled, glanceDetail and so on), shared by every chat. Each chat
+// now keeps its own (SETTINGS_PREFIX); the old keys stay in the store, unread.
 const TOUR_KEY = 'glanceTour'
+// When other chats' settings and checkpoints were last tidied away; it runs at most once a day.
+const SETTINGS_TIDY_KEY = 'settingsTidiedAt'
+const DAY_MS = 24 * 60 * 60_000
+/** The approval row in the settings while in Gruppenarbeit, where every plan waits for approval. */
+const APPROVE_ALWAYS = 'An (in der Gruppenarbeit immer)'
 /** The welcome, three short cards the first time: what the checklist is, what Needs you means, where the rest lives. */
 const TOUR_FIRST = 'Hier erscheint eine Checkliste, wenn du Claude um etwas mit mehreren Schritten bittest: jeder Schritt, wie weit er ist und wie lange es noch etwa dauert.'
 const TOUR_LAST = 'Unten unter Einstellungen findest du alle Optionen. Der Verlauf zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /leitstand tour.'
@@ -194,7 +194,6 @@ const COLLAPSE_MS = 5000
 const RESEND_WINDOW_MS = 2 * 60 * 1000
 const LIMIT_WARN = 80
 const LIMIT_ALERT = 95
-const CHECKPOINT_KEY = 'lastCheckpoint'
 // Up to 0.24 every chat's checklist sat under this one key; now each has its own (RESUME_PREFIX).
 const OLD_RESUME_KEY = 'glanceResume'
 // The recent chats whose checklists are kept, so a resumed chat picks up where it was.
@@ -259,6 +258,9 @@ const SETTINGS_PANE = 'leitstand-settings'
 const handoffAtom = atom({ plugin: 'leitstand', key: 'handoffState' } as const, 'idle')
 // The main chat is being compacted: a message sent now waits in the queue until it is through.
 const compactingAtom = atom({ plugin: 'leitstand', key: 'isCompacting' } as const, false)
+// The plan Start was pressed for (waitingPlanOf's words) while its message is on its way; null otherwise. The band then
+// reads Startet gleich… and a press sends nothing more; kept in state, so it outlasts a reload.
+const startingAtom = atom({ plugin: 'leitstand', key: 'startingPlan' } as const, null)
 // Remote Control's state per source: the app's own switch (ccd_session_mgmt) and /remote-control's description;
 // `missing` while the session lacks that source.
 type RemoteSide = 'on' | 'off' | 'missing'
@@ -268,6 +270,12 @@ const remoteAtom = atom({ plugin: 'leitstand', key: 'remoteControl' } as const, 
 const adhdAtom = atom({ plugin: 'leitstand', key: 'adhdMode' } as const, false)
 // When 🅰️ was last pressed to end a running Autopilot, for Autopilot to read as a round ends (see toggleNightShift).
 const autopilotStopAtom = atom({ plugin: 'leitstand', key: 'autopilotStop' } as const, null)
+// This chat's own settings, as the person changed them in it; see keepForChat.
+const ownSettingsAtom = atom({ plugin: 'leitstand', key: 'ownSettings' } as const, { sid: null, carry: false, values: {} } as {
+  sid: string | null
+  carry: boolean
+  values: Partial<ChatSettings>
+})
 const HANDOFF_CONFIRM_MS = 8000
 // What the Continue button sends, as the person's own words; turn.start knows it and keeps the job going.
 const CONTINUE_TEXT = 'Mach bitte da weiter, wo du aufgehört hast.'
@@ -399,15 +407,19 @@ let isStalled = false
 let nightStart: { plan: string; since: number } | null = null
 let nightTimer: Timer | undefined
 let nightStartedPlan: string | null = null
+// The settings a new chat starts with, from the config menu (register sets them); and the settings work under way,
+// so the next waits for it.
+let defaults: ChatSettings = FACTORY_SETTINGS
+let settingsWrite: Promise<void> = Promise.resolve()
 
 const now = ($: $) => $.clock.now()
 
 const syncTicker = ($: $, list: GlanceChecklist | null) => {
   const isAnimated = list !== null && (list.phase === 'working' || list.phase === 'needsYou' || list.phase === 'background')
   // Calm mode: nothing moves, so the clock only ticks to keep the times current. Nor does anything move while a plan
-  // waits for Start with no helper at work; a band drawn afresh four times a second there could lose a click on Start
+  // waits for Start, a helper at work or not; a band drawn afresh four times a second there could lose a click on Start
   // to the new drawing, and the person had to press twice.
-  const isWaitingForStart = list !== null && list.approval === 'waiting' && !isBusy(list)
+  const isWaitingForStart = list !== null && list.approval === 'waiting'
   const every = isCalmMode || isWaitingForStart ? CALM_TICK_MS : TICK_MS
   if (ticker !== undefined && (!isAnimated || tickerEvery !== every)) {
     ticker.cancel()
@@ -823,11 +835,13 @@ const isCompactingNow = async ($: $) => {
   return true
 }
 
-/** Sends words as the person's own message; true when sent, otherwise onFail says what to do instead. */
+/** Sends words as the person's own message; true when sent, otherwise (failed or dropped) onFail says what to do instead. */
 const sendAsUser = async ($: $, text: string, onFail: () => unknown) => {
   try {
-    await $.prompt.submit({ text, asUser: true })
-    return true
+    const result = await $.prompt.submit({ text, asUser: true })
+    if (result.drop === undefined) return true
+    await onFail()
+    return false
   } catch {
     await onFail()
     return false
@@ -1079,7 +1093,7 @@ const tidyUp = async ($: $, extra?: { secrets: readonly Secret[] }): Promise<'co
   }
   if (note !== null) {
     const at = await now($)
-    await $.store.set(CHECKPOINT_KEY, { sessionId: await $.session.id(), at, note })
+    await $.store.set(checkpointKey(await $.session.id()), { at, note })
     await update($, checkpointAtom, () => at)
   } else {
     $.ui.toast("Sicherungspunkt ließ sich nicht speichern, räume trotzdem auf.")
@@ -1136,10 +1150,10 @@ const withoutSecrets = (message: CompactedMessage, secrets: readonly Secret[]): 
   return built
 }
 
-/** The checkpoint saved before this chat was last tidied up; null in another chat or when there is none. */
+/** The checkpoint saved before this chat was last tidied up, under its own key; null when there is none. */
 const checkpointOf = async ($: $): Promise<string | null> => {
-  const saved = (await $.store.get(CHECKPOINT_KEY)) as { sessionId?: string; note?: string } | undefined
-  return saved?.note && saved.sessionId === (await $.session.id()) ? saved.note : null
+  const saved = (await $.store.get(checkpointKey(await $.session.id()))) as { note?: unknown } | undefined
+  return typeof saved?.note === 'string' && saved.note !== '' ? saved.note : null
 }
 
 /** What the checkpoint and the compaction are told about secrets moved into the .env: placeholders only, no values. */
@@ -1255,16 +1269,143 @@ const measureUsage = async ($: $, usage: GlanceUsage) => {
   limitLevel = level
 }
 
+/** Runs settings work one after another, so two quick presses never save out of order. */
+const queued = <T,>(work: () => Promise<T>): Promise<T> => {
+  const run = settingsWrite.then(work)
+  settingsWrite = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+const settingsKey = (sid: string) => `${SETTINGS_PREFIX}${sid}`
+const checkpointKey = (sid: string) => `${CHECKPOINT_PREFIX}${sid}`
+// Where the one checkpoint lay before each chat kept its own: { sessionId, at, note }.
+const LEGACY_CHECKPOINT_KEY = 'lastCheckpoint'
+
+/** Saves a chat's own values under its key, with when; with none left, the key goes. A store that fails leaves them in state. */
+const writeOwn = async ($: $, sid: string | null, values: Partial<ChatSettings>) => {
+  if (sid === null) return
+  try {
+    if (Object.keys(values).length === 0) await $.store.delete(settingsKey(sid))
+    else await $.store.set(settingsKey(sid), { at: await now($), values })
+  } catch {
+    // This chat's state still holds them: a reload reads them back from there.
+  }
+}
+
+/** Puts a chat's settings into effect: every setting's state, the calm ticker and, where it changed, the other chats line. */
+const applySettings = async ($: $, settings: ChatSettings) => {
+  const wasNaming = (await read($, enabledAtom)) && (await read($, showsOthersAtom))
+  await update($, enabledAtom, () => settings.enabled)
+  await update($, detailAtom, () => settings.detail)
+  await update($, workModeAtom, () => settings.workMode)
+  await update($, soundAtom, () => settings.sound)
+  await update($, noticeAtom, () => settings.notice)
+  await update($, showsOthersAtom, () => settings.others)
+  isCalmMode = settings.calm
+  await update($, calmAtom, () => settings.calm)
+  await update($, guardAtom, () => settings.guard)
+  await update($, maskAtom, () => settings.mask)
+  await update($, approveAtom, () => settings.approve)
+  await update($, shipOnGithubAtom, () => settings.ship)
+  syncTicker($, await read($, checklistAtom))
+  if (wasNaming !== (settings.enabled && settings.others)) void refreshOthers($).catch(() => undefined)
+}
+
+/**
+ * When this chat last saved a checkpoint, for Letzter Stand; null when it has none. One saved before checkpoints were
+ * kept per chat, under the old global key and for this chat, becomes this chat's own, once; the old key stays.
+ */
+const loadCheckpoint = async ($: $, sid: string | null) => {
+  let saved = sid === null ? undefined : ((await $.store.get(checkpointKey(sid)).catch(() => undefined)) as { at?: unknown; note?: unknown } | undefined)
+  if (sid !== null && saved === undefined) {
+    const old = (await $.store.get(LEGACY_CHECKPOINT_KEY).catch(() => undefined)) as { sessionId?: unknown; at?: unknown; note?: unknown } | undefined
+    if (old?.sessionId === sid && typeof old.at === 'number' && typeof old.note === 'string') {
+      saved = { at: old.at, note: old.note }
+      await $.store.set(checkpointKey(sid), saved).catch(() => undefined)
+    }
+  }
+  await update($, checkpointAtom, () => (typeof saved?.at === 'number' ? saved.at : null))
+}
+
+/** Loads a chat's settings: what its key holds, else what this chat's state holds, else none; then puts them into effect. */
+const loadChatSettings = async ($: $, sid: string | null) => {
+  const own = await read($, ownSettingsAtom)
+  const stored = sid === null ? undefined : await $.store.get(settingsKey(sid)).catch(() => undefined)
+  const values = stored !== undefined ? ownValues(stored) : own.sid === sid ? ownValues({ values: own.values }) : {}
+  await update($, ownSettingsAtom, () => ({ sid, carry: false, values }))
+  await applySettings($, chatSettings(defaults, values))
+  // In use again: its key is kept for another 30 days.
+  if (Object.keys(values).length > 0) await writeOwn($, sid, values)
+}
+
+/**
+ * Follows the chat id: after /clear (`carry`) the chat keeps its settings, now under its new id; after a resume in
+ * the same process the resumed chat's own are loaded. `isStart` loads them even when the id is the same (a reload).
+ * True when it put settings into effect.
+ */
+const follow = async ($: $, isStart: boolean): Promise<boolean> => {
+  const sid = await $.session.id().catch(() => null)
+  const own = await read($, ownSettingsAtom)
+  if (sid === own.sid && !isStart) return false
+  await loadCheckpoint($, sid)
+  if (own.carry && sid !== null && sid !== own.sid) {
+    const values = ownValues({ values: own.values })
+    await update($, ownSettingsAtom, () => ({ sid, carry: false, values }))
+    await writeOwn($, sid, values)
+    await applySettings($, chatSettings(defaults, values))
+    return true
+  }
+  await loadChatSettings($, sid)
+  return true
+}
+
+const followSession = ($: $, isStart = false) => queued(() => follow($, isStart))
+
+/** Keeps a change for this chat alone: in its state, and under its own key. Other chats, open or new, never see it. */
+const keepForChat = ($: $, patch: Partial<ChatSettings>) =>
+  queued(async () => {
+    // The chat id changed since (a resume): this change belongs to the chat now open.
+    const isLoaded = await follow($, false)
+    const sid = await $.session.id().catch(() => null)
+    const next = await update($, ownSettingsAtom, own => ({ sid, carry: false, values: { ...(own?.values ?? {}), ...patch } }))
+    if (isLoaded) await applySettings($, chatSettings(defaults, next.values))
+    await writeOwn($, sid, next.values)
+  })
+
+/**
+ * Tidies away other chats' settings and checkpoints not used for 30 days, at most once a day; never this chat's own.
+ * With nothing of other chats to look at, it neither reads nor writes.
+ */
+const tidySettings = async ($: $) => {
+  const sid = await $.session.id().catch(() => null)
+  const mine = sid === null ? [] : [settingsKey(sid), checkpointKey(sid)]
+  const keys = (await $.store.keys()).filter(key => (key.startsWith(SETTINGS_PREFIX) || key.startsWith(CHECKPOINT_PREFIX)) && !mine.includes(key))
+  if (keys.length === 0) return
+  const at = await now($)
+  const last = await $.store.get(SETTINGS_TIDY_KEY)
+  if (typeof last === 'number' && at - last < DAY_MS) return
+  await $.store.set(SETTINGS_TIDY_KEY, at)
+  const saved: [string, unknown][] = []
+  for (const key of keys) saved.push([key, await $.store.get(key)])
+  for (const key of staleSettingsKeys(saved, at, sid)) {
+    // A chat that used it since it was read keeps it.
+    if (staleSettingsKeys([[key, await $.store.get(key)]], at, sid).length > 0) await $.store.delete(key)
+  }
+}
+
 const setEnabled = async ($: $, isEnabled: boolean) => {
   await update($, enabledAtom, () => isEnabled)
-  await $.store.set(STORE_KEY, isEnabled)
+  await keepForChat($, { enabled: isEnabled })
   $.ui.toast(isEnabled ? 'Der Leitstand ist an: Tool-Details sind ausgeblendet' : 'Der Leitstand ist aus: Alles wird angezeigt')
 }
 
 /** Sounds: off, a chime, or a chime and a few words. A chime plays at once so the person hears what they picked. */
 const setSound = async ($: $, mode: 'off' | 'chime' | 'voice') => {
   await update($, soundAtom, () => mode)
-  await $.store.set(SOUND_KEY, mode)
+  await keepForChat($, { sound: mode })
   if (mode !== 'off') void playSound($, 'sounds/needs-you.wav').catch(() => undefined)
 }
 
@@ -1272,7 +1413,7 @@ const setSound = async ($: $, mode: 'off' | 'chime' | 'voice') => {
 const setCalm = async ($: $, isOn: boolean) => {
   isCalmMode = isOn
   await update($, calmAtom, () => isOn)
-  await $.store.set(CALM_KEY, isOn)
+  await keepForChat($, { calm: isOn })
   syncTicker($, await read($, checklistAtom))
 }
 
@@ -1285,27 +1426,27 @@ const stepTour = async ($: $, step: number | null) => {
 /** Desktop notices: on shows one when Claude needs you, gets stuck or finishes a long job. A sample shows at once. */
 const setNotice = async ($: $, isOn: boolean) => {
   await update($, noticeAtom, () => isOn)
-  await $.store.set(NOTICE_KEY, isOn)
+  await keepForChat($, { notice: isOn })
   if (isOn) void showNotice($, 'Claude braucht dich', 'So sagt dir der Leitstand Bescheid.')
 }
 
 /** The line naming the other chats that need the person: off before sharing the screen, say. */
 const setOthers = async ($: $, isOn: boolean) => {
   await update($, showsOthersAtom, () => isOn)
-  await $.store.set(OTHERS_KEY, isOn)
+  await keepForChat($, { others: isOn })
   if (isOn) await refreshOthers($).catch(() => undefined)
 }
 
 /** The password guard: on holds back a message that looks like it has a password or key in it. */
 const setGuard = async ($: $, isOn: boolean) => {
   await update($, guardAtom, () => isOn)
-  await $.store.set(GUARD_KEY, isOn)
+  await keepForChat($, { guard: isOn })
 }
 
 /** Masking on screen: on, passwords, keys and personal details read as dots in messages, command and tool output. */
 const setMasking = async ($: $, isOn: boolean) => {
   await update($, maskAtom, () => isOn)
-  await $.store.set(MASK_KEY, isOn)
+  await keepForChat($, { mask: isOn })
 }
 
 const MASKING_WORDS = {
@@ -1326,7 +1467,7 @@ const isMasking = async ($: $) => (await read($, enabledAtom)) && (await read($,
 /** Finish on GitHub: a finished job in a GitHub project offers Ship it. */
 const setShipOnGithub = async ($: $, isOn: boolean) => {
   await update($, shipOnGithubAtom, () => isOn)
-  await $.store.set(SHIP_KEY, isOn)
+  await keepForChat($, { ship: isOn })
 }
 
 /** Sends the close-out as the person's own message: cleanup, commit, pull request, merge once the person approves. */
@@ -1343,13 +1484,13 @@ const shipIt = ($: $) => {
 /** Approve the plan first: Claude lays out its plan, then waits for Start or a change. */
 const setApprove = async ($: $, isOn: boolean) => {
   await update($, approveAtom, () => isOn)
-  await $.store.set(APPROVE_KEY, isOn)
+  await keepForChat($, { approve: isOn })
 }
 
 /** Arbeitsweise: Auto (Claude entscheidet selbst über Helfer) oder Dynamisch (Claude leitet, Arbeiter in Stufen setzen um). */
 const setWorkMode = async ($: $, mode: WorkMode) => {
   await update($, workModeAtom, () => mode)
-  await $.store.set(WORK_MODE_KEY, mode)
+  await keepForChat($, { workMode: mode })
 }
 
 /** Ob gerade die Arbeitsweise Dynamisch gilt: nur mit dem Leitstand an. */
@@ -1742,14 +1883,30 @@ const stopNightStart = () => {
   nightStart = null
 }
 
-/** The person approves the plan: the same job starts, and Autopilot has nothing left to start for it. */
+/**
+ * The person approves the plan: the same job starts, and Autopilot has nothing left to start for it. A plan already on
+ * its way sends nothing more. Not sent (failed or dropped): Start and Autopilot are free for it again.
+ */
 const startPlan = async ($: $) => {
   if (await isCompactingNow($)) return false
   const plan = waitingPlanOf(await read($, checklistAtom))
-  const isSent = await sendAsUser($, START_TEXT, () => $.ui.toast("Starten geht gerade nicht. Schreib: los"))
-  if (isSent && plan !== null) {
-    nightStartedPlan = plan
-    stopNightStart()
+  if (plan === null) return sendAsUser($, START_TEXT, () => $.ui.toast("Starten geht gerade nicht. Schreib: los"))
+  // Marked in one step, so two presses at once agree on which one sends.
+  let isMine = false
+  await update($, startingAtom, starting => {
+    if (starting === plan) return starting
+    isMine = true
+    return plan
+  })
+  if (!isMine) return true
+  nightStartedPlan = plan
+  stopNightStart()
+  let isSent = false
+  try {
+    isSent = await sendAsUser($, START_TEXT, () => $.ui.toast("Starten geht gerade nicht. Schreib: los"))
+  } finally {
+    if (!isSent && nightStartedPlan === plan) nightStartedPlan = null
+    await update($, startingAtom, starting => (starting === plan ? null : starting))
   }
   return isSent
 }
@@ -1814,11 +1971,8 @@ const nightStartNote = async ($: $) =>
 /** Picks Simple, Details, Minimal or Off directly, as the settings panel does. */
 const setView = async ($: $, view: 'simple' | 'detailed' | 'minimal' | 'off') => {
   await update($, enabledAtom, () => view !== 'off')
-  await $.store.set(STORE_KEY, view !== 'off')
-  if (view !== 'off') {
-    await update($, detailAtom, () => view)
-    await $.store.set(DETAIL_KEY, view)
-  }
+  if (view !== 'off') await update($, detailAtom, () => view)
+  await keepForChat($, { enabled: view !== 'off', ...(view !== 'off' ? { detail: view } : {}) })
 }
 
 /** Plays what the person picked, so they know what they will hear. */
@@ -1828,19 +1982,16 @@ const alertSample = async ($: $, mode: 'off' | 'chime' | 'voice') => {
   if (mode === 'voice') await sayWords($, 'Claude braucht dich').catch(() => undefined)
 }
 
-/** Back to how Leitstand starts: Simple, no sounds or notices, calm off, password guard on, no plan approval. */
+/** Back to the defaults from the config menu, in this chat alone: its own values and its key go. */
 const resetSettings = async ($: $) => {
-  await setView($, 'simple')
-  await setSound($, 'off')
-  await setNotice($, false)
-  await setOthers($, true)
-  await setCalm($, false)
-  await setGuard($, true)
-  await setMasking($, true)
-  await setApprove($, false)
-  await setWorkMode($, 'auto')
-  await setShipOnGithub($, false)
-  $.ui.toast('Die Einstellungen sind wieder auf Standard.')
+  await queued(async () => {
+    await follow($, false)
+    const sid = await $.session.id().catch(() => null)
+    await update($, ownSettingsAtom, () => ({ sid, carry: false, values: {} }))
+    await writeOwn($, sid, {})
+    await applySettings($, defaults)
+  })
+  $.ui.toast('Auf den Standard zurückgesetzt, nur in diesem Chat.')
 }
 
 const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'Leitstand-Einstellungen', closeOnEscape: true })
@@ -1860,14 +2011,14 @@ const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed'
 
 const setDetail = async ($: $, isDetailed: boolean) => {
   await update($, detailAtom, () => (isDetailed ? 'detailed' : 'simple'))
-  await $.store.set(DETAIL_KEY, isDetailed ? 'detailed' : 'simple')
+  await keepForChat($, { detail: isDetailed ? 'detailed' : 'simple' })
   $.ui.toast(
     isDetailed ? 'Details an: Modelle, Tokens, Cache und Plan-Nutzung' : 'Details aus: nur die Schritte und der Fortschritt',
   )
 }
 
-// Leitstand grew out of GlanceFlow, which was called Glance until 0.9: once, bring over Glance's settings and history
-// from its own store file.
+// Leitstand grew out of GlanceFlow, which was called Glance until 0.9: once, bring over Glance's history from its own
+// store file. Settings are kept per chat since 0.51 and are not brought over.
 const ADOPTED_KEY = 'adoptedGlance'
 const adoptGlanceStore = async ($: $) => {
   if (await $.store.get(ADOPTED_KEY)) {
@@ -1882,8 +2033,6 @@ const adoptGlanceStore = async ($: $) => {
       return
     }
     const dir = `${config}/plugins/store`
-    const settings = new Set([STORE_KEY, DETAIL_KEY, SOUND_KEY, CALM_KEY, GUARD_KEY, APPROVE_KEY, NOTICE_KEY])
-    const mine = new Set(await $.store.keys())
     for (const file of await $.fs.list(dir)) {
       if (!/^glance_.*\.json$/.test(file.name)) {
         continue
@@ -1900,8 +2049,6 @@ const adoptGlanceStore = async ($: $) => {
             }
           }
           await $.store.set(own, entries ?? [])
-        } else if (settings.has(key) && !mine.has(key)) {
-          await $.store.set(key, value)
         }
       }
     }
@@ -1924,7 +2071,9 @@ const splitSharedDays = async ($: $) => {
   }
 }
 
-export function registerGlance(on: On): void {
+export function registerGlance(on: On, options: PluginOptions = {}): void {
+  // What a new chat starts with; a change in the config menu reloads the module with the new values.
+  defaults = defaultSettings(options)
   // A chat that ends says so, so the other chats stop mentioning it; its checklist stays for when it is resumed.
   on('session.end', async ($, e, next) => {
     saveTimer?.cancel()
@@ -1939,6 +2088,8 @@ export function registerGlance(on: On): void {
     // keeps reading the others.
     // A cleared chat starts without ADHD mode.
     if (e.reason === 'clear') await update($, adhdAtom, () => false).catch(() => undefined)
+    // A cleared chat keeps its settings: the next turn keeps them under the new chat id.
+    if (e.reason === 'clear') await update($, ownSettingsAtom, own => ({ sid: own?.sid ?? null, values: own?.values ?? {}, carry: true })).catch(() => undefined)
     if (e.reason !== 'clear' && e.reason !== 'resume') {
       hasEnded = true
       othersTimer?.cancel()
@@ -1964,33 +2115,12 @@ export function registerGlance(on: On): void {
       if (keys.every(key => key === ADOPTED_KEY)) await update($, tourAtom, () => 0)
       else await $.store.set(TOUR_KEY, true)
     }
-    const stored = await $.store.get(STORE_KEY)
-    await update($, enabledAtom, () => stored !== false)
-    const detail = await $.store.get(DETAIL_KEY)
-    await update($, detailAtom, () => (detail === 'detailed' || detail === 'minimal' ? detail : 'simple'))
-    const sound = await $.store.get(SOUND_KEY)
-    await update($, soundAtom, () => (sound === 'chime' || sound === 'voice' ? sound : 'off'))
-    isCalmMode = (await $.store.get(CALM_KEY)) === true
-    const isGuarded = (await $.store.get(GUARD_KEY)) !== false
-    await update($, guardAtom, () => isGuarded)
-    const masks = (await $.store.get(MASK_KEY)) !== false
-    await update($, maskAtom, () => masks)
-    const approves = (await $.store.get(APPROVE_KEY)) === true
-    await update($, approveAtom, () => approves)
-    const workMode = await $.store.get(WORK_MODE_KEY)
-    await update($, workModeAtom, () => (workMode === 'dynamisch' ? 'dynamisch' : 'auto'))
-    const ships = (await $.store.get(SHIP_KEY)) === true
-    await update($, shipOnGithubAtom, () => ships)
+    // Housekeeping first: other chats' settings and checkpoints unused for 30 days go, never this chat's own.
+    await tidySettings($).catch(() => undefined)
+    // This chat's own settings, or the defaults from the config menu for a new chat; and its own Letzter Stand.
+    await followSession($, true).catch(() => undefined)
     const origin = await $.process.run(['git', 'remote', 'get-url', 'origin']).catch(() => ({ exitCode: 1, stdout: '' }))
     await update($, hasGithubAtom, () => origin.exitCode === 0 && /github\.com[:/]/.test(origin.stdout))
-    const isNoticing = (await $.store.get(NOTICE_KEY)) === true
-    await update($, noticeAtom, () => isNoticing)
-    const showsOthers = (await $.store.get(OTHERS_KEY)) !== false
-    await update($, showsOthersAtom, () => showsOthers)
-    const saved = (await $.store.get(CHECKPOINT_KEY)) as { sessionId?: string; at?: number } | undefined
-    const thisSession = await $.session.id().catch(() => null)
-    await update($, checkpointAtom, () => (saved?.sessionId === thisSession && typeof saved?.at === 'number' ? saved.at : null))
-    await update($, calmAtom, () => isCalmMode)
     hasEnded = false
     endShipping()
     // Tidying is housekeeping: a store that fails at it must not keep the chat from starting. It never prunes this
@@ -2305,7 +2435,11 @@ export function registerGlance(on: On): void {
       try {
         return await next(e)
       } finally {
-        if (isBlocking) await update($, compactingAtom, () => false)
+        if (isBlocking) {
+          await update($, compactingAtom, () => false)
+          // A Start on its way may have been lost with the queue: Start is free again.
+          await update($, startingAtom, () => null)
+        }
       }
     })()
     if (pendingVault !== null && (await now($)) > pendingVault.until) pendingVault = null
@@ -2436,6 +2570,8 @@ export function registerGlance(on: On): void {
     // No main turn runs during a compaction: one that starts means it is over.
     if (e.agentId === undefined && (await read($, compactingAtom))) await update($, compactingAtom, () => false)
     if (e.agentId === undefined) void readRemote($)
+    // After /clear or a resume in this process the chat id changed: its settings follow.
+    if (!e.agentId) void followSession($).catch(() => {})
     runningTurn = e.turnId
     noteSign($)
     const text = ownWords(e.text)
@@ -2480,6 +2616,8 @@ export function registerGlance(on: On): void {
       // Start, or "go ahead" typed: the plan is approved and the same job goes on. The go-ahead is used up on it.
       isApprovingTurn = false
       await change($, list => ({ ...list, approval: 'approved', phase: 'working', needsYouReason: null, isCollapsed: false }))
+      // The plan runs: Start is gone, and nothing is on its way any more.
+      await update($, startingAtom, () => null)
     } else if (current !== null && (text === CONTINUE_TEXT || (isContinueWords(text) && !isFinished(current)))) {
       // The Continue button, or "continue" typed: the same job picks up again.
       await change($, list => ({
@@ -2996,13 +3134,13 @@ export function registerGlance(on: On): void {
         {vector ? (
           // The app titles the panel; the body starts with how changes behave.
           <Text dimColor wrap="wrap">
-            Änderungen gelten sofort und bleiben für deine nächsten Chats.
+            Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.
           </Text>
         ) : (
           <Box flexDirection="column">
             <Text bold>⚙ Leitstand-Einstellungen</Text>
             <Text dimColor wrap="wrap">
-              Änderungen gelten sofort und bleiben für deine nächsten Chats.
+              Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.
             </Text>
             <Text dimColor>{rule}</Text>
           </Box>
@@ -3078,8 +3216,16 @@ export function registerGlance(on: On): void {
           'approve',
           'approve',
           'Plan zuerst freigeben',
-          approves || workMode === 'dynamisch' ? 'An' : 'Aus',
-          choice('approve', [['off', 'Aus'], ['on', 'An']], approves || workMode === 'dynamisch' ? 'on' : 'off', value => setApprove($, value === 'on')),
+          workMode === 'dynamisch' ? APPROVE_ALWAYS : approves ? 'An' : 'Aus',
+          // In Gruppenarbeit every plan waits for approval: a press there changes and keeps nothing.
+          choice(
+            'approve',
+            [['off', 'Aus'], ['on', workMode === 'dynamisch' ? APPROVE_ALWAYS : 'An']],
+            approves || workMode === 'dynamisch' ? 'on' : 'off',
+            async value => {
+              if ((await read($, workModeAtom)) !== 'dynamisch') await setApprove($, value === 'on')
+            },
+          ),
           workMode === 'dynamisch'
             ? `In der Gruppenarbeit wartet jeder Plan auf deine Freigabe. Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll.`
             : approves
@@ -3909,12 +4055,19 @@ export function registerGlance(on: On): void {
         {`startet in ${nightStartIn} s`}
       </Text>
     )
+    // Start pressed and its message on its way: the button says so, and a press on it does nothing. The press itself
+    // does not wait for the message, which waits for its turn.
+    const waitingPlan = waitingPlanOf(list0)
+    const isStarting = waitingPlan !== null && (await read($, startingAtom)) === waitingPlan
+    const startItem = isStarting
+      ? action('start', 'play', 'Startet gleich…', () => undefined)
+      : action('start', 'play', 'Start', () => void startPlan($).catch(() => undefined), undefined, true)
     const controls = isEnabled
       ? [
           canPause && action('pause', 'pause', pauseLabel, () => pauseJob($)),
           // Elsewhere than the terminal Start, the main button, stays last; the hint goes before it.
           vector && nightStartHint,
-          !isCompacting && list0?.approval === 'waiting' && action('start', 'play', 'Start', () => startPlan($), undefined, true),
+          !isCompacting && list0?.approval === 'waiting' && startItem,
           !vector && nightStartHint,
           !isCompacting && canContinue && action('continue', 'play', continueLabel, () => continueJob($), undefined, !(vector && isLimitStuck)),
         ].filter(Boolean)

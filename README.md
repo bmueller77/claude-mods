@@ -1,7 +1,10 @@
 # bjoern-mods
 
-Claude-Code-Marktplatz mit Björns eigenen Mods, dazu filetree und i-have-adhd.
-Die eigenen Mods liegen hier im Repo, die beiden fremden kommen direkt aus ihren Original-Repos.
+Claude-Code-Marktplatz mit Björns eigenen Mods, dazu i-have-adhd.
+Die eigenen Mods und die deutschen Fassungen liegen hier im Repo, i-have-adhd kommt direkt aus seinem Original-Repo.
+
+Einstellungen gelten je Chat: Ein Schalter, den du in einem Chat umlegst, ändert keinen anderen Chat. Neue Chats
+starten mit dem Standard aus dem Einstellungsmenü der App (Leitstand, Zusammenfassung, Visible Compact).
 
 Neue Instanz einrichten:
 
@@ -21,7 +24,7 @@ In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/stati
 | zusammenfassung | hier (Eigenbau) | nach jeder Arbeitsrunde: was getan wurde und was man leicht übersieht, mit Dateiliste und Replay | ja, ein Haiku-Aufruf je Arbeitsrunde |
 | visible-compact | hier (deutsche Fassung von nvsravank/visible-compact, MIT) | Chat vor und nach `/compact` nebeneinander, Knopf Übersetzen; `/show-last-compact` | nur beim Übersetzen (Haiku) |
 | autopilot | hier (Eigenbau, früher nachtschicht) | Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe; `/autopilot` | ja: jede angeschobene Runde kostet wie eine Nachricht |
-| filetree | data-goblin/claude-code-filetree | Dateibaum, im Terminal mit `/tui fullscreen` | nein |
+| filetree | hier (deutsche Fassung von data-goblin/claude-code-filetree, MIT) | Dateibaum als Seitenfenster mit Git-Status, im Terminal mit `/tui fullscreen` | nein |
 | i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; Knopf 🧠 im Leitstand | nur der Skilltext im Kontext, solange der Modus an ist |
 | you-should-know | in Claude Code eingebaut | wird von install.sh eingeschaltet | ja |
 

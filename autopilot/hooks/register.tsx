@@ -27,6 +27,20 @@ const START_PAUSE_MS = 1000
 /** Der Grund im Bericht, wenn die Person den Autopiloten mit 🅰️ im Leitstand beendet hat. */
 export const GRUND_KNOPF = 'du hast ihn über 🅰️ beendet'
 
+/** Der Grund im Bericht, wenn der Autopilot so oft angeschoben hat, wie maxRunden erlaubt. */
+export const GRUND_GRENZE = 'Rundengrenze'
+
+/** Wo ein Agent laut `$.agent.list()` noch arbeitet (AgentStatus); die anderen sind fertig oder warten auf eine Nachricht. */
+const AGENT_ARBEITET: ReadonlySet<string> = new Set(['pending', 'running', 'waiting'])
+
+/**
+ * Welche Hintergrundarbeit (`background_tasks[].type` am Rundenende) das Anschieben
+ * zurueckhaelt: Agenten und Workflows, die sich mit einer Fertigmeldung zurueckmelden.
+ * Shells und Monitore nicht: Ein Dev-Server oder ein Monitor laeuft beliebig lange
+ * und wuerde den Autopiloten sonst stilllegen.
+ */
+const HINTERGRUND_HAELT: ReadonlySet<string> = new Set(['subagent', 'workflow'])
+
 /**
  * Wo der Leitstand den Wunsch ablegt, die Schicht zu beenden: die Zeit des
  * Drucks auf 🅰️. Sein /autopilot aus wartet, bis die Sitzung still ist, und das
@@ -109,20 +123,18 @@ let laeuft = false
 let hatRunde = false
 /** Werkzeugaufrufe der laufenden Runde. */
 let werkzeuge = 0
-/** Ob die laufende Runde von der Schicht angeschoben wurde. */
-let angeschoben = false
-/** Angeschobene Runden seit der letzten Nachricht der Person. */
-let runden = 0
-/** Angeschobene Runden in Folge ohne Werkzeugaufruf. */
-let leerlauf = 0
+/**
+ * Wie viele Agenten und Workflows die Engine am Ende der letzten Runde der
+ * Hauptschleife als laufend meldete (`classic.Stop`, vor `turn.complete`); Shells
+ * und Monitore zaehlen nicht. null, solange seit dem Beginn der Runde keine Meldung kam.
+ */
+let hintergrund: number | null = null
 /** API-Fehler in Folge. */
 let fehler = 0
 /** Das Anschieben nach einem API-Fehler, solange es noch wartet. */
 let warte: { cancel: () => void } | null = null
 
 function zaehlerAuf0(): void {
-    runden = 0
-    leerlauf = 0
     fehler = 0
     warte?.cancel()
     warte = null
@@ -144,9 +156,47 @@ async function sollAus($: EngineInterface, s: Schicht): Promise<boolean> {
 }
 
 async function anschieben($: EngineInterface): Promise<void> {
-    runden += 1
-    await update($, schicht, s => (s ? { ...s, geschoben: s.geschoben + 1 } : s))
+    // Die Markierung setzt anschieben selbst, vor dem Einreichen: Den eigenen
+    // $.prompt.submit sieht der prompt.submit-Hook dieses Mods nie (Re-entry-Regel,
+    // reference.md: er wird unter den Frames des aufrufenden Hooks erhoben). Darum
+    // griff die Leerlauf-Bremse bis 0.4.0 nie.
+    await update($, schicht, s =>
+        s ? { ...s, geschoben: s.geschoben + 1, runden: (s.runden ?? 0) + 1, angeschoben: true } : s,
+    )
     void $.prompt.submit({ text: WEITER }).catch(() => {})
+}
+
+/**
+ * Ob noch Hintergrundarbeit dieser Sitzung laeuft. Ihre Fertigmeldung startet
+ * ohnehin eine neue Runde. Ohne Meldung der Engine seit Rundenbeginn (nach einem
+ * API-Fehler, nach einem Neuladen) fragt sie die Liste der Agenten.
+ */
+async function hintergrundLaeuft($: EngineInterface): Promise<boolean> {
+    if (hintergrund !== null) {
+        return hintergrund > 0
+    }
+    try {
+        const agenten = await $.agent.list()
+        return agenten.some(a => AGENT_ARBEITET.has(a.status))
+    } catch {
+        return false
+    }
+}
+
+/**
+ * Vor jedem Anstoss: Laeuft Hintergrundarbeit, wartet die Schicht ('warten'),
+ * ohne zu zaehlen. Hat sie so oft angeschoben, wie maxRunden erlaubt, endet sie
+ * mit dem Grund Rundengrenze ('ende'). Sonst darf sie anschieben ('los').
+ */
+async function vorDemAnstoss($: EngineInterface, s: Schicht): Promise<'warten' | 'ende' | 'los'> {
+    if (await hintergrundLaeuft($)) {
+        return 'warten'
+    }
+    if ((s.runden ?? 0) >= maxRunden) {
+        await beenden($, GRUND_GRENZE)
+        return 'ende'
+    }
+    return 'los'
 }
 
 async function anhalten($: EngineInterface, phase: Phase, grund: string): Promise<void> {
@@ -163,6 +213,9 @@ async function anschiebenWennNoetig($: EngineInterface): Promise<void> {
         // Kam in der Pause 🅰️ im Leitstand, endet die Schicht, statt anzuschieben.
         if (await sollAus($, s)) {
             await beenden($, GRUND_KNOPF)
+            return
+        }
+        if ((await vorDemAnstoss($, s)) !== 'los') {
             return
         }
         await anschieben($)
@@ -193,14 +246,16 @@ async function beginnen($: EngineInterface): Promise<boolean> {
     const seit = await $.clock.now()
     await update($, bericht, () => null)
     await update($, zeigeFragen, () => false)
-    await update($, schicht, () => ({ seit, phase: 'laeuft' as const, grund: null, geschoben: 0, fragen: [] }))
+    await update($, schicht, () => ({ seit, phase: 'laeuft' as const, grund: null, geschoben: 0, runden: 0, angeschoben: false, leerlauf: 0, fragen: [] }))
     return gleichWeiter($)
 }
 
 /** Laesst eine angehaltene oder fertige Schicht weiterlaufen; true, wenn Claude gleich weitermacht. */
 async function fortsetzen($: EngineInterface): Promise<boolean> {
     zaehlerAuf0()
-    await update($, schicht, s => (s ? { ...s, phase: 'laeuft' as const, grund: null } : s))
+    await update($, schicht, s =>
+        s ? { ...s, phase: 'laeuft' as const, grund: null, runden: 0, angeschoben: false, leerlauf: 0 } : s,
+    )
     return gleichWeiter($)
 }
 
@@ -285,16 +340,11 @@ export const register: Register = (on, options) => {
     })
 
     on('prompt.submit', async ($, e, next) => {
-        if (e.origin.kind === 'plugin' && e.origin.name === 'autopilot') {
-            angeschoben = true
-            return next(e)
-        }
         const s = await read($, schicht)
         if (!s || e.command || (e.origin.kind !== 'composer' && e.origin.kind !== 'bridge')) {
             return next(e)
         }
         // Die Person hat selbst geschrieben: ein neuer Auftrag, die Zaehler beginnen von vorn.
-        angeschoben = false
         zaehlerAuf0()
         // Sie hat vorher 🅰️ im Leitstand gedrueckt: Die Schicht ist vorbei, die
         // Nachricht geht ohne den Kontext des Autopiloten raus.
@@ -302,9 +352,10 @@ export const register: Register = (on, options) => {
             await beenden($, GRUND_KNOPF)
             return next(e)
         }
-        if (s.phase !== 'laeuft') {
-            await update($, schicht, x => (x ? { ...x, phase: 'laeuft' as const, grund: null } : x))
-        }
+        // Nur hier, bei einer Nachricht der Person, beginnt der Rundenzaehler von vorn.
+        await update($, schicht, x =>
+            x ? { ...x, phase: 'laeuft' as const, grund: null, runden: 0, angeschoben: false, leerlauf: 0 } : x,
+        )
         return next({ ...e, context: [...(e.context ?? []), KONTEXT] })
     })
 
@@ -312,9 +363,18 @@ export const register: Register = (on, options) => {
         if (!e.agentId) {
             laeuft = true
             werkzeuge = 0
+            hintergrund = null
         }
         return next(e)
     })
+
+    // Am Ende jeder Runde der Hauptschleife meldet die Engine, was noch im Hintergrund
+    // laeuft, vor turn.complete. Subagenten melden sich mit SubagentStop, nicht hier.
+    // Nur laufende Agenten und Workflows halten das Anschieben zurueck.
+    on('classic.Stop', async ($, e, next) => {
+        hintergrund = (e.background_tasks ?? []).filter(t => HINTERGRUND_HAELT.has(t.type)).length
+        return next(e)
+    }).catch(($, e, next) => next(e))
 
     on('tool.call', async ($, e, next) => {
         if (!e.agentId) {
@@ -341,12 +401,15 @@ export const register: Register = (on, options) => {
         }
         laeuft = false
         hatRunde = true
-        const warAngeschoben = angeschoben
-        angeschoben = false
 
         const s = await read($, schicht)
         if (!s) {
             return r
+        }
+        // Ob diese Runde angeschoben war; die Markierung gilt nur fuer sie.
+        const warAngeschoben = s.angeschoben === true
+        if (warAngeschoben) {
+            await update($, schicht, x => (x ? { ...x, angeschoben: false } : x))
         }
         if (e.reason === 'aborted') {
             // Wer unterbricht, ist da.
@@ -366,10 +429,6 @@ export const register: Register = (on, options) => {
             await anhalten($, 'angehalten', 'Claude hat abgelehnt')
             return r
         }
-        if (runden >= maxRunden) {
-            await anhalten($, 'angehalten', `${maxRunden}x angeschoben, das Limit ist erreicht`)
-            return r
-        }
         if (e.reason === 'error') {
             fehler += 1
             if (fehler >= FEHLER_MAX) {
@@ -384,7 +443,12 @@ export const register: Register = (on, options) => {
             await anhalten($, 'fertig', 'Claude meldet fertig')
             return r
         }
-        leerlauf = warAngeschoben && werkzeuge === 0 ? leerlauf + 1 : 0
+        // Hintergrundarbeit meldet sich selbst mit einer neuen Runde; an der Rundengrenze ist Schluss.
+        if ((await vorDemAnstoss($, s)) !== 'los') {
+            return r
+        }
+        const leerlauf = warAngeschoben && werkzeuge === 0 ? (s.leerlauf ?? 0) + 1 : 0
+        await update($, schicht, x => (x ? { ...x, leerlauf } : x))
         if (leerlauf >= LEERLAUF_MAX) {
             await anhalten($, 'angehalten', 'Claude kommt ohne dich nicht weiter')
             return r
@@ -420,13 +484,31 @@ export const register: Register = (on, options) => {
 
         // Der Schluessel `autopilot` ist fest: Leitstand und Statistik holen die Zeile
         // daran ganz nach oben, wenn sie den Teil des Autopiloten in ihren einbauen.
+        // Eine Zeile: links der Status, der den freien Platz nimmt und umbricht, statt
+        // die Knoepfe hinauszuschieben; rechts die Knoepfe.
         const eigene = (
             <Box key="autopilot" flexDirection="column" paddingX={1}>
                 <Box flexDirection="row" gap={1}>
                     <Text color="suggestion" bold>
                         Autopilot:
                     </Text>
-                    {zeile}
+                    <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                        {zeile}
+                    </Box>
+                    <Box flexDirection="row" gap={2} flexShrink={0}>
+                        {fragen.length > 0 ? (
+                            <Button
+                                key="ap-fragen"
+                                label={offen ? 'Fragen zu' : `Fragen (${fragen.length})`}
+                                onPress={() => void fragenUmschalten($)}
+                            />
+                        ) : null}
+                        {s ? (
+                            <Button key="ap-beenden" label="Beenden" onPress={() => void beenden($, 'du hast ihn beendet')} />
+                        ) : (
+                            <Button key="ap-weg" label="Weg" role="dismiss" onPress={() => void berichtWeg($)} />
+                        )}
+                    </Box>
                 </Box>
                 {offen && fragen.length > 0 ? (
                     <Box flexDirection="column">
@@ -438,20 +520,6 @@ export const register: Register = (on, options) => {
                         ))}
                     </Box>
                 ) : null}
-                <Box flexDirection="row" gap={2}>
-                    {fragen.length > 0 ? (
-                        <Button
-                            key="ap-fragen"
-                            label={offen ? 'Fragen zu' : `Fragen (${fragen.length})`}
-                            onPress={() => void fragenUmschalten($)}
-                        />
-                    ) : null}
-                    {s ? (
-                        <Button key="ap-beenden" label="Beenden" onPress={() => void beenden($, 'du hast ihn beendet')} />
-                    ) : (
-                        <Button key="ap-weg" label="Weg" role="dismiss" onPress={() => void berichtWeg($)} />
-                    )}
-                </Box>
             </Box>
         )
         // Die eigene Zeile vor allem, was darunter kommt: Sie steht ganz oben im Band.

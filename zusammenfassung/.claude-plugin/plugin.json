@@ -1,6 +1,6 @@
 {
   "name": "zusammenfassung",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Nach jeder Arbeitsrunde eine kurze Zusammenfassung ueber dem Eingabefeld: was getan wurde und was man leicht uebersieht. Aufklappbar mit Erklaerung und Dateiliste, dazu ein Replay der Dateiaenderungen Schritt fuer Schritt. Ersetzt zweiter-blick und replay-theater.",
   "author": {
     "name": "Björn Müller",
@@ -8,6 +8,12 @@
   },
   "types": "./types/index.d.ts",
   "userConfig": {
+    "an": {
+      "type": "boolean",
+      "title": "Zusammenfassung",
+      "description": "Zeigt nach einer Arbeitsrunde eine kurze Zusammenfassung. Standard für neue Chats; /zusammenfassung schaltet nur im Chat um.",
+      "default": true
+    },
     "modell": {
       "type": "string",
       "title": "Modell fuer die Zusammenfassung",

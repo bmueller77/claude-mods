@@ -155,7 +155,39 @@ const COLORS: Record<Side | 'user' | 'assistant', string> = {
   user: 'suggestion',
   assistant: 'claude',
 }
-const TRANSLATE_STORE_NAME = 'translate'
+// Whether chunks are shown in German, per chat: `{ at, isOn }` under `translate:<session id>`. The old keys `translate`
+// (for every chat) and `theme` are no longer read, and left alone.
+const TRANSLATE_STORE_PREFIX = 'translate:'
+// When stale chat keys were last cleared away; chats untouched for 30 days go, at most once a day.
+const TIDIED_STORE_NAME = 'tidied'
+const CHAT_KEEP_MS = 30 * 24 * 60 * 60_000
+const TIDY_EVERY_MS = 24 * 60 * 60_000
+// The default for a new chat, from the settings.
+let translateByDefault = false
+
+type ChatTranslate = { at: number; isOn: boolean }
+const isChatTranslate = (v: unknown): v is ChatTranslate =>
+  typeof v === 'object' && v !== null && typeof (v as ChatTranslate).at === 'number' && typeof (v as ChatTranslate).isOn === 'boolean'
+
+/** This chat's choice, else the default; a choice found is marked as touched. */
+const loadTranslate = async ($: EngineInterface, sid: string, now: number) => {
+  const saved = await $.store.get(TRANSLATE_STORE_PREFIX + sid)
+  if (!isChatTranslate(saved)) return translateByDefault
+  await $.store.set(TRANSLATE_STORE_PREFIX + sid, { at: now, isOn: saved.isOn })
+  return saved.isOn
+}
+
+/** Drops other chats' keys untouched for 30 days; at most once a day. */
+const tidyChats = async ($: EngineInterface, sid: string, now: number) => {
+  const last = await $.store.get(TIDIED_STORE_NAME)
+  if (typeof last === 'number' && now - last < TIDY_EVERY_MS) return
+  await $.store.set(TIDIED_STORE_NAME, now)
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(TRANSLATE_STORE_PREFIX) || key === TRANSLATE_STORE_PREFIX + sid) continue
+    const saved = await $.store.get(key)
+    if (!isChatTranslate(saved) || now - saved.at > CHAT_KEEP_MS) await $.store.delete(key)
+  }
+}
 
 const index = atom({ plugin: 'visible-compact', key: 'index' } as const, [])
 const selected = atom({ plugin: 'visible-compact', key: 'selected' } as const, null)
@@ -221,7 +253,7 @@ export const translateShown = async ($: EngineInterface) => {
 
 const toggleTranslate = async ($: EngineInterface) => {
   const isOn = await update($, translate, current => !current)
-  await $.store.set(TRANSLATE_STORE_NAME, isOn)
+  await $.store.set(TRANSLATE_STORE_PREFIX + (await $.session.id()), { at: await $.clock.now(), isOn })
   if (isOn) {
     await update($, translation, t => ({ ...t, failed: 0 }))
     await translateShown($)
@@ -258,6 +290,7 @@ const show = async ($: EngineInterface, id: string | null) => {
 export const register: Register = (on, options) => {
   storage = options.storage === 'home' ? 'home' : 'temp'
   model = typeof options.modell === 'string' && options.modell.trim() !== '' ? options.modell.trim() : 'haiku'
+  translateByDefault = options.uebersetzen === true
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -267,9 +300,12 @@ export const register: Register = (on, options) => {
     // Compactions live on disk under the session id, so a restart or --resume picks them up again.
     const saved = await readIndex($)
     await update($, index, () => saved)
-    // Restore whether chunks are shown in German, as picked in an earlier session.
-    const savedTranslate = await $.store.get(TRANSLATE_STORE_NAME)
-    if (typeof savedTranslate === 'boolean') await update($, translate, () => savedTranslate)
+    // Restore whether chunks are shown in German, as picked earlier in this chat; a new chat starts with the default.
+    const sid = await $.session.id()
+    const now = await $.clock.now()
+    const isOn = await loadTranslate($, sid, now)
+    await update($, translate, () => isOn)
+    await tidyChats($, sid, now)
     // A reload drops the calls that were out; their chunks are sent again when next shown.
     await update($, translation, t => ({ ...t, open: 0 }))
 

@@ -31,8 +31,55 @@ const BEARBEITER = new Set(['Edit', 'Write', 'MultiEdit'])
 /** Das Fenster mit dem Replay. */
 const FENSTER = 'zusammenfassung-replay'
 
-/** Schluessel im Speicher: ob die Zusammenfassung aus ist. */
-const SPEICHER_AUS = 'zusammenfassung.aus'
+/**
+ * Schluessel im Speicher: ob die Zusammenfassung in einem Chat aus ist, je Chat
+ * `{ at, aus }` unter `zusammenfassung.aus:<Sitzungs-ID>`. Der alte Schluessel ohne
+ * ID galt fuer alle Chats; er wird nicht mehr gelesen.
+ */
+const SPEICHER_AUS = 'zusammenfassung.aus:'
+/** Wann zuletzt alte Chat-Schluessel weggeraeumt wurden. */
+const SPEICHER_AUFGERAEUMT = 'zusammenfassung.aufgeraeumt'
+/** Chat-Schluessel, die so lange nicht beruehrt wurden, fliegen raus. */
+const CHAT_HALTBAR_MS = 30 * 24 * 60 * 60_000
+/** Hoechstens so oft wird aufgeraeumt. */
+const AUFRAEUMEN_ABSTAND_MS = 24 * 60 * 60_000
+
+type ChatAus = { at: number; aus: boolean }
+
+function istChatAus(v: unknown): v is ChatAus {
+    return typeof v === 'object' && v !== null && typeof (v as ChatAus).at === 'number' && typeof (v as ChatAus).aus === 'boolean'
+}
+
+/**
+ * Ob die Zusammenfassung in diesem Chat aus ist: der Wert des Chats, sonst der
+ * Standard aus den Einstellungen. Ein gefundener Wert wird als beruehrt markiert.
+ */
+async function ladeAus($: EngineInterface, sid: string, standardAus: boolean, jetzt: number): Promise<boolean> {
+    const v = await $.store.get(SPEICHER_AUS + sid)
+    if (!istChatAus(v)) {
+        return standardAus
+    }
+    await $.store.set(SPEICHER_AUS + sid, { at: jetzt, aus: v.aus })
+    return v.aus
+}
+
+/** Fremde Chat-Schluessel, laenger als 30 Tage unberuehrt, wegraeumen; hoechstens einmal am Tag. */
+async function raeumeChatsAuf($: EngineInterface, sid: string, jetzt: number): Promise<void> {
+    const zuletzt = await $.store.get(SPEICHER_AUFGERAEUMT)
+    if (typeof zuletzt === 'number' && jetzt - zuletzt < AUFRAEUMEN_ABSTAND_MS) {
+        return
+    }
+    await $.store.set(SPEICHER_AUFGERAEUMT, jetzt)
+    for (const schluessel of await $.store.keys()) {
+        if (!schluessel.startsWith(SPEICHER_AUS) || schluessel === SPEICHER_AUS + sid) {
+            continue
+        }
+        const v = await $.store.get(schluessel)
+        if (!istChatAus(v) || jetzt - v.at > CHAT_HALTBAR_MS) {
+            await $.store.delete(schluessel)
+        }
+    }
+}
 
 /** Die Zeichen auf den Knoepfen: Dreieck zum Auf- und Zuklappen, Kreispfeil fuer das Replay. */
 const SYMBOL_AUF = '⏷'
@@ -423,6 +470,8 @@ async function gehe($: EngineInterface, zu: number): Promise<void> {
 export const register: Register = (on, options) => {
     const modell = String(options.modell || 'haiku')
     const mindestMs = Math.max(0, Number(options.mindestSekunden ?? 60)) * 1000
+    /** Der Standard fuer neue Chats; /zusammenfassung schaltet nur im Chat um. */
+    const standardAus = options.an === false
 
     /** Werkzeugaufrufe in der laufenden Runde. */
     let werkzeuge = 0
@@ -446,14 +495,17 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
-        const aus = (await $.store.get(SPEICHER_AUS)) === true
+        const sid = await $.session.id()
+        const jetzt = await $.clock.now()
+        const aus = await ladeAus($, sid, standardAus, jetzt)
         await update($, isAus, () => aus)
+        await raeumeChatsAuf($, sid, jetzt)
         return r
     })
 
     on('command.run', { command: 'zusammenfassung' }, async $ => {
         const aus = await update($, isAus, v => !v)
-        await $.store.set(SPEICHER_AUS, aus)
+        await $.store.set(SPEICHER_AUS + (await $.session.id()), { at: await $.clock.now(), aus })
         if (aus) {
             await update($, bericht, () => null)
         }

@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 
-import { FERTIG, FRAGE_ABGELEHNT, GRUND_KNOPF, KONTEXT, WEITER, istFertig } from '../hooks/register'
+import { FERTIG, FRAGE_ABGELEHNT, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, istFertig } from '../hooks/register'
 
 const BAND = { plugin: 'autopilot', component: 'AbovePrompt' } as const
 
@@ -25,8 +25,10 @@ type Eingang = { text: string; context: readonly string[]; origin: string }
  * und woher sie kamen, damit ein Test das Anschieben sieht. Mit `spalte`
  * zeichnet darunter mehr als ein Teil, wie wenn weitere Mods im Band stehen.
  */
-function boden(on: On, x?: { spalte?: boolean }) {
+function boden(on: On, x?: { spalte?: boolean; agenten?: () => readonly { id: string; status: string }[] }) {
     const eingang: Eingang[] = []
+    on('classic.Stop', (_$, _e, _next) => ({}) as never)
+    on('agent.list', (_$, _e, _next) => ({ value: x?.agenten?.() ?? [] }) as never)
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
     on('turn.start', (_$, e, _next) => ({ turnId: e.turnId }))
     on('turn.complete', (_$, e, _next) => ({ text: e.answer }))
@@ -53,6 +55,7 @@ type Test$ = {
     tool: { call: (e: never) => Promise<unknown> }
     command: { run: (e: never) => Promise<{ text?: unknown }> }
     prompt: { submit: (e: never) => Promise<unknown> }
+    classic: { Stop: (e: never) => Promise<unknown> }
 }
 
 async function start($: Test$) {
@@ -69,13 +72,33 @@ async function person($: Test$, text: string) {
     await $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false } as never)
 }
 
-/** Eine Runde der Hauptschleife: Start, Werkzeugaufrufe, Ende. */
-async function runde($: Test$, id: string, antwort: string, x?: { werkzeuge?: number; reason?: string }) {
+/** Was die Engine am Ende einer Runde als laufende Hintergrundarbeit meldet (`background_tasks`). */
+type Aufgabe = { id: string; type: string; status: string; description: string }
+const ARBEITER: Aufgabe = { id: 'a1', type: 'subagent', status: 'running', description: 'Einstellungen untersuchen' }
+const ARBEITER2: Aufgabe = { id: 'a2', type: 'subagent', status: 'running', description: 'Typen pruefen' }
+const SHELL: Aufgabe = { id: 'b1', type: 'shell', status: 'running', description: 'Dev-Server' }
+const MONITOR: Aufgabe = { id: 'm1', type: 'monitor', status: 'running', description: 'Log beobachten' }
+const WORKFLOW: Aufgabe = { id: 'w1', type: 'workflow', status: 'running', description: 'Pruefen und berichten' }
+
+/**
+ * Eine Runde der Hauptschleife: Start, Werkzeugaufrufe, Ende. Wie in der Engine
+ * kommt vor dem Ende einer beantworteten Runde `classic.Stop` mit der Hintergrundarbeit,
+ * die noch laeuft; nach einem Fehler oder einer Unterbrechung nicht. `stop: false` laesst es aus.
+ */
+async function runde(
+    $: Test$,
+    id: string,
+    antwort: string,
+    x?: { werkzeuge?: number; reason?: string; hintergrund?: readonly Aufgabe[]; stop?: boolean },
+) {
     await $.turn.start({ text: '', turnId: id } as never)
     for (let i = 0; i < (x?.werkzeuge ?? 1); i += 1) {
         await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
     }
     const reason = x?.reason ?? 'answer'
+    if (reason === 'answer' && x?.stop !== false) {
+        await $.classic.Stop({ stop_hook_active: false, background_tasks: x?.hintergrund ?? [] } as never)
+    }
     await $.turn.complete({ answer: antwort, durationMs: 1000, isAborted: reason === 'aborted', turnId: id, reason } as never)
 }
 
@@ -258,7 +281,7 @@ test('mit der alten Marke NACHTSCHICHT-FERTIG ist der Autopilot ebenso fertig', 
     expect(await leiste(ui as never)).toContain('Claude meldet fertig')
 })
 
-test('nach dem Limit haelt die Schicht an, eine Nachricht der Person setzt es zurueck', { options: { maxRunden: 2 } }, async ($, on) => {
+test('an der Rundengrenze endet der Autopilot mit Grund Rundengrenze, die naechste Nachricht startet ihn nicht neu', { options: { maxRunden: 2 } }, async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     const eingang = boden(on)
     await start($ as never)
@@ -269,12 +292,82 @@ test('nach dem Limit haelt die Schicht an, eine Nachricht der Person setzt es zu
     await runde($ as never, 't3', 'Weiter?')
     expect(angeschoben(eingang)).toHaveLength(2)
 
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    expect(await leiste(ui as never)).toContain('Limit ist erreicht')
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}, nach 0 min: 2x angeschoben`)
+        expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
+    }
 
-    await person($ as never, 'Mach weiter.')
-    await runde($ as never, 't4', 'Weiter?')
-    expect(angeschoben(eingang)).toHaveLength(3)
+    // Vorbei ist vorbei: Die naechste Nachricht geht ohne Kontext raus, nach ihrer Runde schiebt nichts an.
+    await person($ as never, 'Was bedeuten die Zahlen?')
+    expect(eingang.at(-1)?.context).toEqual([])
+    await runde($ as never, 't4', 'Die Zahlen sind ...')
+    expect(angeschoben(eingang)).toHaveLength(2)
+})
+
+test('nur eine Nachricht der Person setzt den Rundenzaehler zurueck, auch mitten in einer Runde', { options: { maxRunden: 2 } }, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Teil A steht.')
+    // Eine Fertigmeldung aus dem Hintergrund und eine andere Sitzung zaehlen nicht als Nachricht der Person.
+    await $.prompt.submit({ text: '<task-notification>fertig</task-notification>', origin: { kind: 'task-notification' }, wait: false } as never)
+    await $.prompt.submit({ text: 'Bericht', origin: { kind: 'peer' }, wait: false } as never)
+    await runde($ as never, 't2', 'Teil B steht.')
+    expect(angeschoben(eingang)).toHaveLength(2)
+
+    // Die Person schreibt mitten in der Runde t3: Der Zaehler beginnt von vorn.
+    await $.turn.start({ text: '', turnId: 't3' } as never)
+    await $.prompt.submit({ text: 'Und noch der Knopf.', origin: { kind: 'composer' }, wait: false, turnId: 't3' } as never)
+    await $.classic.Stop({ stop_hook_active: false, background_tasks: [] } as never)
+    await $.turn.complete({ answer: 'Teil C steht.', durationMs: 1000, isAborted: false, turnId: 't3', reason: 'answer' } as never)
+    await runde($ as never, 't4', 'Teil D steht.')
+    expect(angeschoben(eingang)).toHaveLength(4)
+
+    await runde($ as never, 't5', 'Teil E steht.')
+    expect(angeschoben(eingang)).toHaveLength(4)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}`)
+})
+
+/**
+ * Ein Mod, der den Zustand des Autopiloten liest, wie es jeder Mod darf: Was dort
+ * steht, ueberlebt ein Neuladen des Moduls; Variablen des Moduls nicht.
+ */
+const LESER = {
+    name: 'leser',
+    register(on: On) {
+        on('command.run', { command: 'schicht-lesen' }, async $ => {
+            const { value } = (await $.state.get({ plugin: 'autopilot', key: 'schicht' } as never)) as { value?: unknown }
+            return { text: JSON.stringify(value ?? null) }
+        })
+    },
+}
+
+async function schichtLesen($: Test$) {
+    const r = await $.command.run({ command: 'schicht-lesen', args: '' } as never)
+    return JSON.parse(String(r.text)) as { runden?: number; angeschoben?: boolean; leerlauf?: number } | null
+}
+
+async function runden($: Test$) {
+    const r = await $.command.run({ command: 'schicht-lesen', args: '' } as never)
+    return (JSON.parse(String(r.text)) as { runden?: number } | null)?.runden
+}
+
+test('der Rundenzaehler steht im Zustand der Schicht, so dass ein Neuladen ihn nicht verliert', { options: { maxRunden: 3 }, plugins: [LESER] }, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    expect(await runden($ as never)).toBe(0)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Teil A steht.')
+    await runde($ as never, 't2', 'Teil B steht.')
+    expect(await runden($ as never)).toBe(2)
+    await person($ as never, 'Weiter so.')
+    expect(await runden($ as never)).toBe(0)
 })
 
 test('zwei angeschobene Runden ohne Werkzeug: die Schicht haelt an', async ($, on) => {
@@ -290,6 +383,133 @@ test('zwei angeschobene Runden ohne Werkzeug: die Schicht haelt an', async ($, o
 
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
     expect(await leiste(ui as never)).toContain('kommt ohne dich nicht weiter')
+})
+
+test('die Leerlauf-Bremse haengt nicht am eigenen prompt.submit-Hook und steht im Zustand der Schicht', { plugins: [LESER] }, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Soll ich?')
+    // anschieben selbst markiert die naechste Runde, nicht erst der prompt.submit-Hook.
+    const nachT1 = await schichtLesen($ as never)
+    expect(nachT1?.angeschoben).toBe(true)
+    expect(nachT1?.leerlauf).toBe(0)
+    await runde($ as never, 't2', 'Ich warte.', { werkzeuge: 0 })
+    expect((await schichtLesen($ as never))?.leerlauf).toBe(1)
+    await runde($ as never, 't3', 'Ich warte weiter.', { werkzeuge: 0 })
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await leiste(ui as never)).toContain('kommt ohne dich nicht weiter')
+    // Eine Nachricht der Person setzt die Bremse zurueck.
+    await befehl($ as never, 'an')
+    await person($ as never, 'Weiter so.')
+    const neu = await schichtLesen($ as never)
+    expect(neu?.leerlauf).toBe(0)
+    expect(neu?.angeschoben).toBe(false)
+})
+
+test('solange Hintergrundarbeit laeuft, schiebt der Autopilot nicht an; erst nach einer Runde ohne', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    // Claude hat zwei Arbeiter gestartet und wartet.
+    await runde($ as never, 't1', 'Zwei Arbeiter laufen, ich warte.', { hintergrund: [ARBEITER, ARBEITER2] })
+    expect(angeschoben(eingang)).toHaveLength(0)
+    // Die erste Fertigmeldung startet eine Runde; der zweite laeuft noch.
+    await runde($ as never, 't2', 'Einer ist fertig, ich warte auf den zweiten.', { werkzeuge: 0, hintergrund: [ARBEITER2] })
+    expect(angeschoben(eingang)).toHaveLength(0)
+    // Die letzte Fertigmeldung: Nichts laeuft mehr, die Runde endet ohne Abschluss.
+    await runde($ as never, 't3', 'Beide fertig, Teil B steht noch aus.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain('1x angeschoben')
+})
+
+test('nur Agenten und Workflows halten das Anschieben zurueck, Hintergrund-Shells und Monitore nicht', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    // Nur ein Dev-Server laeuft im Hintergrund: Er meldet sich nie fertig, also wird angeschoben.
+    await runde($ as never, 't1', 'Der Server laeuft, Teil B steht aus.', { hintergrund: [SHELL] })
+    expect(angeschoben(eingang)).toHaveLength(1)
+    await runde($ as never, 't2', 'Ich beobachte das Log.', { hintergrund: [SHELL, MONITOR] })
+    expect(angeschoben(eingang)).toHaveLength(2)
+    // Ein Agent laeuft (neben der Shell): kein Anstoss.
+    await runde($ as never, 't3', 'Der Arbeiter laeuft, ich warte.', { hintergrund: [SHELL, ARBEITER] })
+    expect(angeschoben(eingang)).toHaveLength(2)
+    // Ein Workflow laeuft: ebenso kein Anstoss.
+    await runde($ as never, 't4', 'Der Workflow laeuft, ich warte.', { hintergrund: [WORKFLOW] })
+    expect(angeschoben(eingang)).toHaveLength(2)
+})
+
+test('eine von einem Plugin als Person eingereichte Nachricht setzt den Rundenzaehler nicht zurueck', { options: { maxRunden: 2 } }, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Teil A steht.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+    // Der Start-Knopf des Leitstands: asUser, die Herkunft bleibt das Plugin.
+    await $.prompt.submit({
+        text: 'Der Plan sieht gut aus. Leg bitte los.',
+        origin: { kind: 'plugin', name: 'leitstand', asUser: true },
+        wait: false,
+    } as never)
+    await runde($ as never, 't2', 'Teil B steht.')
+    expect(angeschoben(eingang)).toHaveLength(2)
+    await runde($ as never, 't3', 'Teil C steht.')
+    expect(angeschoben(eingang)).toHaveLength(2)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}`)
+})
+
+test('wartende Runden zaehlen nicht gegen die Rundengrenze', { options: { maxRunden: 1 } }, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    for (const id of ['t1', 't2', 't3']) {
+        await runde($ as never, id, 'Ich warte auf den Arbeiter.', { werkzeuge: 0, hintergrund: [ARBEITER] })
+    }
+    await runde($ as never, 't4', 'Der Arbeiter ist fertig, Teil B steht aus.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rueckfragen weiter')
+})
+
+test('eingeschaltet, waehrend ein Arbeiter laeuft: kein Anstoss, bis eine Runde ohne Hintergrundarbeit endet', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Der Arbeiter laeuft, ich warte.', { hintergrund: [ARBEITER] })
+    await befehl($ as never)
+    await clock.advance(5000)
+    expect(angeschoben(eingang)).toHaveLength(0)
+    await runde($ as never, 't2', 'Der Arbeiter ist fertig, Teil B steht aus.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+})
+
+test('ohne Meldung der Engine am Rundenende fragt der Autopilot die Liste der Agenten', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    let agenten: { id: string; status: string }[] = [{ id: 'a1', status: 'running' }]
+    const eingang = boden(on, { agenten: () => agenten })
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Ich warte.', { stop: false })
+    expect(angeschoben(eingang)).toHaveLength(0)
+    agenten = [{ id: 'a1', status: 'completed' }]
+    await runde($ as never, 't2', 'Fertig mit A, B steht aus.', { stop: false })
+    expect(angeschoben(eingang)).toHaveLength(1)
 })
 
 test('nach einem API-Fehler schiebt die Schicht nach einer Minute an', async ($, on) => {
@@ -364,6 +584,112 @@ test('die Zeile traegt den Schluessel autopilot und steht vor allem, was darunte
         const zeile = (await ui.findAll({ type: 'Box' })).find(b => b.props.key === 'autopilot')
         expect(zeile).toBeDefined()
         expect(JSON.stringify(zeile)).toContain('ap-beenden')
+    }
+})
+
+type Knoten = { type?: string; key?: string; text?: string; props?: Record<string, unknown>; children?: unknown[] }
+
+const istKnoten = (k: unknown): k is Knoten => typeof k === 'object' && k !== null && 'type' in k
+const schluessel = (k: Knoten) => k.key ?? (k.props?.key as string | undefined)
+
+/** Die Knoepfe einer Knopf-Box: ihre direkten Kinder, wenn alle Knoepfe sind. */
+function knoepfeIn(k: Knoten) {
+    if (k.type !== 'Box' || k.props?.flexDirection !== 'row') {
+        return null
+    }
+    const kinder = (k.children ?? []).filter(istKnoten)
+    return kinder.length > 0 && kinder.every(c => c.type === 'Button') ? kinder.map(schluessel) : null
+}
+
+/**
+ * Die Zeilen-Box, in der "Autopilot:" und die Knopf-Box mit dem Knopf `knopf`
+ * direkte Kinder sind, und die Knoepfe dieser Knopf-Box in ihrer Reihenfolge.
+ */
+async function zeileMit(ui: { findAll: (q: { type: string }) => Promise<Knoten[]> }, knopf: string) {
+    for (const b of await ui.findAll({ type: 'Box' })) {
+        if (b.props?.flexDirection !== 'row') {
+            continue
+        }
+        const kinder = (b.children ?? []).filter(istKnoten)
+        const label = kinder.some(k => k.type === 'Text' && (k.text ?? (k.children ?? []).join('')) === 'Autopilot:')
+        const knoepfe = kinder.map(knoepfeIn).find(l => l?.includes(knopf))
+        if (label && knoepfe) {
+            return { zeile: b, knoepfe }
+        }
+    }
+    return undefined
+}
+
+/** Die direkten Kinder der Box `autopilot`. */
+async function teile(ui: { findAll: (q: { type: string }) => Promise<Knoten[]> }) {
+    const box = (await ui.findAll({ type: 'Box' })).find(b => b.props?.key === 'autopilot' || b.key === 'autopilot')
+    return (box?.children ?? []).filter(istKnoten)
+}
+
+test('Status und Knoepfe stehen in einer Zeile, die Fragen aufgeklappt darunter', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    await befehl($ as never)
+
+    // Laeuft, ohne Fragen: genau eine Zeile mit Beenden.
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect((await zeileMit(ui as never, 'ap-beenden'))?.knoepfe).toEqual(['ap-beenden'])
+        expect(await teile(ui as never)).toHaveLength(1)
+    }
+
+    // Mit einer Frage: Fragen und Beenden in derselben Zeile, aufgeklappt die Liste darunter.
+    const frage = {
+        tool: 'AskUserQuestion',
+        questions: [{ question: 'Welche Datenbank?', header: 'DB', multiSelect: false, options: [] }],
+    }
+    await $.tool.call(frage as never)
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect((await zeileMit(ui as never, 'ap-beenden'))?.knoepfe).toEqual(['ap-fragen', 'ap-beenden'])
+        expect(await teile(ui as never)).toHaveLength(1)
+    }
+    {
+        const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+        await ui.press({ key: 'ap-fragen' })
+    }
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        const treffer = await zeileMit(ui as never, 'ap-fragen')
+        expect(treffer?.knoepfe).toEqual(['ap-fragen', 'ap-beenden'])
+        expect(JSON.stringify(treffer?.zeile)).not.toContain('Welche Datenbank?')
+        const stuecke = await teile(ui as never)
+        expect(stuecke).toHaveLength(2)
+        expect(stuecke[0]?.children).toEqual(treffer?.zeile.children)
+        expect(JSON.stringify(stuecke[1])).toContain('Welche Datenbank?')
+    }
+    {
+        const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+        await ui.press({ key: 'ap-fragen' })
+    }
+
+    // Vorbei: Weg steht in derselben Zeile.
+    await clock.advance(60_000)
+    await befehl($ as never, 'aus')
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        // Die Frage aus der Schicht steht im Bericht weiter, daher auch hier Fragen vorn.
+        expect((await zeileMit(ui as never, 'ap-weg'))?.knoepfe).toEqual(['ap-fragen', 'ap-weg'])
+        expect(await teile(ui as never)).toHaveLength(1)
+    }
+})
+
+test('vorbei ohne Fragen: nur Weg in der Knopf-Box, eine Zeile', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await befehl($ as never, 'aus')
+    for (const surface of ['terminal', 'desktop'] as const) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect((await zeileMit(ui as never, 'ap-weg'))?.knoepfe).toEqual(['ap-weg'])
+        expect(await teile(ui as never)).toHaveLength(1)
     }
 })
 
