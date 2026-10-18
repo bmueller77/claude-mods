@@ -732,7 +732,7 @@ export function shellPieces(command: string): ShellPiece[] {
       const heredoc = char === '<' ? HEREDOC.exec(command.slice(at)) : null
       if (char === '\\') at++
       else if (char === "'" || char === '"' || char === '`') at = end(at + 1, char)
-      else if (heredoc && command.indexOf('\n', at) >= 0) at = body(command.indexOf('\n', at) + 1, heredoc[3], heredoc[1] === '-').next
+      else if (heredoc?.[3] !== undefined && command.indexOf('\n', at) >= 0) at = body(command.indexOf('\n', at) + 1, heredoc[3], heredoc[1] === '-').next
       else if (char === open) depth++
       else if (char === close && --depth === 0) return at
     }
@@ -799,7 +799,7 @@ export function shellPieces(command: string): ShellPiece[] {
   const doubleQuoted = (from: number): number => {
     add('', true)
     for (let at = from; at < command.length; at++) {
-      const char = command[at]
+      const char = command.charAt(at)
       const next = command[at + 1]
       if (char === '"') return at
       if (char === '\\' && next !== undefined && '"\\$`\n'.includes(next)) {
@@ -812,7 +812,7 @@ export function shellPieces(command: string): ShellPiece[] {
   }
 
   for (let at = 0; at < command.length; at++) {
-    const char = command[at]
+    const char = command.charAt(at)
     const next = command[at + 1]
     if (char === '\\') {
       at++
@@ -841,7 +841,7 @@ export function shellPieces(command: string): ShellPiece[] {
       endWord()
       const heredoc = char === '<' ? HEREDOC.exec(command.slice(at)) : null
       const operator = command.startsWith('<<<', at) ? '<<<' : heredoc ? `<<${heredoc[1]}` : command.startsWith('>>', at) ? '>>' : char
-      if (heredoc && operator !== '<<<') heredocs.push({ delimiter: heredoc[3], isTabbed: heredoc[1] === '-' })
+      if (heredoc?.[3] !== undefined && operator !== '<<<') heredocs.push({ delimiter: heredoc[3], isTabbed: heredoc[1] === '-' })
       words.push({ text: operator, isRunTime: false })
       at += operator.length - 1
     } else add(char)
@@ -856,7 +856,7 @@ function commandPieces(command: string): string[] {
   let piece = ''
   let quote: string | null = null
   for (let at = 0; at < command.length; at++) {
-    const char = command[at]
+    const char = command.charAt(at)
     if (quote === null && ';|&\n'.includes(char)) {
       pieces.push(piece)
       piece = ''
@@ -882,7 +882,7 @@ const WRAPPED = /^\s*(?:ba|z)?sh\s+-c\s+(["'])([\s\S]*)\1\s*$/
 const ghPieces = (command: string): string[] =>
   commandPieces(command).flatMap(piece => {
     const wrapped = WRAPPED.exec(piece)
-    return wrapped ? ghPieces(wrapped[2]) : [piece]
+    return wrapped?.[2] !== undefined ? ghPieces(wrapped[2]) : [piece]
   })
 const PR_MERGE = /^\s*gh\s+pr\s+merge\b/
 // gh api, curl and wget routes that merge or schedule a merge: REST pull and branch merges, GraphQL merge, auto-merge and merge queue.
@@ -999,7 +999,9 @@ function ghCommand(args: ShellWord[]): string[] | null {
   const found: string[] = []
   let isPastFlags = false
   for (let at = 0; at < args.length && found.length < 2; at++) {
-    const { text, isRunTime } = args[at]
+    const word = args[at]
+    if (word === undefined) break
+    const { text, isRunTime } = word
     if (isRunTime) return null
     if (isPastFlags || !text.startsWith('-') || text === '-' || found[0] === 'pr') found.push(text)
     else if (text === '--') isPastFlags = true
@@ -1041,7 +1043,7 @@ function wordFindings(code: string, command: string, isWrapped = false, isAlone 
           // Fails closed like a merge: a flag's value could stand where gh reads its subcommand.
           found.push({ refusal: PR_FLAG_FIRST })
         } else if (gh[0] === 'api' && MERGE_ROUTE.test(command)) found.push({ refusal: NO_API })
-        else if (isCommand && gh.length > 0 && (!GH_COMMANDS.has(gh[0]) || (GH_EXTENSION.has(gh[0]) && gh[1] === 'exec'))) {
+        else if (isCommand && gh[0] !== undefined && (!GH_COMMANDS.has(gh[0]) || (GH_EXTENSION.has(gh[0]) && gh[1] === 'exec'))) {
           found.push({ refusal: GH_ALIAS })
         }
       } else if (!isCommand) {
@@ -1050,9 +1052,10 @@ function wordFindings(code: string, command: string, isWrapped = false, isAlone 
         // The command a wrapper runs: its first word that is not an option or VAR=x.
         if (rest.find(one => !/[OA]/.test(wordClass(one)))?.isRunTime && !isBody) found.push({ refusal: RUN_TIME })
       } else if (SHELLS.has(name)) {
-        const isPlain = !isWrapped && !isBody && at === 0 && word.text === name && words.length === 3 && rest[0].text === '-c'
+        const script = rest[1]
+        const isPlain = !isWrapped && !isBody && at === 0 && word.text === name && words.length === 3 && rest[0]?.text === '-c' && script !== undefined
         const flag = rest.findIndex(one => /^-\w*c/.test(one.text))
-        if (isPlain) wordFindings(rest[1].text, command, false, alone, found)
+        if (isPlain) wordFindings(script.text, command, false, alone, found)
         else if (flag >= 0) for (const one of rest.slice(flag + 1)) wordFindings(one.text, command, true, false, found)
       } else if (name === 'eval') {
         wordFindings(rest.map(one => one.text).join(' '), command, true, false, found)
@@ -1075,7 +1078,8 @@ function mergeRefusal(args: ShellWord[], approvedSha: string | null, isAlone: bo
   const positionals: string[] = []
   const shas: string[] = []
   for (let at = 0; at < args.length; at++) {
-    const text = args[at].text
+    const text = args[at]?.text
+    if (text === undefined) break
     if (text === '--') {
       positionals.push(...args.slice(at + 1).map(word => word.text))
       break
@@ -1094,7 +1098,7 @@ function mergeRefusal(args: ShellWord[], approvedSha: string | null, isAlone: bo
     } else {
       // Short flags run together (-sd); one that takes a value takes the rest of the word (past a =) or the next word.
       for (let one = 1; one < text.length && flag === undefined; one++) {
-        const name = MERGE_SHORT.get(text[one])
+        const name = MERGE_SHORT.get(text.charAt(one))
         const after = text.slice(one + 1)
         if (name === undefined) return MERGE_WORDS
         if (MERGE_FLAGS.get(name)) {

@@ -2657,7 +2657,7 @@ async function shipping($: Engine, on: On) {
   await finish($)
   await pressShip($)
   expect(shipped.sent).toHaveLength(1)
-  await $.turn.start({ text: shipped.sent[0], turnId: 't2' })
+  await $.turn.start({ text: shipped.sent[0]!, turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Open the pull request', 'Wait for checks'] })
   await callTool($, { tool: PROGRESS, task: 'Open the pull request', percent: 100 })
   await callTool($, { tool: PROGRESS, task: 'Wait for checks', percent: 100 })
@@ -2930,7 +2930,7 @@ test('a refused curl or wget merge leaves the approval and Ship it as they were,
   expect(await tries(mergeAt(OTHER_SHA))).toContain('Merge freigeben')
   expect(await tries(`gh pr merge --squash --delete-branch --match-head-commit ${SHA}`)).toBeUndefined()
   // That merge worked and ended Ship it.
-  expect(await tries(HTTP_MERGES[0])).toBeUndefined()
+  expect(await tries(HTTP_MERGES[0]!)).toBeUndefined()
 })
 
 test('Ship it refuses gh api merges sent through stdin from Claude and helpers, and leaves them alone before it and with Leitstand off', async ($, on) => {
@@ -2975,7 +2975,7 @@ test('a refused gh api stdin merge leaves the approval and Ship it as they were,
   expect(await tries(mergeAt(OTHER_SHA))).toContain('Merge freigeben')
   expect(await tries(`gh pr merge --squash --delete-branch --match-head-commit ${SHA}`)).toBeUndefined()
   // That merge worked and ended Ship it.
-  expect(await tries(STDIN_MERGES[0])).toBeUndefined()
+  expect(await tries(STDIN_MERGES[0]!)).toBeUndefined()
 })
 
 // Every spelling Ship it refuses at the approved head commit or without it, as Claude or a helper would send it.
@@ -3557,7 +3557,7 @@ test('on Linux and Windows the chime and the words play through the computer\'s 
   await alertOn('Linux', 't1')
   expect(heard).toEqual([])
   expect(ran).toHaveLength(2)
-  expect(ran[0]).toMatch(/^pw-play \/.*\/sounds\/needs-you\.wav$/)
+  expect(ran[0]).toMatch(/^pw-play (?:\/|[A-Za-z]:\\).*\/sounds\/needs-you\.wav$/)
   expect(ran[1]).toBe('spd-say -w Claude braucht dich')
 
   await alertOn('Windows_NT', 't2')
@@ -3842,12 +3842,55 @@ test("once, Leitstand brings over Glance's settings and history; another mod's s
   }
   const reads: string[] = []
   on('fs.list', (_, e) => {
-    expect(e.path).toBe('/home/me/.claude/plugins/store')
+    expect(e.path.replaceAll('\\', '/')).toMatch(/^(?:[A-Za-z]:)?\/home\/me\/\.claude\/plugins\/store$/)
     return { value: Object.keys(files).map(name => ({ name, kind: 'file', size: 1, mtimeMs: 0, isLink: false })) } as never
   })
   on('fs.read', (_, e) => {
     reads.push(e.path)
-    return { value: JSON.stringify(files[e.path.split('/').pop()!]) } as never
+    return { value: JSON.stringify(files[e.path.split(/[\\/]/).pop()!]) } as never
+  })
+  on('tool.register', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+  await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
+  await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
+
+  expect(store.get('history:2026-10-06:glance')).toEqual([job])
+  expect(store.get('glanceDetail')).toBe('detailed')
+  expect(store.get('glanceSound')).toBe('chime')
+  expect(store.get('glanceEnabled')).toBeUndefined()
+  expect(store.get('glanceCalm')).toBeUndefined()
+  expect(reads).toHaveLength(2)
+})
+
+test("where only USERPROFILE is set (Windows), Leitstand still finds Glance's store and brings over its settings and history", async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const store = new Map<string, unknown>()
+  on('store.get', (_, e) => ({ value: store.get(e.key) }) as never)
+  on('store.set', (_, e) => {
+    store.set(e.key, e.value)
+    return { value: undefined } as never
+  })
+  on('store.delete', (_, e) => {
+    store.delete(e.key)
+    return { value: undefined } as never
+  })
+  on('store.keys', () => ({ value: [...store.keys()] }) as never)
+  mock.env(on, { USERPROFILE: '/home/me' })
+  const job = { jobId: 'j1', project: '/work', startedAt: 1, finishedAt: 2, title: 'Build the page', outcome: 'done', stepsDone: 1, stepsTotal: 1, newTokens: 0, cachedTokens: 0, doneSteps: ['Build the page'], openSteps: [], isQuickAnswer: false }
+  const files: Record<string, unknown> = {
+    'glance_claude-mods-1a2b.json': { 'history:2026-10-06': [job], glanceDetail: 'detailed', glanceSound: 'chime' },
+    'glance_other-3c4d.json': { 'history:2026-10-06': [{ id: 'not ours' }], enabled: false },
+    'notes_x-5e6f.json': { glanceCalm: true },
+  }
+  const reads: string[] = []
+  on('fs.list', (_, e) => {
+    expect(e.path.replaceAll('\\', '/')).toMatch(/^(?:[A-Za-z]:)?\/home\/me\/\.claude\/plugins\/store$/)
+    return { value: Object.keys(files).map(name => ({ name, kind: 'file', size: 1, mtimeMs: 0, isLink: false })) } as never
+  })
+  on('fs.read', (_, e) => {
+    reads.push(e.path)
+    return { value: JSON.stringify(files[e.path.split(/[\\/]/).pop()!]) } as never
   })
   on('tool.register', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)

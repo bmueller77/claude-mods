@@ -1875,7 +1875,12 @@ const adoptGlanceStore = async ($: $) => {
   }
   await $.store.set(ADOPTED_KEY, true)
   try {
-    const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${await $.env.get('HOME')}/.claude`
+    // Windows sets USERPROFILE, not HOME.
+    const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+    const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? (home === undefined ? undefined : `${home}/.claude`)
+    if (config === undefined) {
+      return
+    }
     const dir = `${config}/plugins/store`
     const settings = new Set([STORE_KEY, DETAIL_KEY, SOUND_KEY, CALM_KEY, GUARD_KEY, APPROVE_KEY, NOTICE_KEY])
     const mine = new Set(await $.store.keys())
