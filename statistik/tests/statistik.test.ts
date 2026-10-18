@@ -1390,3 +1390,29 @@ test('kommen nur die Vorschlaege von unten, steht kein Strich ueber der Statisti
         expect((await ui.findAll({ type: 'Svg' })).some(s => s.props.alt === 'Trennlinie')).toBe(false)
     }
 })
+
+test('ein Countdown, der beim Neuladen laeuft, fuehrt nie aus; danach geht ein neuer Druck normal', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    for (const knopf of ['wischen', 'compact'] as const) {
+        await ui.press({ key: knopf })
+        await clock.advance(4_000)
+        // Was ein Neuladen ausloest: session.start feuert noch einmal.
+        await start($ as never)
+        await clock.advance(3 * COUNTDOWN)
+        expect(b.befehle).toEqual([])
+    }
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
+    // Danach startet ein neuer Druck wieder normal und fuehrt nach 10 s aus.
+    await ui.press({ key: 'compact' })
+    await clock.advance(COUNTDOWN)
+    expect(b.befehle).toEqual(['compact'])
+})
+
