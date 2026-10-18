@@ -5269,7 +5269,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const order = ['workmode', 'grill', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F4C2}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
+    for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
     // Review and Usage are gone.
     for (const key of ['review', 'usage']) expect(row).not.toContain(`"key":"${key}"`)
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
@@ -5316,7 +5316,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(row.indexOf('adhd')).toBeLessThan(row.indexOf('dim|'))
   })
 
-  test('Filetree (📂) steht hinter 🧠 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
+  test('Filetree (🌳) steht hinter 🧠 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     const at = row.indexOf('filetree')
@@ -5324,11 +5324,11 @@ describe('Arbeitsweise und Grill mich', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'filetree')
     await ui.unmount()
-    expect(button?.props.label).toBe('\u{1F4C2}')
+    expect(button?.props.label).toBe('\u{1F333}')
     expect(button?.props.variant).toBe('secondary')
   })
 
-  test('ein Druck auf 📂 startet den Befehl filetree; fehlt er, sagt Leitstand das', async ($, on) => {
+  test('ein Druck auf 🌳 startet den Befehl filetree; fehlt er, sagt der Leitstand das', async ($, on) => {
     const { state, press } = await skillWorld($, on)
     state.commands = [skill('filetree')]
     await press('filetree')
@@ -5440,7 +5440,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await variant()).toBe('secondary')
   })
 
-  test('Nachtschicht startet ihren Befehl; fehlt er, sagt Leitstand das', async ($, on) => {
+  test('Nachtschicht startet ihren Befehl; fehlt er, sagt der Leitstand das', async ($, on) => {
     const { state, press } = await skillWorld($, on)
     state.commands = [skill('nachtschicht')]
     await press('nightshift')

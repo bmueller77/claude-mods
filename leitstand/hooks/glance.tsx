@@ -158,8 +158,8 @@ const GRILL = '\u2668\uFE0F'
 const HUMANIZE = '\u{1F9CD}'
 const ADHD = '\u{1F9E0}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
-/** The opener for Filetree's side pane, after ADHD mode: an open folder. */
-const FILETREE = '\u{1F4C2}'
+/** The opener for Filetree's side pane, after ADHD mode: a tree. */
+const FILETREE = '\u{1F333}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
 const MASK_ON = '\u{1F512}'
 const MASK_OFF = '\u{1F513}'
