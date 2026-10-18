@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderNode, RenderSurface, SessionMessage } from 'claude-code'
 
-import type { CacheSample, Chatlaenge, ContextSample, Fenster, KontextDetails, KontextScheibe, Lage, Nutzung } from '../types'
+import type { CacheSample, Chatlaenge, ContextSample, Fenster, Lage, Nutzung } from '../types'
 
 // Statistik: cache-meter und cache-tax in einer Zeile.
 //
@@ -67,9 +67,6 @@ const SPEICHER_WARM_BIS = 'statistik.warmBis'
 /** Steht statt einer Frist unter dem Schluessel der Sitzung: warm ohne Ende in diesem Chat. */
 const WARM_IMMER = 'immer'
 
-/** Das Fenster mit den Kontext-Details, das der Knopf an der Seite oeffnet. */
-const FENSTER_DETAILS = 'statistik-kontext'
-
 /** Der Block von Naechste-Schritte: er steht immer ganz unten, unter der Statistik. */
 const BLOCK_UNTEN = 'naechste-schritte'
 
@@ -106,7 +103,7 @@ const SYMBOL_COMPACT = '🔽'
 const SYMBOL_EINGEREIHT = '⏳'
 /** Die Chatlaenge: eine Sprechblase, als Text. */
 const SYMBOL_CHAT = '💬'
-/** Details zum Kontext: ein Diagramm. */
+/** Details zum Kontext: ein Diagramm; der Knopf zeigt /context. */
 const SYMBOL_DETAILS = '📊'
 /** Warmhalten sofort aus: ein Kreuz neben dem Schalter, als Emoji (✖️). */
 const SYMBOL_AUS = '\u2716\uFE0F'
@@ -149,8 +146,6 @@ const nutzung = atom({ plugin: 'statistik', key: 'nutzung' } as const, {
 const tick = atom({ plugin: 'statistik', key: 'tick' } as const, 0)
 const eingereiht = atom({ plugin: 'statistik', key: 'eingereiht' } as const, null as 'compact' | 'wischen' | null)
 const chatlaenge = atom({ plugin: 'statistik', key: 'chatlaenge' } as const, null as Chatlaenge | null)
-const details = atom({ plugin: 'statistik', key: 'details' } as const, null as KontextDetails | null)
-const zeigeDetails = atom({ plugin: 'statistik', key: 'zeigeDetails' } as const, false)
 
 // --- Was nur dieses Laden des Moduls braucht ---
 // Ein Neuladen beginnt hier von vorn. Was die Leiste zeigt, steht zusaetzlich
@@ -644,108 +639,6 @@ function tippZustand(l: Lage, kalt: boolean, jetzt: number): string {
     return zeilen.join('\n')
 }
 
-// --- Kontext im Detail (aus context-bar uebernommen) ---
-// Das Fenster als ein gestapelter Balken, eine Farbe je Kategorie wie bei
-// /context, darunter eine Legende mit Tokens und Anteilen. Geschaetzt im
-// Prozess, ohne eigene Anfrage.
-
-/** context-bar gibt jeder benutzten Zeile ihre eigene Farbe, der Reihe nach. */
-const PALETTE = ['#7aa2f7', '#7dcfff', '#bb9af7', '#9ece6a', '#e0af68', '#f7768e', '#73daca', '#ff9e64', '#c0caf5']
-/** Die Zeile, die waechst, in der Akzentfarbe. */
-const NACHRICHTEN_FARBE = '#d97757'
-/** Ein mittleres Grau liest sich auf hellem wie dunklem Grund als leer. */
-const LEER_FARBE = '#808080'
-const ZEICHEN: Record<KontextScheibe['art'], string> = { belegt: '█', frei: '─', puffer: '░' }
-
-/** Die Kategorien von /context auf Deutsch; was hier fehlt, bleibt, wie die Engine es nennt. */
-const KATEGORIE: Record<string, string> = {
-    'system prompt': 'Systemprompt',
-    'system tools': 'Werkzeuge',
-    'mcp tools': 'MCP-Werkzeuge',
-    'memory files': 'Memory',
-    'custom agents': 'Agenten',
-    skills: 'Skills',
-    messages: 'Nachrichten',
-    'free space': 'frei',
-    'autocompact buffer': 'Compact-Puffer',
-}
-
-/** Die Aufschluesselung von /context als Kasten-Inhalt. */
-export function detailsAus(b: {
-    categories: readonly { name: string; tokens: number; color: string; kind: string }[]
-    totalTokens: number
-    rawMaxTokens: number
-    autoCompactThreshold?: number
-    isAutoCompactEnabled: boolean
-}): KontextDetails {
-    const art = (kind: string): KontextScheibe['art'] => (kind === 'free' ? 'frei' : kind === 'buffer' ? 'puffer' : 'belegt')
-    const scheiben: KontextScheibe[] = b.categories
-        .filter(c => c.kind !== 'deferred' && c.tokens > 0)
-        .map(c => {
-            const roh = c.name.toLowerCase()
-            return { name: KATEGORIE[roh] ?? c.name, tokens: c.tokens, farbe: '', art: art(c.kind), istNachrichten: roh === 'messages' }
-        })
-    const reihe = { belegt: 0, frei: 1, puffer: 2 }
-    // Stabil sortiert: die belegten Zeilen behalten die Reihenfolge von /context.
-    scheiben.sort((x, y) => reihe[x.art] - reihe[y.art])
-    let naechste = 0
-    for (const s of scheiben) {
-        s.farbe = s.art !== 'belegt' ? LEER_FARBE : s.istNachrichten ? NACHRICHTEN_FARBE : PALETTE[naechste++ % PALETTE.length]!
-    }
-    return {
-        scheiben,
-        belegt: b.totalTokens,
-        fenster: b.rawMaxTokens,
-        compactBei: b.isAutoCompactEnabled ? b.autoCompactThreshold : undefined,
-    }
-}
-
-/** Anteil am Fenster, deutsch geschrieben: "34 %", "1,5 %", "<0,1 %". */
-function anteilText(n: number, fenster: number): string {
-    const p = (n / fenster) * 100
-    if (p > 0 && p < 0.1) {
-        return '<0,1 %'
-    }
-    return `${(p >= 10 ? String(Math.round(p)) : String(+p.toFixed(1))).replace('.', ',')} %`
-}
-
-/** Der Balken als Abschnitte: jede Scheibe ihren Anteil an `breite`, eine belegte mindestens ein Feld. */
-export function zellen(d: KontextDetails, breite: number): { farbe: string; text: string }[] {
-    const groessen = d.scheiben.map(s => Math.max(s.art === 'belegt' ? 1 : 0, Math.round((s.tokens / d.fenster) * breite)))
-    // Gerundet geht die Summe ein paar Felder daneben: erst der freie Platz gleicht aus, dann die groessten.
-    let rest = breite - groessen.reduce((a, n) => a + n, 0)
-    const istBelegt = (i: number) => d.scheiben[i]!.art === 'belegt'
-    const reihe = d.scheiben.map((_, i) => i).sort((a, b) => Number(istBelegt(a)) - Number(istBelegt(b)) || groessen[b]! - groessen[a]!)
-    for (const i of reihe) {
-        if (rest === 0) {
-            break
-        }
-        const neu = Math.max(istBelegt(i) ? 1 : 0, groessen[i]! + rest)
-        rest -= neu - groessen[i]!
-        groessen[i] = neu
-    }
-    return d.scheiben.map((s, i) => ({ farbe: s.farbe, text: ZEICHEN[s.art].repeat(groessen[i]!) })).filter(z => z.text !== '')
-}
-
-/** Die Legende, in Zeilen gepackt, die nicht breiter sind als `breite`. */
-export function legende(d: KontextDetails, breite: number): KontextScheibe[][] {
-    const LUECKE = 3
-    const zeilen: KontextScheibe[][] = [[]]
-    let belegt = 0
-    for (const s of d.scheiben) {
-        const groesse = 2 + s.name.length + 1 + kurz(s.tokens).length + (s.art === 'belegt' ? 1 + anteilText(s.tokens, d.fenster).length : 0)
-        const zeile = zeilen[zeilen.length - 1]!
-        if (zeile.length > 0 && belegt + LUECKE + groesse > breite) {
-            zeilen.push([s])
-            belegt = groesse
-        } else {
-            belegt += (zeile.length > 0 ? LUECKE : 0) + groesse
-            zeile.push(s)
-        }
-    }
-    return zeilen.filter(z => z.length > 0)
-}
-
 /**
  * Nimmt das Element mit dem Schluessel `schluessel` aus einem gezeichneten Baum.
  *
@@ -784,30 +677,22 @@ export function nimmHeraus(baum: RenderNode, schluessel: string): { oben: Render
     return { oben: kinder.length > 0 ? ({ ...baum, children: kinder } as RenderElement) : null, unten }
 }
 
-/** Ob das Fenster mit den Kontext-Details offen ist, nach dem Buch der Engine. */
-async function detailsOffen($: EngineInterface): Promise<boolean> {
-    try {
-        return (await $.ui.panes()).some(p => p.id === FENSTER_DETAILS)
-    } catch {
-        return false
-    }
-}
-
 /**
- * Das Fenster mit den Kontext-Details oeffnen oder schliessen.
+ * Den Kontext im Detail zeigen: /context, wie wenn die Person es tippt.
  *
- * Das Kontext-Fenster der App selbst kann ein Mod nicht oeffnen; die Statistik
- * hat darum ein eigenes, das die App an der Seite andockt.
+ * Die Kontext-Anzeige in der Seitenleiste der App kann ein Mod nicht oeffnen:
+ * Kein Werkzeug der App nennt sie, `ccd_view.show_pane` kennt keinen Kontext.
+ * /context ist der Weg, den App und Terminal selbst anbieten; der Befehl laeuft,
+ * sobald die Sitzung still ist. Lehnt die Engine ihn ab, steht er im
+ * Eingabefeld und wartet auf Enter.
  */
-async function schalteDetails($: EngineInterface): Promise<void> {
-    if (await detailsOffen($)) {
-        await $.ui.close({ id: FENSTER_DETAILS })
-        await update($, zeigeDetails, () => false)
-        return
+async function zeigeKontext($: EngineInterface): Promise<void> {
+    try {
+        await $.command.run({ command: 'context' })
+    } catch {
+        await $.prompt.fill({ text: '/context' }).catch(() => {})
+        $.ui.toast('Drück Enter, dann zeigt die App den Kontext.')
     }
-    await kontextNeu($)
-    await $.ui.open({ id: FENSTER_DETAILS, title: 'Kontext' })
-    await update($, zeigeDetails, () => true)
 }
 
 // --- Messen ---
@@ -818,47 +703,38 @@ async function schalteDetails($: EngineInterface): Promise<void> {
  * "summary" schaetzt im Prozess und stellt keine Anfrage, der Aufruf kostet
  * also nichts.
  */
-async function messeKontext($: EngineInterface): Promise<{ k: ContextSample | null; d: KontextDetails | null }> {
+async function messeKontext($: EngineInterface): Promise<ContextSample | null> {
     try {
         const u = await $.session.usage({ breakdown: 'summary' })
         const b = u.context.breakdown
         if (b) {
             return {
-                k: {
-                    tokens: b.totalTokens,
-                    window: b.rawMaxTokens,
-                    threshold: b.autoCompactThreshold ?? Math.round(b.rawMaxTokens * SCHWELLE_RUECKFALL),
-                    isThresholdKnown: b.autoCompactThreshold != null,
-                },
-                d: b.rawMaxTokens > 0 ? detailsAus(b) : null,
+                tokens: b.totalTokens,
+                window: b.rawMaxTokens,
+                threshold: b.autoCompactThreshold ?? Math.round(b.rawMaxTokens * SCHWELLE_RUECKFALL),
+                isThresholdKnown: b.autoCompactThreshold != null,
             }
         }
         if (u.context.tokens == null) {
-            return { k: null, d: null }
+            return null
         }
         return {
-            k: {
-                tokens: u.context.tokens,
-                window: u.context.window,
-                threshold: Math.round(u.context.window * SCHWELLE_RUECKFALL),
-                isThresholdKnown: false,
-            },
-            d: null,
+            tokens: u.context.tokens,
+            window: u.context.window,
+            threshold: Math.round(u.context.window * SCHWELLE_RUECKFALL),
+            isThresholdKnown: false,
         }
     } catch {
-        return { k: null, d: null }
+        return null
     }
 }
 
 /** Den Kontext messen und ablegen; die Zahl der Tokens braucht auch die Kostenschaetzung. */
 async function kontextNeu($: EngineInterface): Promise<void> {
-    const { k, d } = await messeKontext($)
+    const k = await messeKontext($)
     if (k) {
         z.ctx = k.tokens
         await update($, context, () => k)
-    }
-    if (d) {
-        await update($, details, () => d)
     }
     try {
         await setzeLimits($, (await $.session.usage()).rateLimits)
@@ -1350,9 +1226,6 @@ export const register: Register = (on, options) => {
         if ((await $.store.get(SPEICHER_IMMER)) !== undefined) {
             await $.store.delete(SPEICHER_IMMER)
         }
-        // Nach einem Neuladen kann das Fenster noch offen sein; die Engine weiss es.
-        const offen = await detailsOffen($)
-        await update($, zeigeDetails, () => offen)
         const { minuten } = await laufzeitBeimStart($)
         z.laufzeitMs = minuten * 60_000
 
@@ -1719,15 +1592,9 @@ export const register: Register = (on, options) => {
         const ausKnopf = warm ? (
             <Button key="warmhalten-aus" label={SYMBOL_AUS} variant="secondary" onPress={() => void stoppe($, null)} />
         ) : null
-        // Details zum Kontext: oeffnet und schliesst das Fenster an der Seite.
-        const offen = await read($, zeigeDetails)
+        // Details zum Kontext: /context, die Anzeige der App; im Terminal die von Claude Code.
         const detailsKnopf = (
-            <Button
-                key="details"
-                label={SYMBOL_DETAILS}
-                variant={offen ? 'primary' : 'secondary'}
-                onPress={() => void schalteDetails($)}
-            />
+            <Button key="details" label={SYMBOL_DETAILS} variant="secondary" onPress={() => void zeigeKontext($)} />
         )
 
         // Aufraeumen mit Sicherungspunkt steht rechts neben der Chatlaenge; wird der
@@ -1843,61 +1710,5 @@ export const register: Register = (on, options) => {
                 {unten}
             </Box>
         )
-    })
-
-    // Das Fenster an der Seite: der Kontext je Kategorie, wie /context ihn aufschluesselt.
-    on('ui.render', { component: 'Pane', requestId: FENSTER_DETAILS }, async ($, e) => {
-        const { Box, Text } = $.ui.resolve(e)
-        const d = await read($, details)
-        const k = await read($, context)
-        if (!d) {
-            return <Text dimColor>Noch nicht gemessen. Nach der nächsten Antwort steht hier der Kontext.</Text>
-        }
-        const stufe = k ? kontextStufe(k.tokens, k.threshold) : null
-        const farbe = stufe ? STUFE_FARBE[stufe] : 'subtle'
-        const breite = Math.max(1, e.props.bodyColumns)
-        // Angedockt ist das Fenster schmal: jede Kategorie bekommt eine eigene Zeile.
-        const legendeBreite = e.props.placement === 'dock' ? 0 : breite
-        return (
-            <Box flexDirection="column">
-                <Text wrap="truncate-end">
-                    <Text color={NACHRICHTEN_FARBE}>{'◆ '}</Text>
-                    <Text bold>{'Kontext '}</Text>
-                    <Text bold color={farbe}>
-                        {anteilText(d.belegt, d.fenster)}
-                    </Text>
-                </Text>
-                <Text dimColor wrap="truncate-end">
-                    {`${kurz(d.belegt)} von ${kurz(d.fenster)}${d.compactBei ? ` · Compact bei ${kurz(d.compactBei)}` : ''}`}
-                </Text>
-                <Text>
-                    {zellen(d, breite).map((z, i) => (
-                        <Text key={`st-zelle-${i}`} color={z.farbe}>
-                            {z.text}
-                        </Text>
-                    ))}
-                </Text>
-                {legende(d, legendeBreite).map((zeile, i) => (
-                    <Text key={`st-legende-${i}`} wrap="truncate-end">
-                        {zeile.map((s, j) => (
-                            <Text key={`st-eintrag-${i}-${j}`}>
-                                {j > 0 ? '   ' : ''}
-                                <Text color={s.farbe}>{s.art === 'belegt' ? '■ ' : `${ZEICHEN[s.art]} `}</Text>
-                                <Text dimColor={s.art !== 'belegt'}>{`${s.name} `}</Text>
-                                <Text bold={s.art === 'belegt'}>{kurz(s.tokens)}</Text>
-                                {s.art === 'belegt' ? <Text dimColor>{` ${anteilText(s.tokens, d.fenster)}`}</Text> : null}
-                            </Text>
-                        ))}
-                    </Text>
-                ))}
-            </Box>
-        )
-    })
-
-    // Schliesst die Person das Fenster selbst, ist der Knopf wieder aus.
-    on('ui.close', { id: FENSTER_DETAILS }, async ($, e, next) => {
-        const r = await next(e)
-        await update($, zeigeDetails, () => false).catch(() => {})
-        return r
     })
 }

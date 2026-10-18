@@ -3,7 +3,7 @@ import type { On, RenderElement } from 'claude-code'
 
 import { FERTIG, FRAGE_ABGELEHNT, KONTEXT, WEITER, istFertig } from '../hooks/register'
 
-const BAND = { plugin: 'nachtschicht', component: 'AbovePrompt' } as const
+const BAND = { plugin: 'autopilot', component: 'AbovePrompt' } as const
 
 function props(x?: { hasSurvey?: boolean }) {
     return {
@@ -56,7 +56,7 @@ async function start($: Test$) {
 }
 
 async function befehl($: Test$, args = '') {
-    const r = await $.command.run({ command: 'nachtschicht', args } as never)
+    const r = await $.command.run({ command: 'autopilot', args } as never)
     return String(r.text ?? '')
 }
 
@@ -75,7 +75,7 @@ async function runde($: Test$, id: string, antwort: string, x?: { werkzeuge?: nu
     await $.turn.complete({ answer: antwort, durationMs: 1000, isAborted: reason === 'aborted', turnId: id, reason } as never)
 }
 
-const angeschoben = (eingang: Eingang[]) => eingang.filter(p => p.origin === 'plugin:nachtschicht')
+const angeschoben = (eingang: Eingang[]) => eingang.filter(p => p.origin === 'plugin:autopilot')
 
 async function leiste(ui: { findAll: (q: { type: string }) => Promise<{ text: string; children: unknown[] }[]> }) {
     return (await ui.findAll({ type: 'Text' }))
@@ -89,6 +89,23 @@ test('istFertig sieht die Marke nur in den letzten Zeilen', () => {
     expect(istFertig(`Uebergabe\n${FERTIG.toLowerCase()}\n`)).toBe(true)
     expect(istFertig(`Wenn ich fertig bin, schreibe ich ${FERTIG}.\nZeile\nZeile\nZeile`)).toBe(false)
     expect(istFertig('Soll ich weitermachen?')).toBe(false)
+})
+
+test('istFertig nimmt auch die alte Marke an, die laufende Sitzungen noch kennen', () => {
+    expect(FERTIG).toBe('AUTOPILOT-FERTIG')
+    expect(istFertig('Alles erledigt.\n\nNACHTSCHICHT-FERTIG')).toBe(true)
+    expect(istFertig('Uebergabe\nnachtschicht-fertig\n')).toBe(true)
+    expect(istFertig('Frueher hiess die Marke NACHTSCHICHT-FERTIG.\nZeile\nZeile\nZeile')).toBe(false)
+})
+
+test('die Texte an Claude nennen den Autopiloten und nur die neue Marke', () => {
+    expect(KONTEXT).toStartWith('Der Autopilot ist an:')
+    expect(KONTEXT).toContain(FERTIG)
+    expect(WEITER).toContain('den Autopiloten eingeschaltet')
+    expect(FRAGE_ABGELEHNT).toStartWith('Autopilot:')
+    for (const text of [KONTEXT, WEITER, FRAGE_ABGELEHNT]) {
+        expect(text).not.toMatch(/nachtschicht/i)
+    }
 })
 
 test('ohne Schicht passiert nichts', async ($, on) => {
@@ -108,7 +125,7 @@ test('eingeschaltet vor dem Auftrag: Kontext am Auftrag, nach einer offenen Rund
     const eingang = boden(on)
     await start($ as never)
 
-    expect(await befehl($ as never)).toContain('Nachtschicht ist an')
+    expect(await befehl($ as never)).toContain('Der Autopilot ist an')
     // Noch keine Runde: nichts anzuschieben.
     expect(angeschoben(eingang)).toHaveLength(0)
 
@@ -123,10 +140,10 @@ test('eingeschaltet vor dem Auftrag: Kontext am Auftrag, nach einer offenen Rund
     for (const surface of ['terminal', 'desktop'] as const) {
         const ui = await $.ui.mount({ ...BAND, surface, props: props() })
         const text = await leiste(ui as never)
-        expect(text).toContain('Nachtschicht:')
+        expect(text).toContain('Autopilot:')
         expect(text).toContain('1x angeschoben')
-        expect(text.indexOf('Nachtschicht')).toBeLessThan(text.indexOf('engine'))
-        expect(await ui.find({ type: 'Button', key: 'ns-beenden' })).toBeDefined()
+        expect(text.indexOf('Autopilot')).toBeLessThan(text.indexOf('engine'))
+        expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeDefined()
     }
 })
 
@@ -175,7 +192,7 @@ test('eine Rueckfrage beantwortet die Schicht selbst und merkt sie sich', async 
 
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     expect(await leiste(ui as never)).toContain('1 Frage selbst entschieden')
-    await ui.press({ key: 'ns-fragen' })
+    await ui.press({ key: 'ap-fragen' })
     expect(await leiste(ui as never)).toContain('Welche Datenbank?')
 })
 
@@ -194,6 +211,19 @@ test('mit der Marke ist die Schicht fertig und schiebt nicht mehr an, ein neuer 
     await person($ as never, 'Jetzt noch das hier.')
     await runde($ as never, 't2', 'Halb fertig.')
     expect(angeschoben(eingang)).toHaveLength(1)
+})
+
+test('mit der alten Marke NACHTSCHICHT-FERTIG ist der Autopilot ebenso fertig', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Fertig. Uebergabe: alles gebaut.\nNACHTSCHICHT-FERTIG')
+    expect(angeschoben(eingang)).toHaveLength(0)
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await leiste(ui as never)).toContain('Claude meldet fertig')
 })
 
 test('nach dem Limit haelt die Schicht an, eine Nachricht der Person setzt es zurueck', { options: { maxRunden: 2 } }, async ($, on) => {
@@ -256,25 +286,25 @@ test('wer unterbricht, beendet die Schicht; der Bericht bleibt bis Weg', async (
         const text = await leiste(ui as never)
         expect(text).toContain('du hast unterbrochen')
         expect(text).toContain('30 min')
-        expect(await ui.find({ type: 'Button', key: 'ns-weg' })).toBeDefined()
+        expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
     }
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    await ui.press({ key: 'ns-weg' })
+    await ui.press({ key: 'ap-weg' })
     expect(await leiste(ui as never)).toBe('engine')
 })
 
-test('/nachtschicht aus beendet sie, Beenden in der Leiste auch', async ($, on) => {
+test('/autopilot aus beendet ihn, Beenden in der Leiste auch', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     boden(on)
     await start($ as never)
     await befehl($ as never)
-    expect(await befehl($ as never, 'aus')).toContain('Nachtschicht ist aus')
+    expect(await befehl($ as never, 'aus')).toContain('Der Autopilot ist aus')
     expect(await befehl($ as never, 'aus')).toContain('war nicht an')
 
     await befehl($ as never, 'an')
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    await ui.press({ key: 'ns-beenden' })
-    expect(await leiste(ui as never)).toContain('du hast sie beendet')
+    await ui.press({ key: 'ap-beenden' })
+    expect(await leiste(ui as never)).toContain('du hast ihn beendet')
 })
 
 test('bei einer Umfrage weicht die Leiste', async ($, on) => {

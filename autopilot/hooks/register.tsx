@@ -4,7 +4,12 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Bericht, Phase, Schicht } from '../types'
 
 /** Die letzte Zeile, mit der Claude meldet, dass alles erledigt ist, was ohne die Person geht. */
-export const FERTIG = 'NACHTSCHICHT-FERTIG'
+export const FERTIG = 'AUTOPILOT-FERTIG'
+/**
+ * Dieselbe Marke aus der Zeit, als der Mod Nachtschicht hiess. Sitzungen, die
+ * davor begannen, kennen nur sie und schreiben sie weiter; sie zaehlt deshalb mit.
+ */
+const FERTIG_ALT = 'NACHTSCHICHT-FERTIG'
 /** So viele Rueckfragen behaelt die Liste; aeltere fallen raus. */
 const FRAGEN_MAX = 20
 /** Nach so vielen angeschobenen Runden in Folge ohne Werkzeugaufruf haelt die Schicht an. */
@@ -19,9 +24,9 @@ const FEHLER_PAUSE_MS = 60_000
  */
 const START_PAUSE_MS = 1000
 
-const schicht = atom({ plugin: 'nachtschicht', key: 'schicht' } as const, null as Schicht | null)
-const bericht = atom({ plugin: 'nachtschicht', key: 'bericht' } as const, null as Bericht | null)
-const zeigeFragen = atom({ plugin: 'nachtschicht', key: 'zeigeFragen' } as const, false)
+const schicht = atom({ plugin: 'autopilot', key: 'schicht' } as const, null as Schicht | null)
+const bericht = atom({ plugin: 'autopilot', key: 'bericht' } as const, null as Bericht | null)
+const zeigeFragen = atom({ plugin: 'autopilot', key: 'zeigeFragen' } as const, false)
 
 const REGELN =
     'Stell keine Rueckfragen, weder mit einem Werkzeug noch am Ende deiner Antwort. ' +
@@ -34,16 +39,16 @@ const REGELN =
     `und als letzte Zeile ${FERTIG}.`
 
 /** Was eine Nachricht der Person waehrend der Schicht mitbekommt, fuer sie unsichtbar. */
-export const KONTEXT = `Nachtschicht ist an: Die Person ist gleich nicht mehr am Platz und kann nicht antworten. ${REGELN}`
+export const KONTEXT = `Der Autopilot ist an: Die Person ist gleich nicht mehr am Platz und kann nicht antworten. ${REGELN}`
 
 /** Womit die Schicht Claude nach einer Runde ohne Abschluss anschiebt. */
 export const WEITER =
-    'Die Person ist nicht am Platz und hat die Nachtschicht eingeschaltet. ' +
+    'Die Person ist nicht am Platz und hat den Autopiloten eingeschaltet. ' +
     `Mach mit der Aufgabe weiter, ohne auf sie zu warten. ${REGELN}`
 
 /** Was Claude liest, wenn es waehrend der Schicht eine Rueckfrage stellen will. */
 export const FRAGE_ABGELEHNT =
-    'Nachtschicht: Die Person ist nicht am Platz und kann nicht antworten. ' +
+    'Autopilot: Die Person ist nicht am Platz und kann nicht antworten. ' +
     'Entscheide diese Frage selbst (die Option, die du empfehlen wuerdest, bei Zweifeln die vorsichtigere), ' +
     'halte die Entscheidung in einem Satz fest und arbeite weiter.'
 
@@ -51,14 +56,14 @@ export const FRAGE_ABGELEHNT =
  * Ob Claude mit dieser Antwort meldet, dass es fertig ist.
  *
  * Nur die letzten Zeilen zaehlen: wer die Marke mitten im Text erwaehnt,
- * etwa beim Erklaeren, ist damit noch nicht fertig.
+ * etwa beim Erklaeren, ist damit noch nicht fertig. Die alte Marke gilt auch.
  */
 export function istFertig(antwort: string): boolean {
     return antwort
         .trim()
         .split('\n')
         .slice(-3)
-        .some(zeile => zeile.toUpperCase().includes(FERTIG))
+        .some(zeile => [FERTIG, FERTIG_ALT].some(marke => zeile.toUpperCase().includes(marke)))
 }
 
 /** "1 Frage", "3 Fragen". */
@@ -194,14 +199,14 @@ export const register: Register = (on, options) => {
     maxRunden = Math.max(1, Math.floor(Number(options.maxRunden ?? 10)))
 
     // Die Desktop-App holt ihre Befehlsliste, bevor dieser Hook laeuft, und haelt
-    // /nachtschicht als erste Nachricht sonst fuer unbekannt. Dafuer liegt dieselbe
+    // /autopilot als erste Nachricht sonst fuer unbekannt. Dafuer liegt dieselbe
     // Befehlsdatei in ~/.claude/commands; den Lauf beantwortet trotzdem dieser Mod.
     // `immediate`: Einschalten geht auch, waehrend Claude arbeitet.
     on('session.start', async ($, e, next) => {
         await $.command
             .register({
-                name: 'nachtschicht',
-                description: 'Nachtschicht ein- oder ausschalten: Claude arbeitet ohne Rueckfragen weiter, waehrend du weg bist',
+                name: 'autopilot',
+                description: 'Autopilot ein- oder ausschalten: Claude arbeitet ohne Rueckfragen weiter, waehrend du weg bist',
                 argumentHint: '[an|aus]',
                 immediate: true,
             })
@@ -209,34 +214,34 @@ export const register: Register = (on, options) => {
         return next(e)
     })
 
-    on('command.run', { command: 'nachtschicht' }, async ($, e) => {
+    on('command.run', { command: 'autopilot' }, async ($, e) => {
         const arg = e.args.trim().toLowerCase()
         const s = await read($, schicht)
         const soll = arg === 'an' || arg === 'ein' ? true : arg === 'aus' ? false : s === null
 
         if (!soll) {
-            const b = await beenden($, 'du hast sie beendet')
-            return { text: b ? `Nachtschicht ist aus: ${zahlen(b.geschoben, b.fragen.length)}.` : 'Die Nachtschicht war nicht an.' }
+            const b = await beenden($, 'du hast ihn beendet')
+            return { text: b ? `Der Autopilot ist aus: ${zahlen(b.geschoben, b.fragen.length)}.` : 'Der Autopilot war nicht an.' }
         }
         if (s?.phase === 'laeuft') {
-            return { text: 'Die Nachtschicht laeuft schon. /nachtschicht aus beendet sie.' }
+            return { text: 'Der Autopilot laeuft schon. /autopilot aus beendet ihn.' }
         }
         if (s) {
             // Angehalten oder fertig: dieselbe Schicht geht weiter, die Zaehler von vorn.
             const gleich = await fortsetzen($)
-            return { text: `Die Nachtschicht laeuft wieder.${gleich ? ' Claude macht jetzt gleich weiter.' : ''}` }
+            return { text: `Der Autopilot laeuft wieder.${gleich ? ' Claude macht jetzt gleich weiter.' : ''}` }
         }
         const gleich = await beginnen($)
         return {
             text:
-                'Nachtschicht ist an: Claude arbeitet ohne Rueckfragen weiter und schreibt am Ende eine Uebergabe. ' +
+                'Der Autopilot ist an: Claude arbeitet ohne Rueckfragen weiter und schreibt am Ende eine Uebergabe. ' +
                 (gleich ? 'Es macht jetzt gleich weiter. ' : '') +
-                'Freigabe-Dialoge halten sie trotzdem an. /nachtschicht schaltet sie wieder aus.',
+                'Freigabe-Dialoge halten ihn trotzdem an. /autopilot schaltet ihn wieder aus.',
         }
     })
 
     on('prompt.submit', async ($, e, next) => {
-        if (e.origin.kind === 'plugin' && e.origin.name === 'nachtschicht') {
+        if (e.origin.kind === 'plugin' && e.origin.name === 'autopilot') {
             angeschoben = true
             return next(e)
         }
@@ -358,10 +363,10 @@ export const register: Register = (on, options) => {
         )
 
         const eigene = (
-            <Box key="nachtschicht" flexDirection="column" paddingX={1}>
+            <Box key="autopilot" flexDirection="column" paddingX={1}>
                 <Box flexDirection="row" gap={1}>
                     <Text color="suggestion" bold>
-                        Nachtschicht:
+                        Autopilot:
                     </Text>
                     {zeile}
                 </Box>
@@ -369,7 +374,7 @@ export const register: Register = (on, options) => {
                     <Box flexDirection="column">
                         <Text dimColor>Diese Fragen hat Claude selbst entschieden:</Text>
                         {fragen.map((f, i) => (
-                            <Text key={`ns-frage-${i}`} dimColor wrap="wrap">
+                            <Text key={`ap-frage-${i}`} dimColor wrap="wrap">
                                 - {f}
                             </Text>
                         ))}
@@ -378,15 +383,15 @@ export const register: Register = (on, options) => {
                 <Box flexDirection="row" gap={2}>
                     {fragen.length > 0 ? (
                         <Button
-                            key="ns-fragen"
+                            key="ap-fragen"
                             label={offen ? 'Fragen zu' : `Fragen (${fragen.length})`}
                             onPress={() => void fragenUmschalten($)}
                         />
                     ) : null}
                     {s ? (
-                        <Button key="ns-beenden" label="Beenden" onPress={() => void beenden($, 'du hast sie beendet')} />
+                        <Button key="ap-beenden" label="Beenden" onPress={() => void beenden($, 'du hast ihn beendet')} />
                     ) : (
-                        <Button key="ns-weg" label="Weg" role="dismiss" onPress={() => void berichtWeg($)} />
+                        <Button key="ap-weg" label="Weg" role="dismiss" onPress={() => void berichtWeg($)} />
                     )}
                 </Box>
             </Box>

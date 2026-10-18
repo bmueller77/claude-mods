@@ -18,11 +18,9 @@ function props(x?: { isWorking?: boolean; hasSurvey?: boolean }) {
     } as never
 }
 
-type Kategorie = { name: string; tokens: number; kind: string }
-
-function aufschluesselung(tokens: number, fenster: number, schwelle?: number, kategorien: Kategorie[] = []): SessionContextBreakdown {
+function aufschluesselung(tokens: number, fenster: number, schwelle?: number): SessionContextBreakdown {
     return {
-        categories: kategorien.map(k => ({ ...k, color: 'promptBorder', isDeferred: k.kind === 'deferred' })) as never,
+        categories: [],
         totalTokens: tokens,
         maxTokens: fenster,
         rawMaxTokens: fenster,
@@ -48,8 +46,8 @@ type Stand = {
     modell?: string
     /** Was der Nutzungs-Endpunkt antwortet; ohne Angabe ein Fehler 500. */
     endpunkt?: unknown
-    /** Die Kategorien von /context. */
-    kategorien?: Kategorie[]
+    /** Befehle, die die Engine ablehnt, als waeren sie unbekannt. */
+    abgelehnt?: string[]
     /** Was Naechste-Schritte von unten mitbringt: neben anderem oder allein. */
     unten?: 'mit-anderen' | 'allein'
     /** Der Verlauf fuer `$.session.messages()`; "fehler" laesst das Lesen scheitern. */
@@ -85,7 +83,7 @@ function boden(on: On, stand: Stand) {
                 tokens: stand.tokens,
                 window: stand.fenster,
                 percent: Math.round((stand.tokens / stand.fenster) * 100),
-                breakdown: aufschluesselung(stand.tokens, stand.fenster, stand.schwelle, stand.kategorien),
+                breakdown: aufschluesselung(stand.tokens, stand.fenster, stand.schwelle),
             },
             rateLimits: stand.limits ?? [],
         },
@@ -105,6 +103,9 @@ function boden(on: On, stand: Stand) {
     on('turn.complete', (_$, e, _next) => ({ text: e.answer, usage: e.usage }))
     on('command.register', (_$, e, _next) => ({ value: { command: e.name } }))
     on('command.run', (_$, e, _next) => {
+        if (stand.abgelehnt?.includes(e.command)) {
+            throw new Error(`unbekannter Befehl: ${e.command}`)
+        }
         befehle.push(e.args ? `${e.command} ${e.args}` : e.command)
         return { text: '' }
     })
@@ -1069,53 +1070,21 @@ test('nach einem Neuladen laeuft die Uhr weiter, statt auf Cache leer zu springe
     expect((await band.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('🔥')
 })
 
-/** Was die Engine an Fenstern fuehrt, als Boden: oeffnen, schliessen, auflisten. */
-function fensterBoden(on: On) {
-    const offen: string[] = []
+/** Zaehlt, was die Statistik als Fenster oeffnen will: Es soll nichts sein. */
+function fensterZaehler(on: On) {
+    const geoeffnet: string[] = []
     on('ui.open', (_$, e, _next) => {
-        if (!offen.includes(e.id)) {
-            offen.push(e.id)
-        }
+        geoeffnet.push(e.id)
         return { value: { isPlaced: true } } as never
     })
-    on('ui.close', (_$, e, _next) => {
-        const i = offen.indexOf(e.id)
-        if (i >= 0) {
-            offen.splice(i, 1)
-        }
-        return { value: undefined } as never
-    })
-    on('ui.panes', (_$, _e, _next) => ({
-        value: offen.map(id => ({ id, title: 'Kontext', isShown: true, isFocused: false, isPlaced: true })),
-    }))
-    return offen
+    return geoeffnet
 }
 
-function fensterProps(placement: 'dock' | 'inline' = 'dock') {
-    return {
-        title: 'Kontext',
-        isFocused: false,
-        bodyColumns: 40,
-        placement,
-        scroll: { offset: 0, bodyRows: 30, isAtTop: true, isAtBottom: true },
-        view: {},
-    } as never
-}
-
-const KATEGORIEN: Kategorie[] = [
-    { name: 'System prompt', tokens: 3_000, kind: 'used' },
-    { name: 'System tools', tokens: 15_000, kind: 'used' },
-    { name: 'MCP tools (deferred)', tokens: 9_000, kind: 'deferred' },
-    { name: 'Messages', tokens: 50_000, kind: 'used' },
-    { name: 'Free space', tokens: 99_000, kind: 'free' },
-    { name: 'Autocompact buffer', tokens: 33_000, kind: 'buffer' },
-]
-
-test('der Diagramm-Knopf oeffnet den Kontext je Kategorie in einem Fenster an der Seite, auf Deutsch', async ($, on) => {
+test('📊 zeigt die Kontext-Anzeige der App: /context, kein eigenes Fenster', async ($, on) => {
     mock.clock(on, { now: JETZT })
     mock.store(on, {})
-    boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000, kategorien: KATEGORIEN })
-    const fenster = fensterBoden(on)
+    const b = boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000 })
+    const geoeffnet = fensterZaehler(on)
     await start($ as never)
     await runde($ as never)
 
@@ -1126,47 +1095,38 @@ test('der Diagramm-Knopf oeffnet den Kontext je Kategorie in einem Fenster an de
         expect(knopf?.props.variant).toBe('secondary')
 
         await ui.press({ key: 'details' })
-        expect(fenster).toEqual(['statistik-kontext'])
-        expect((await ui.find({ type: 'Button', key: 'details' }))?.props.variant).toBe('primary')
-        // Die Leiste selbst bleibt eine Zeile, ohne Kasten darueber.
-        expect(await leiste(ui as never)).not.toContain('Nachrichten')
-
-        const seite = await $.ui.mount({
-            plugin: 'statistik',
-            surface,
-            component: 'Pane',
-            requestId: 'statistik-kontext',
-            props: fensterProps(),
-        })
-        const text = await leiste(seite as never)
-        expect(text).toContain('Kontext')
-        expect(text).toContain('68k von 200k · Compact bei 166k')
-        expect(text).toContain('Systemprompt')
-        expect(text).toContain('Werkzeuge')
-        expect(text).toContain('Nachrichten')
-        expect(text).toContain('25 %')
-        expect(text).toContain('Compact-Puffer')
-        // Zurueckgestellte Werkzeuge belegen nichts und fehlen.
-        expect(text).not.toContain('MCP')
-        expect(text).toContain('█')
-        await seite.unmount()
-
-        await ui.press({ key: 'details' })
-        expect(fenster).toEqual([])
+        // Der Knopf bleibt, wie er war: kein Fenster, das offen sein koennte.
         expect((await ui.find({ type: 'Button', key: 'details' }))?.props.variant).toBe('secondary')
+        expect(await leiste(ui as never)).not.toContain('Nachrichten')
     }
+    expect(b.befehle).toEqual(['context', 'context'])
+    expect(geoeffnet).toEqual([])
 })
 
-test('ein Kasten, den eine alte Version offen gespeichert hat, kommt nicht wieder', async ($, on) => {
+test('lehnt die Engine /context ab, steht es im Eingabefeld, und ein Toast sagt: Enter druecken', async ($, on) => {
     mock.clock(on, { now: JETZT })
-    mock.store(on, { 'statistik.zeigeDetails': true })
-    boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000, kategorien: KATEGORIEN })
-    fensterBoden(on)
+    mock.store(on, {})
+    const b = boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000, abgelehnt: ['context'] })
+    const geoeffnet = fensterZaehler(on)
+    const entwuerfe: string[] = []
+    on('prompt.fill', (_$, e, _next) => {
+        entwuerfe.push(String(e.text))
+        return { isFilled: true } as never
+    })
+    const toasts: string[] = []
+    on('ui.toast', (_$, e, _next) => {
+        toasts.push(String(e.text))
+        return { value: undefined } as never
+    })
     await start($ as never)
     await runde($ as never)
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
-    expect(await leiste(ui as never)).not.toContain('Nachrichten')
-    expect((await ui.find({ type: 'Button', key: 'details' }))?.props.variant).toBe('secondary')
+
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await ui.press({ key: 'details' })
+    expect(b.befehle).toEqual([])
+    expect(entwuerfe).toEqual(['/context'])
+    expect(toasts).toEqual(['Drück Enter, dann zeigt die App den Kontext.'])
+    expect(geoeffnet).toEqual([])
 })
 
 test('zwischen den Mods darueber und der Statistik steht eine Trennlinie', async ($, on) => {

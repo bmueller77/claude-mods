@@ -1,1 +1,0 @@
-{ "description": "Die Hooks der Nachtschicht", "modules": ["./register.tsx"] }

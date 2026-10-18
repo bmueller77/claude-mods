@@ -84,30 +84,6 @@ export type Nutzung = {
     istFable: boolean
 }
 
-/** Eine Kategorie des Kontextfensters, wie /context sie fuehrt. */
-export type KontextScheibe = {
-    /** Deutscher Name, sonst der der Engine. */
-    name: string
-    tokens: number
-    /** Farbe im Balken und in der Legende. */
-    farbe: string
-    /** Belegt, frei oder der Puffer vor dem automatischen Compact. */
-    art: 'belegt' | 'frei' | 'puffer'
-    /** Die Nachrichten, die mit jeder Runde wachsen, in der Akzentfarbe. */
-    istNachrichten: boolean
-}
-
-/** Das Kontextfenster im Detail, fuer das Fenster an der Seite. */
-export type KontextDetails = {
-    scheiben: KontextScheibe[]
-    /** Belegte Tokens. */
-    belegt: number
-    /** Das Fenster, gegen das gemessen wird. */
-    fenster: number
-    /** Wo automatisch verdichtet wird, wenn das an ist. */
-    compactBei?: number
-}
-
 /** Die Laenge des ganzen Chats seit Beginn, nach jeder Runde neu gezaehlt. */
 export type Chatlaenge = {
     /** Nachrichten der Person und von Claude mit eigenem Text; reine Werkzeug-Ergebnisse zaehlen nicht. */
@@ -125,10 +101,6 @@ declare module 'claude-code' {
             context: ContextSample | null
             lage: Lage
             nutzung: Nutzung
-            /** Das Kontextfenster je Kategorie, nach jeder Runde neu. */
-            details: KontextDetails | null
-            /** Ob das Fenster mit den Kontext-Details offen ist. */
-            zeigeDetails: boolean
             /** Zaehlt jede Minute hoch, damit die Tortenuhr weiterlaeuft. */
             tick: number
             /** Welcher Knopf /compact eingereiht hat, das noch wartet: Dreieck oder Schwamm; null, wenn nichts wartet. */

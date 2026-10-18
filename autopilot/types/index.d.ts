@@ -1,9 +1,13 @@
 /**
- * Was die Nachtschicht zwischen zwei Zeichnungen behaelt.
+ * Was der Autopilot zwischen zwei Zeichnungen behaelt.
  *
  * Alles in `$.state`, also je Sitzung und ueber ein Neuladen des Moduls
- * hinweg. Eine neue Sitzung beginnt ohne Schicht: die Nachtschicht gilt nie
+ * hinweg. Eine neue Sitzung beginnt ohne Schicht: der Autopilot gilt nie
  * aus Versehen weiter.
+ *
+ * Ein Lauf heisst hier weiter Schicht, wie zu der Zeit, als der Mod
+ * Nachtschicht hiess: Der Leitstand liest `schicht`, `bericht` und
+ * `zeigeFragen` unter diesen Namen.
  */
 
 /** Wie es um die Schicht steht. */
@@ -40,7 +44,7 @@ export type Bericht = {
 
 declare module 'claude-code' {
     interface PluginState {
-        nachtschicht: {
+        autopilot: {
             /** Die laufende Schicht, oder null. */
             schicht: Schicht | null
             /** Der Bericht der letzten Schicht, oder null. */

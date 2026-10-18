@@ -180,8 +180,8 @@ const LABEL_WIDTH = 10
 const TICK_MS = 250
 // Calm mode redraws only to keep times current.
 const CALM_TICK_MS = 5000
-// With the night shift on, nobody is there to press Start: a waiting plan starts by itself this long after it began
-// to wait with the shift on.
+// With Autopilot on, nobody is there to press Start: a waiting plan starts by itself this long after it began to
+// wait with Autopilot on.
 const NIGHT_SHIFT_START_MS = 30_000
 // A job shorter than this finishes without a sound.
 const LONG_JOB_MS = 60_000
@@ -387,8 +387,8 @@ let tickerEvery = 0
 let hasSign = false
 let lastSignAt = 0
 let isStalled = false
-// The night shift's own Start: the waiting plan it counts down for and since when, the timer that starts it, and the
-// plan already started (by it or by Start), so a plan laid out again starts once. A reload counts down afresh.
+// Autopilot's own Start: the waiting plan it counts down for and since when, the timer that starts it, and the plan
+// already started (by it or by Start), so a plan laid out again starts once. A reload counts down afresh.
 let nightStart: { plan: string; since: number } | null = null
 let nightTimer: Timer | undefined
 let nightStartedPlan: string | null = null
@@ -1421,28 +1421,34 @@ const runCommand = async ($: $, label: string, names: string[], args?: string): 
   }
 }
 
-/** Night shift: the Nachtschicht mod's command, which turns it on or off. */
-const toggleNightShift = ($: $) => runCommand($, 'nachtschicht', ['nachtschicht'])
+/** Autopilot: its mod's command, which turns it on or off; the old Nachtschicht's where only that is there. */
+const toggleNightShift = ($: $) => runCommand($, 'Autopilot', ['autopilot', 'nachtschicht'])
 
 /** Filetree: the filetree plugin's command, which opens its side pane. Only Filetree closes it, so this opens, never toggles. */
 const openFiletree = ($: $) => runCommand($, 'Filetree', ['filetree'])
 
-// The Nachtschicht keeps its shift in its own state: the shift while there is one, null once it is ended. Any plugin
-// reads any value, so Leitstand reads it straight from there and writes nothing of its own. Not a `dependencies`
-// entry in plugin.json: Leitstand would then not load where the Nachtschicht is not installed. There the value was
-// never written and reads as off.
-const NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
+// Autopilot keeps its run in its own state, under the key from its days as the Nachtschicht (names here still say
+// night shift): the run while there is one, null once it is ended. Any plugin reads any value, so Leitstand reads it
+// straight from there and writes nothing of its own. Not a `dependencies` entry in plugin.json: Leitstand would then
+// not load where Autopilot is not installed. There the value was never written and reads as off.
+const NIGHT_SHIFT_STATE = { plugin: 'autopilot', key: 'schicht' } as const
+// The same value as the mod kept it while it was called Nachtschicht.
+const OLD_NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
 
 /**
- * Whether the night shift is on, as the Nachtschicht holds it: while there is a shift, be it running, finished or
- * halted, since /nachtschicht then ends it. Read while drawing, the band draws again whenever the Nachtschicht writes
- * it, however it was switched (this button, /nachtschicht typed, its own Beenden, Esc). Off on any error.
+ * Whether Autopilot is on, as it holds it: while there is a run, be it running, finished or halted, since /autopilot
+ * then ends it. Read while drawing, the band draws again whenever Autopilot writes it, however it was switched (this
+ * button, /autopilot typed, its own Beenden, Esc). Off on any error. Where Autopilot has written nothing yet in this
+ * session, the Nachtschicht's value counts, so an instance in the middle of switching over still shows right.
  */
 const isNightShiftOn = async ($: $): Promise<boolean> => {
   try {
-    // The value is the Nachtschicht's, declared in its contract and not in Leitstand's, so it is typed here.
-    const { value } = (await $.state.get(NIGHT_SHIFT_STATE as never)) as { value?: unknown }
-    return value !== undefined && value !== null
+    // The values are the mods' own, declared in their contracts and not in Leitstand's, so they are typed here.
+    const { value: own } = (await $.state.get(NIGHT_SHIFT_STATE as never)) as { value?: unknown }
+    // Null is Autopilot's own word that no run is on, so the old value counts only while Autopilot's is unwritten.
+    if (own !== undefined) return own !== null
+    const { value: old } = (await $.state.get(OLD_NIGHT_SHIFT_STATE as never)) as { value?: unknown }
+    return old !== undefined && old !== null
   } catch {
     return false
   }
@@ -1671,7 +1677,7 @@ const holdForApproval = async ($: $): Promise<boolean> => {
     return false
   }
   await change($, list => ({ ...list, approval: 'waiting', phase: 'needsYou', needsYouReason: APPROVE }))
-  // With the night shift on, its count to Start begins now; the same plan laid out again keeps its count.
+  // With Autopilot on, its count to Start begins now; the same plan laid out again keeps its count.
   await armNightStart($)
 
   return true
@@ -1693,7 +1699,7 @@ const planApproval = (list: GlanceChecklist | null, steps: string[]): GlanceChec
 const helperType = (type: string): string => (isTierAgent(type) ? (TIERS.find(tier => tierAgent(tier) === type)?.label ?? type) : type)
 
 /**
- * A plan waiting for Start, as the night shift's Start tells plans apart: its job and its steps, the planned ones when
+ * A plan waiting for Start, as Autopilot's Start tells plans apart: its job and its steps, the planned ones when
  * there are any, as planApproval counts them. Null when no plan waits.
  */
 const waitingPlanOf = (list: GlanceChecklist | null): string | null => {
@@ -1708,7 +1714,7 @@ const stopNightStart = () => {
   nightStart = null
 }
 
-/** The person approves the plan: the same job starts, and the night shift has nothing left to start for it. */
+/** The person approves the plan: the same job starts, and Autopilot has nothing left to start for it. */
 const startPlan = async ($: $) => {
   if (await isCompactingNow($)) return false
   const plan = waitingPlanOf(await read($, checklistAtom))
@@ -1721,7 +1727,7 @@ const startPlan = async ($: $) => {
 }
 
 /**
- * The night shift's count to Start: it runs while Leitstand is on, a plan waits for Start and the night shift is on,
+ * Autopilot's count to Start: it runs while Leitstand is on, a plan waits for Start and Autopilot is on,
  * from the moment all three hold. A new plan starts it over; anything else ends it. Returns the plan counted for.
  */
 const armNightStart = async ($: $): Promise<string | null> => {
@@ -1748,7 +1754,7 @@ const armNightStart = async ($: $): Promise<string | null> => {
 }
 
 /**
- * On each tick and when the count is up: with the night shift on, a plan that has waited NIGHT_SHIFT_START_MS for
+ * On each tick and when the count is up: with Autopilot on, a plan that has waited NIGHT_SHIFT_START_MS for
  * Start starts as if the person pressed it, once. Not while the chat is compacted; the first tick after it does.
  */
 const checkNightStart = async ($: $) => {
@@ -1764,7 +1770,7 @@ const checkNightStart = async ($: $) => {
   if (!(await startPlan($))) nightStartedPlan = null
 }
 
-/** Seconds until the night shift starts this waiting plan, in the steps the band redraws in; null when it won't. */
+/** Seconds until Autopilot starts this waiting plan, in the steps the band redraws in; null when it won't. */
 const nightStartSeconds = (list: GlanceChecklist, at: number): number | null => {
   const plan = waitingPlanOf(list)
   if (plan === null || plan === nightStartedPlan) return null
@@ -1773,9 +1779,9 @@ const nightStartSeconds = (list: GlanceChecklist, at: number): number | null => 
   return left > 0 ? Math.ceil(left / CALM_TICK_MS) * (CALM_TICK_MS / 1000) : null
 }
 
-/** What Claude reads about a waiting plan while the night shift is on: it starts without the person. Empty otherwise. */
+/** What Claude reads about a waiting plan while Autopilot is on: it starts without the person. Empty otherwise. */
 const nightStartNote = async ($: $) =>
-  (await isNightShiftOn($)) ? ` Die Nachtschicht startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.` : ''
+  (await isNightShiftOn($)) ? ` Der Autopilot startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.` : ''
 
 /** Picks Simple, Details, Minimal or Off directly, as the settings panel does. */
 const setView = async ($: $, view: 'simple' | 'detailed' | 'minimal' | 'off') => {
@@ -3780,7 +3786,7 @@ export function registerGlance(on: On): void {
     const masks = await read($, maskAtom)
     const remote = remoteShown(await read($, remoteAtom))
     const adhd = await read($, adhdAtom)
-    // Read only where its button shows, so the Nachtschicht's writes redraw nothing else.
+    // Read only where its button shows, so Autopilot's writes redraw nothing else.
     const nightShift = vector && isEnabled && (await isNightShiftOn($))
     const canShip = isEnabled && (await read($, shipOnGithubAtom)) && (await read($, hasGithubAtom))
     const columns = Math.max(20, e.props.bodyColumns)
@@ -3857,8 +3863,8 @@ export function registerGlance(on: On): void {
     const isLimitStuck = isStuck && /limit/i.test(list0?.stuckReason ?? '')
     // Beside "try again later" a usage limit's button checks whether it has lifted.
     const continueLabel = vector && isStuck ? (isLimitStuck ? 'Erneut prüfen' : 'Erneut versuchen') : 'Weiter'
-    // With the night shift on, a waiting plan starts by itself: beside Start, dim, how long until then. The terminal
-    // reads the night shift only while a plan waits, so its writes redraw nothing else there.
+    // With Autopilot on, a waiting plan starts by itself: beside Start, dim, how long until then. The terminal reads
+    // Autopilot only while a plan waits, so its writes redraw nothing else there.
     const nightStartIn =
       !isCompacting && list0?.approval === 'waiting' && (vector ? nightShift : await isNightShiftOn($)) ? nightStartSeconds(list0, current) : null
     const nightStartHint = nightStartIn !== null && (
@@ -3889,7 +3895,7 @@ export function registerGlance(on: On): void {
       (list0?.phase === 'done' || armed === 'ship') &&
       action('ship', 'ship', armed === 'ship' ? 'Noch mal drücken für Push' : 'Push', () => pressTwice($, 'ship', () => shipIt($)), undefined, armed !== 'ship')
     // Where to go from here: the plan, the history, the settings. Elsewhere than the terminal the settings are a gear
-    // beside the view, at the top right. On the terminal the night shift's hint takes its room from their long labels:
+    // beside the view, at the top right. On the terminal Autopilot's hint takes its room from their long labels:
     // a waiting plan's row with both needs 88 columns.
     const isShortRow = columns < (nightStartIn !== null && !vector ? 88 : 63)
     const places = isEnabled
@@ -4025,7 +4031,7 @@ export function registerGlance(on: On): void {
     // Grill mich right after it, as the steam sign.
     const grillItem = !isEnabled || !vector ? null : <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
     // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
-    // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it), the night shift,
+    // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it), Autopilot,
     // masking on screen and the shield that moves the chat's secrets into the .env.
     const skillItems =
       !isEnabled || !vector

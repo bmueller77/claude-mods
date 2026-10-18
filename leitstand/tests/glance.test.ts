@@ -5261,7 +5261,7 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const skill = (name: string) => ({ name, description: name, source: 'plugin' })
 
-  test('in der App stehen hinter Grill mich Vermenschlichen, ADHS, Filetree, Nachtschicht, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
+  test('in der App stehen hinter Grill mich Vermenschlichen, ADHS, Filetree, Autopilot, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
     await skillWorld($, on)
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
@@ -5440,17 +5440,25 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await variant()).toBe('secondary')
   })
 
-  test('Nachtschicht startet ihren Befehl; fehlt er, sagt der Leitstand das', async ($, on) => {
+  test('Autopilot startet seinen Befehl; fehlt er, sagt der Leitstand das', async ($, on) => {
     const { state, press } = await skillWorld($, on)
-    state.commands = [skill('nachtschicht')]
+    state.commands = [skill('autopilot')]
     await press('nightshift')
-    expect(state.runs).toEqual([{ command: 'nachtschicht', args: undefined }])
+    expect(state.runs).toEqual([{ command: 'autopilot', args: undefined }])
 
     // Another plugin's copy counts too.
     state.runs.length = 0
-    state.commands = [skill('nachtschicht-mod:nachtschicht')]
+    state.commands = [skill('autopilot-mod:autopilot')]
     await press('nightshift')
-    expect(state.runs.map(one => one.command)).toEqual(['nachtschicht-mod:nachtschicht'])
+    expect(state.runs.map(one => one.command)).toEqual(['autopilot-mod:autopilot'])
+
+    // Only the old Nachtschicht there: its command runs. Both there: Autopilot's.
+    state.runs.length = 0
+    state.commands = [skill('nachtschicht')]
+    await press('nightshift')
+    state.commands = [skill('nachtschicht'), skill('autopilot')]
+    await press('nightshift')
+    expect(state.runs.map(one => one.command)).toEqual(['nachtschicht', 'autopilot'])
 
     // A name without a prefix the session does not list: a toast, nothing in the prompt.
     state.runs.length = 0
@@ -5458,27 +5466,27 @@ describe('Arbeitsweise und Grill mich', () => {
     await press('nightshift')
     expect(state.runs).toEqual([])
     expect(state.filled).toEqual([])
-    expect(state.toasts).toContain('nachtschicht ist in dieser Sitzung nicht verfügbar.')
+    expect(state.toasts).toContain('Autopilot ist in dieser Sitzung nicht verfügbar.')
   })
 
   /**
-   * The Nachtschicht mod as far as Leitstand sees it, written inline: it keeps its shift in its own state, null when
-   * there is none. /nachtschicht with no argument ends a shift that is there, else starts one; `an` and `aus` say which.
-   * A turn that ends on its mark finishes the shift and a refusal halts it, both keeping it; Esc ends it.
+   * The Autopilot mod as far as Leitstand sees it, written inline: it keeps its run in its own state, null when there
+   * is none. /autopilot with no argument ends a run that is there, else starts one; `an` and `aus` say which. A turn
+   * that ends on its mark finishes the run and a refusal halts it, both keeping it; Esc ends it.
    */
-  const FAKE_NIGHT_SHIFT = {
-    name: 'nachtschicht',
+  const FAKE_AUTOPILOT = {
+    name: 'autopilot',
     register(on: On) {
       type Shift = { seit: number; phase: 'laeuft' | 'fertig' | 'angehalten'; grund: string | null; geschoben: number; fragen: string[] }
-      // A hooks module spells $ at its call sites only, so each hook reads and writes the shift itself.
-      const ref = { plugin: 'nachtschicht', key: 'schicht' } as const
-      on('command.run', { command: 'nachtschicht' }, async ($, e) => {
+      // A hooks module spells $ at its call sites only, so each hook reads and writes the run itself.
+      const ref = { plugin: 'autopilot', key: 'schicht' } as const
+      on('command.run', { command: 'autopilot' }, async ($, e) => {
         const arg = String(e.args ?? '').trim().toLowerCase()
         const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
         const wants = arg === 'an' ? true : arg === 'aus' ? false : shift === null
         const changed: Shift | null = wants ? { seit: 0, geschoben: 0, fragen: [], ...shift, phase: 'laeuft', grund: null } : null
         await $.state.set(ref as never, changed as never)
-        return { text: wants ? 'Nachtschicht ist an.' : shift ? 'Nachtschicht ist aus.' : 'Die Nachtschicht war nicht an.' }
+        return { text: wants ? 'Der Autopilot ist an.' : shift ? 'Der Autopilot ist aus.' : 'Der Autopilot war nicht an.' }
       })
       on('turn.complete', async ($, e, next) => {
         const answer = await next(e)
@@ -5489,7 +5497,7 @@ describe('Arbeitsweise und Grill mich', () => {
             ? null
             : e.reason === 'refusal'
               ? { ...shift, phase: 'angehalten', grund: 'Claude hat abgelehnt' }
-              : e.answer.trim().endsWith('NACHTSCHICHT-FERTIG')
+              : e.answer.trim().endsWith('AUTOPILOT-FERTIG')
                 ? { ...shift, phase: 'fertig', grund: 'Claude meldet fertig' }
                 : shift
         if (changed !== shift) await $.state.set(ref as never, changed as never)
@@ -5497,22 +5505,41 @@ describe('Arbeitsweise und Grill mich', () => {
       })
     },
   }
-  const WITH_NIGHT_SHIFT = { plugins: [FAKE_NIGHT_SHIFT] }
-  /** The night shift button's variant in the app. */
+  /**
+   * The same mod as it was called before 0.2, the Nachtschicht, for an instance not switched over yet: only its command
+   * and its shift, under its own name. A hooks module's state references are literals, so it has its own copy.
+   */
+  const FAKE_OLD_NIGHT_SHIFT = {
+    name: 'nachtschicht',
+    register(on: On) {
+      const ref = { plugin: 'nachtschicht', key: 'schicht' } as const
+      on('command.run', { command: 'nachtschicht' }, async ($, e) => {
+        const arg = String(e.args ?? '').trim().toLowerCase()
+        const shift = ((await $.state.get(ref as never)) as { value?: unknown }).value ?? null
+        const wants = arg === 'an' ? true : arg === 'aus' ? false : shift === null
+        const changed = wants ? { seit: 0, phase: 'laeuft', grund: null, geschoben: 0, fragen: [] } : null
+        await $.state.set(ref as never, changed as never)
+        return { text: wants ? 'Nachtschicht ist an.' : 'Nachtschicht ist aus.' }
+      })
+    },
+  }
+  const WITH_AUTOPILOT = { plugins: [FAKE_AUTOPILOT] }
+  /** The Autopilot button's variant in the app. */
   const nightShiftVariant = async ($: Engine) => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'nightshift')
     await ui.unmount()
     return button?.props.variant
   }
-  /** /nachtschicht as typed, with its argument. */
-  const typeNightShift = ($: Engine, args = '') => $.command.run({ command: 'nachtschicht', args } as never)
+  /** /autopilot as typed, with its argument; or the old /nachtschicht. */
+  const typeNightShift = ($: Engine, args = '', command: 'autopilot' | 'nachtschicht' = 'autopilot') =>
+    $.command.run({ command, args } as never)
 
-  test('ohne den Mod Nachtschicht steht 🅰️ schlicht da, auch nach einem Druck', async ($, on) => {
+  test('ohne den Mod Autopilot steht 🅰️ schlicht da, auch nach einem Druck', async ($, on) => {
     const { state, press } = await skillWorld($, on)
     expect(await nightShiftVariant($)).toBe('secondary')
-    // Listed, but nobody keeps a shift: the run changes nothing.
-    state.commands = [skill('nachtschicht')]
+    // Listed, but nobody keeps a run: pressing changes nothing.
+    state.commands = [skill('autopilot')]
     await press('nightshift')
     expect(state.runs).toHaveLength(1)
     expect(await nightShiftVariant($)).toBe('secondary')
@@ -5522,19 +5549,19 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Nachtschicht per Knopf: ein Druck schaltet sie an und hebt 🅰️ hervor, der nächste aus', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Autopilot per Knopf: ein Druck schaltet ihn an und hebt 🅰️ hervor, der nächste aus', WITH_AUTOPILOT, async ($, on) => {
     const { state, press } = await skillWorld($, on)
-    state.commands = [skill('nachtschicht')]
+    state.commands = [skill('autopilot')]
     expect(await nightShiftVariant($)).toBe('secondary')
     await press('nightshift')
-    // The Nachtschicht answered its command itself.
+    // Autopilot answered its command itself.
     expect(state.runs).toEqual([])
     expect(await nightShiftVariant($)).toBe('primary')
     await press('nightshift')
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Nachtschicht getippt: /nachtschicht, /nachtschicht an und aus schalten 🅰️ mit', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Autopilot getippt: /autopilot, /autopilot an und aus schalten 🅰️ mit', WITH_AUTOPILOT, async ($, on) => {
     await skillWorld($, on)
     await typeNightShift($)
     expect(await nightShiftVariant($)).toBe('primary')
@@ -5546,14 +5573,14 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Nachtschicht fertig oder angehalten: 🅰️ bleibt hervorgehoben, bis ein Druck sie beendet; Esc beendet sie', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Autopilot fertig oder angehalten: 🅰️ bleibt hervorgehoben, bis ein Druck ihn beendet; Esc beendet ihn', WITH_AUTOPILOT, async ($, on) => {
     const { state, press } = await skillWorld($, on)
-    state.commands = [skill('nachtschicht')]
+    state.commands = [skill('autopilot')]
     const end = (answer: string, reason: string) =>
       $.turn.complete({ answer, durationMs: 1, isAborted: reason === 'aborted', turnId: 't1', reason } as never)
 
     await typeNightShift($)
-    await end('Uebergabe: alles gebaut.\nNACHTSCHICHT-FERTIG', 'answer')
+    await end('Uebergabe: alles gebaut.\nAUTOPILOT-FERTIG', 'answer')
     expect(await nightShiftVariant($)).toBe('primary')
     await press('nightshift')
     expect(await nightShiftVariant($)).toBe('secondary')
@@ -5565,7 +5592,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Nachtschicht nach dem Neuladen: 🅰️ zeigt weiter, was die Nachtschicht hält', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Autopilot nach dem Neuladen: 🅰️ zeigt weiter, was der Autopilot hält', WITH_AUTOPILOT, async ($, on) => {
     on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
     on('process.run', () => ({ value: { exitCode: 2, stdout: '', stderr: '' } }) as never)
     on('tool.register', () => ({ value: undefined }) as never)
@@ -5579,8 +5606,34 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
+  test('ohne Autopilot zeigt 🅰️ weiter, was die alte Nachtschicht hält, und ein Druck schaltet sie', { plugins: [FAKE_OLD_NIGHT_SHIFT] }, async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('nachtschicht')]
+    expect(await nightShiftVariant($)).toBe('secondary')
+    await press('nightshift')
+    // The Nachtschicht answered its command itself.
+    expect(state.runs).toEqual([])
+    expect(await nightShiftVariant($)).toBe('primary')
+    await typeNightShift($, 'aus', 'nachtschicht')
+    expect(await nightShiftVariant($)).toBe('secondary')
+    await typeNightShift($, 'an', 'nachtschicht')
+    expect(await nightShiftVariant($)).toBe('primary')
+  })
+
+  test('hat der Autopilot schon geschrieben, zählt sein Wert, nicht mehr der der alten Nachtschicht', { plugins: [FAKE_AUTOPILOT, FAKE_OLD_NIGHT_SHIFT] }, async ($, on) => {
+    await skillWorld($, on)
+    await typeNightShift($, 'an', 'nachtschicht')
+    // Autopilot has written nothing yet: the Nachtschicht's run shows.
+    expect(await nightShiftVariant($)).toBe('primary')
+    await typeNightShift($, 'an')
+    expect(await nightShiftVariant($)).toBe('primary')
+    // Autopilot ended its run; the Nachtschicht's still says on, and no longer counts.
+    await typeNightShift($, 'aus')
+    expect(await nightShiftVariant($)).toBe('secondary')
+  })
+
   /**
-   * A plan that waits for Start in Gruppenarbeit, with the night shift on or off; what Leitstand sends as the
+   * A plan that waits for Start in Gruppenarbeit, with Autopilot on or off; what Leitstand sends as the
    * person's words is kept. The turn that laid it out has ended, as Claude stops to wait.
    */
   const nightPlan = async ($: Engine, on: On, isNightShift: boolean) => {
@@ -5598,8 +5651,8 @@ describe('Arbeitsweise und Grill mich', () => {
     return { clock, sent, planned }
   }
   const START_WORDS = 'Der Plan sieht gut aus. Leg bitte los.'
-  const NIGHT_NOTE = 'Die Nachtschicht startet den Plan in 30 Sekunden von selbst.'
-  /** The night shift's hint beside Start as drawn, marked when dim; none while nothing counts down. */
+  const NIGHT_NOTE = 'Der Autopilot startet den Plan in 30 Sekunden von selbst.'
+  /** Autopilot's hint beside Start as drawn, marked when dim; none while nothing counts down. */
   const nightHint = async ($: Engine, surface: (typeof SURFACES)[number]) => {
     const ui = await $.ui.mount({ ...BAND, surface })
     const found = (await ui.findAll({ type: 'Text' })).filter(one => one.text.startsWith('startet in'))
@@ -5608,7 +5661,7 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const bash = ($: Engine) => callTool($, { tool: 'Bash', command: 'ls' })
 
-  test('Nachtschicht an: ein wartender Plan startet nach 30 s von selbst, genau einmal, und Claude weiß es', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Autopilot an: ein wartender Plan startet nach 30 s von selbst, genau einmal, und Claude weiß es', WITH_AUTOPILOT, async ($, on) => {
     const { clock, sent, planned } = await nightPlan($, on, true)
     expect(String(planned.result)).toContain(`warte auf ihre Antwort. Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ${NIGHT_NOTE}`)
     expect((await bash($)).deny).toBe(`Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort. ${NIGHT_NOTE}`)
@@ -5625,12 +5678,12 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS])
   })
 
-  test('Nachtschicht nach 25 s aus: der Plan wartet weiter; wieder an, zählt sie volle 30 s', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Autopilot nach 25 s aus: der Plan wartet weiter; wieder an, zählt er volle 30 s', WITH_AUTOPILOT, async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     await clock.advance(25_000)
     await typeNightShift($, 'aus')
     expect(await nightHint($, 'desktop')).toEqual([])
-    expect((await bash($)).deny).not.toContain('Nachtschicht')
+    expect((await bash($)).deny).not.toContain('Autopilot')
     await clock.advance(60_000)
     expect(sent).toEqual([])
 
@@ -5641,7 +5694,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS])
   })
 
-  test('Plan in den 30 s mit Start freigegeben: die Nachtschicht schickt nichts dazu, auch vor seiner Runde nicht', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('Plan in den 30 s mit Start freigegeben: der Autopilot schickt nichts dazu, auch vor seiner Runde nicht', WITH_AUTOPILOT, async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     await clock.advance(10_000)
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -5657,16 +5710,16 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS])
   })
 
-  test('ohne Nachtschicht wartet der Plan auch nach 60 s auf Start, ohne Hinweis, und Claude liest nichts von ihr', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('ohne Autopilot wartet der Plan auch nach 60 s auf Start, ohne Hinweis, und Claude liest nichts von ihm', WITH_AUTOPILOT, async ($, on) => {
     const { clock, sent, planned } = await nightPlan($, on, false)
-    expect(String(planned.result)).not.toContain('Nachtschicht')
-    expect((await bash($)).deny).not.toContain('Nachtschicht')
+    expect(String(planned.result)).not.toContain('Autopilot')
+    expect((await bash($)).deny).not.toContain('Autopilot')
     for (const surface of SURFACES) expect(await nightHint($, surface)).toEqual([])
     await clock.advance(60_000)
     expect(sent).toEqual([])
   })
 
-  test('derselbe Plan, noch einmal gemeldet, startet einmal; ein anderer Plan bekommt volle 30 s', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('derselbe Plan, noch einmal gemeldet, startet einmal; ein anderer Plan bekommt volle 30 s', WITH_AUTOPILOT, async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     const same = ['Lies die Markennotizen', 'Baue die Preistabelle']
     // Laid out again while it counts: the count goes on.
@@ -5674,7 +5727,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await callTool($, { tool: PLAN, steps: same })
     await clock.advance(10_000)
     expect(sent).toEqual([START_WORDS])
-    // Again, before the start's turn begins, as the night shift's rounds bring it: nothing more.
+    // Again, before the start's turn begins, as Autopilot's rounds bring it: nothing more.
     await callTool($, { tool: PLAN, steps: same })
     await clock.advance(60_000)
     expect(sent).toEqual([START_WORDS])
@@ -5686,7 +5739,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS, START_WORDS])
   })
 
-  test('während der Chat verdichtet wird, startet die Nachtschicht den Plan nicht, gleich danach schon', WITH_NIGHT_SHIFT, async ($, on) => {
+  test('während der Chat verdichtet wird, startet der Autopilot den Plan nicht, gleich danach schon', WITH_AUTOPILOT, async ($, on) => {
     let isCompacting = false
     on('state.get', async (_, e, next) => {
       // The read comes back as { value: { value, version } }: the inner value is the one Leitstand reads.
@@ -5703,7 +5756,7 @@ describe('Arbeitsweise und Grill mich', () => {
   })
 
   for (const surface of SURFACES) {
-    test(`Nachtschicht an: neben Start steht gedimmt, in wie vielen Sekunden der Plan startet (${surface})`, WITH_NIGHT_SHIFT, async ($, on) => {
+    test(`Autopilot an: neben Start steht gedimmt, in wie vielen Sekunden der Plan startet (${surface})`, WITH_AUTOPILOT, async ($, on) => {
       const { clock } = await nightPlan($, on, true)
       expect(await nightHint($, surface)).toEqual(['startet in 30 s (gedimmt)'])
       // Right beside Start, as the row reads: in the app before it, Start staying last; on the terminal after it.
@@ -5741,9 +5794,9 @@ describe('Arbeitsweise und Grill mich', () => {
     return button === undefined ? null : { variant: button.props.variant, label: button.props.label }
   }
 
-  test('Remote Control verbunden: 🛜 steht hervorgehoben zwischen dem Strich hinter Filetree und Nachtschicht', async ($, on) => {
+  test('Remote Control verbunden: 🛜 steht hervorgehoben zwischen dem Strich hinter Filetree und Autopilot', async ($, on) => {
     const { state } = await skillWorld($, on)
-    state.commands = [remoteCommand(true), skill('nachtschicht')]
+    state.commands = [remoteCommand(true), skill('autopilot')]
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
@@ -5764,7 +5817,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).not.toBeNull()
     // The command goes away (a policy turns it off, say): the button goes with it.
-    state.commands = [skill('nachtschicht')]
+    state.commands = [skill('autopilot')]
     await endTurn($)
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
@@ -5888,7 +5941,7 @@ describe('Arbeitsweise und Grill mich', () => {
   test('weder App-Schalter noch /remote-control: kein 🛜', async ($, on) => {
     const { state } = await skillWorld($, on)
     state.app = 'unavailable'
-    state.commands = [skill('nachtschicht')]
+    state.commands = [skill('autopilot')]
     await endTurn($)
     expect(await remoteButton($)).toBeNull()
     state.app = null

@@ -1,0 +1,1 @@
+{ "description": "Die Hooks des Autopiloten", "modules": ["./register.tsx"] }

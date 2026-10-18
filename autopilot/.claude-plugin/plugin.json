@@ -1,0 +1,18 @@
+{
+  "name": "autopilot",
+  "version": "0.2.0",
+  "description": "Autopilot: Claude arbeitet ohne Rueckfragen weiter, waehrend du weg bist. Fragen entscheidet es selbst, eine Runde ohne Abschluss wird angeschoben, am Ende steht eine Uebergabe. /autopilot schaltet ihn ein und aus.",
+  "author": {
+    "name": "Björn Müller",
+    "email": "bjoern@mueller.family"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "maxRunden": {
+      "type": "number",
+      "title": "Hoechstens angeschobene Runden",
+      "description": "So oft schiebt der Autopilot Claude nach einer Runde ohne Abschluss hoechstens an, dann haelt er an. Jede Runde kostet Tokens wie eine eigene Nachricht. Eine neue Nachricht von dir setzt den Zaehler zurueck.",
+      "default": 10
+    }
+  }
+}
