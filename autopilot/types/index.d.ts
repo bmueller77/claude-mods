@@ -18,7 +18,10 @@
 export type Phase =
     /** Claude arbeitet, die Schicht schiebt nach jeder Runde ohne Abschluss an. */
     | 'laeuft'
-    /** Claude hat gemeldet, dass alles erledigt ist, was ohne die Person geht. */
+    /**
+     * Claude hat gemeldet, dass alles erledigt ist, was ohne die Person geht. Nur noch
+     * in Schichten aus Versionen vor 0.6.0: Seitdem beendet die Marke die Schicht.
+     */
     | 'fertig'
     /** Die Schicht schiebt nicht mehr an: Leerlauf, Fehler oder Ablehnung. */
     | 'angehalten'

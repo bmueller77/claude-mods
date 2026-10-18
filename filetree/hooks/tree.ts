@@ -147,7 +147,7 @@ export type Change = 'new' | 'mod' | 'del'
 
 export function parseBranch(record: string): Branch {
   const body = record.replace(/^## /, '')
-  if (body.startsWith('HEAD (no branch)')) return { head: 'detached', upstream: '', ahead: 0, behind: 0 }
+  if (body.startsWith('HEAD (no branch)')) return { head: 'HEAD losgelöst', upstream: '', ahead: 0, behind: 0 }
   const head = body.match(/^(?:No commits yet on |Initial commit on )?(.+?)(?:\.\.\.|\s|$)/)?.[1] ?? body
   const upstream = body.match(/\.\.\.(\S+)/)?.[1] ?? ''
   const ahead = Number(body.match(/ahead (\d+)/)?.[1] ?? 0)

@@ -1,7 +1,7 @@
 {
   "name": "statistik",
-  "version": "0.15.2",
-  "description": "Statistik in einer Zeile ueber dem Eingabefeld: Nutzungslimits (SL, FL bei Fable, WL), Prompt-Cache und Kontext als Ringe, Kontext-Details ueber /context (die Anzeige der App), warm oder kalt, dazu die Knoepfe Warmhalten und Compact. Ersetzt cache-meter und cache-tax.",
+  "version": "0.15.4",
+  "description": "Statistik in einer Zeile über dem Eingabefeld: Nutzungslimits (SL, FL bei Fable, WL), Prompt-Cache und Kontext als Ringe, Kontext-Details über /context (die Anzeige der App), warm oder kalt, dazu die Knöpfe Warmhalten und Compact. Ersetzt cache-meter und cache-tax.",
   "author": {
     "name": "Björn Müller",
     "email": "bjoern@mueller.family"
@@ -11,7 +11,7 @@
     "cacheLaufzeit": {
       "type": "string",
       "title": "Cache-Laufzeit",
-      "description": "auto nimmt eine Stunde an (mit Fragezeichen), bis ein Cache-Treffer nach mehr als fuenf Minuten Pause sie belegt oder die Sitzung sie selbst meldet. 5m oder 1h legt sie fest.",
+      "description": "auto nimmt eine Stunde an (mit Fragezeichen), bis ein Cache-Treffer nach mehr als fünf Minuten Pause sie belegt oder die Sitzung sie selbst meldet. 5m oder 1h legt sie fest.",
       "default": "auto",
       "options": [
         "auto",

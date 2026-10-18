@@ -267,5 +267,5 @@ test('/reflect hilfe nennt die Befehle; ein Fehler wird zu einem schlichten Satz
   for (const teil of ['/reflect [Schwerpunkt]', '/reflect zeigen', '/reflect regeln', '/reflect speichern <Nr> [global|projekt|chat]', '/reflect verwerfen <Nr>', '/reflect pruefung an|aus', '(jetzt an)', '/reflect auto an|aus', '(jetzt aus)', 'merke: <Regel>'])
     expect(text).toContain(teil)
   kaputt = true
-  expect(await befehl($, 'pruefung aus')).toBe('reflect: Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect hilfe zeigt die Befehle.')
+  expect(await befehl($, 'pruefung aus')).toBe('Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect hilfe zeigt die Befehle.')
 })

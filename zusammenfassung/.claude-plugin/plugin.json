@@ -1,7 +1,7 @@
 {
   "name": "zusammenfassung",
-  "version": "0.5.0",
-  "description": "Nach jeder Arbeitsrunde eine kurze Zusammenfassung ueber dem Eingabefeld: was getan wurde und was man leicht uebersieht. Aufklappbar mit Erklaerung und Dateiliste, dazu ein Replay der Dateiaenderungen Schritt fuer Schritt. Ersetzt zweiter-blick und replay-theater.",
+  "version": "0.5.2",
+  "description": "Nach jeder Arbeitsrunde eine kurze Zusammenfassung über dem Eingabefeld: was getan wurde und was man leicht übersieht. Aufklappbar mit Erklärung und Dateiliste, dazu ein Replay der Dateiänderungen Schritt für Schritt. Ersetzt zweiter-blick und replay-theater.",
   "author": {
     "name": "Björn Müller",
     "email": "bjoern@mueller.family"
@@ -16,8 +16,8 @@
     },
     "modell": {
       "type": "string",
-      "title": "Modell fuer die Zusammenfassung",
-      "description": "Welches Modell die Runde liest und zusammenfasst. haiku ist guenstig und reicht dafuer.",
+      "title": "Modell für die Zusammenfassung",
+      "description": "Welches Modell die Runde liest und zusammenfasst. haiku ist günstig und reicht dafür.",
       "default": "haiku"
     },
     "mindestSekunden": {

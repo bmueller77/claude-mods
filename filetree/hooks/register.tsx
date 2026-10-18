@@ -1014,7 +1014,36 @@ function shortPath(path: string): string {
   return home && inside(home, path) ? `~${path.slice(home.length)}` : path
 }
 
+const VORSATZ_NAME = 'filetree'
+const VORSATZ_LABEL = 'Filetree'
+/**
+ * Die Engine setzt vor die Antwort eines Befehls die Namen der Mods, die ihn hooken
+ * ("name1+name2: Text"). In der gespeicherten Zeile streicht dieser Mod seinen eigenen
+ * Namen und haengt stattdessen "(gemeldet vom Mod LABEL)" an: einzeilig mit Leerzeichen,
+ * mehrzeilig in einer eigenen letzten Zeile. Andere Namen bleiben stehen.
+ */
+const VORSATZ_KOPF = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+const VORSATZ_ENDE = '</local-command-stdout>'
+export function ohneVorsatz(text: string): string {
+  const m = VORSATZ_KOPF.exec(text)
+  if (!m) return text
+  const namen = (m[2] ?? '').split('+')
+  if (!namen.includes(VORSATZ_NAME)) return text
+  const rest = namen.filter(n => n !== VORSATZ_NAME)
+  let rumpf = text.slice(m[0].length)
+  const ende = rumpf.endsWith(VORSATZ_ENDE) ? VORSATZ_ENDE : ''
+  rumpf = rumpf.slice(0, rumpf.length - ende.length).replace(/\s+$/, '')
+  const zusatz = `(gemeldet vom Mod ${VORSATZ_LABEL})`
+  const trenner = rumpf === '' ? '' : rumpf.includes('\n') ? '\n' : ' '
+  return (m[1] ?? '') + (rest.length ? `${rest.join('+')}: ` : '') + rumpf + trenner + zusatz + ende
+}
+
 export const register: Register = (on, options) => {
+  on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+    const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text) } : b))
+    return next({ ...e, message: { ...e.message, content } })
+  }).catch(($, e, next) => next(e))
+
   glyphSetting = typeof options?.glyphs === 'string' ? options.glyphs : 'auto'
   const activity = typeof options?.activity === 'string' ? options.activity : 'reads and writes'
   showReads = activity.includes('reads')

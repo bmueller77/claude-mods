@@ -414,17 +414,17 @@ test('Umschrift lesen: Marken, JSON, roher Text', () => {
     expect(platzhalter(UPGRADE)).toEqual(['[Zielzeit]'])
 })
 
-test('Prompt-Texte folgen dem Guide: Warum, Fertig, Gruende statt Verbote, keine Einzelschritte, keine Extra-Pruefung', () => {
+test('Prompt-Texte folgen dem Guide: Warum, Fertig, Gruende statt Verbote, keine Einzelschritte, keine Extra-Prüfung', () => {
     const f = SYSTEM_FRAGEN.toLowerCase()
     // Rueckfragen zielen auf blinde Flecken, in der Rangfolge Warum, Fertig, Leitplanken, erst dann Format.
     expect(f).toMatch(/blinde[nm]? fleck/)
-    expect(f).toMatch(/selbstverstaendlich/)
+    expect(f).toMatch(/selbstverständlich/)
     const rang = ['warum', 'fertig', 'leitplanken', 'format'].map(w => f.indexOf(w))
     expect(rang.every(i => i >= 0)).toBe(true)
     expect(rang).toEqual([...rang].sort((x, y) => x - y))
     expect(f).toMatch(/nicht nach dem wie in einzelschritten/)
     // Unveraendert: hoechstens drei Fragen, zwei bis vier Optionen, Sprache des Prompts, JSON-Form.
-    expect(f).toMatch(/hoechstens drei/)
+    expect(f).toMatch(/höchstens drei/)
     expect(f).toMatch(/zwei bis vier/)
     expect(f).toMatch(/sprache des prompts/)
     expect(SYSTEM_FRAGEN).toContain('{"fragen":[{"frage":"...?","optionen":["...","..."]}]}')
@@ -433,23 +433,23 @@ test('Prompt-Texte folgen dem Guide: Warum, Fertig, Gruende statt Verbote, keine
     expect(u).toMatch(/ganzen auftrag als ergebnis, nicht als schrittfolge/)
     expect(u).toMatch(/keine einzelschritte/)
     // Das Warum nach Muster, mit Platzhaltern.
-    expect(u).toMatch(/warum[^.]*ich arbeite an \[[^\]]+\] fuer \[[^\]]+\]/)
+    expect(u).toMatch(/warum[^.]*ich arbeite an \[[^\]]+\] für \[[^\]]+\]/)
     // Fertig: pruefbare Bedingung, Abbruchkriterium, erst arbeiten, dann fragen.
     expect(u).toMatch(/fertig ist es, wenn/)
-    expect(u).toMatch(/pruefbar/)
+    expect(u).toMatch(/prüfbar/)
     expect(u).toMatch(/abbruchkriterium/)
-    expect(u).toMatch(/erledige zuerst die arbeit, bevor du rueckfragen stellst/)
+    expect(u).toMatch(/erledige zuerst die arbeit, bevor du rückfragen stellst/)
     // Leitplanken als Gruende statt Verbote.
     expect(u).toMatch(/leitplanken[^.]*grund statt[^.]*verbot/)
     // Kein offengelegter Gedankengang, keine Extra-Pruefschleife, keine Rollen-Tricks; Ausnahme nur bei hohem Risiko.
-    expect(u).toMatch(/lass weg[^.]*ueberlegungen offenzulegen/)
-    expect(u).toMatch(/lass weg[^.]*schritt fuer schritt zu denken/)
-    expect(u).toMatch(/lass weg[^.]*(selbstpruefung|zweiten pruefer)/)
+    expect(u).toMatch(/lass weg[^.]*überlegungen offenzulegen/)
+    expect(u).toMatch(/lass weg[^.]*schritt für schritt zu denken/)
+    expect(u).toMatch(/lass weg[^.]*(selbstprüfung|zweiten prüfer)/)
     expect(u).toMatch(/lass weg[^.]*du bist ein experte/)
-    expect(u).toMatch(/teuer[^.]*(kunden|vertraege)/)
+    expect(u).toMatch(/teuer[^.]*(kunden|verträge)/)
     // Form: hoechstens vier Absaetze in der Reihenfolge des Guides, Ausgabe mit Abdeckung.
-    expect(u).toMatch(/hoechstens vier kurze absaetze in der reihenfolge auftrag, warum, leitplanken, fertig/)
-    expect(u).toMatch(/aufzaehlungen nur fuer wirklich parallele/)
+    expect(u).toMatch(/höchstens vier kurze absätze in der reihenfolge auftrag, warum, leitplanken, fertig/)
+    expect(u).toMatch(/aufzählungen nur für wirklich parallele/)
     expect(SYSTEM_UMSCHREIBEN).toContain('<abdeckung>auftrag=ja|nein warum=ja|nein leitplanken=ja|nein fertig=ja|nein</abdeckung>')
     expect(SYSTEM_UMSCHREIBEN).toContain('<upgrade>')
     expect(SYSTEM_UMSCHREIBEN).toContain('<ergaenzt>')
@@ -560,7 +560,7 @@ test('der ganze Weg: /better, Fragen, Umschreiben, Pruefen, Ausfuehren', async (
         expect(b.geoeffnet.at(-1)).toBe(PANE)
         expect(b.modell).toHaveLength(1)
         expect(b.modell[0]!.prompt).toContain(`<prompt>\n${ORIGINAL}\n</prompt>`)
-        expect(b.modell[0]!.system).toContain('hoechstens drei Multiple-Choice-Fragen')
+        expect(b.modell[0]!.system).toContain('höchstens drei Multiple-Choice-Fragen')
 
         const ui = await zeige($, surface)
         let text = await inhalt(ui)

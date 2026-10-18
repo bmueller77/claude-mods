@@ -1355,6 +1355,36 @@ export function karte(jetzt: number, c: CacheSample | null, k: ContextSample | n
     return zeilen.join('\n')
 }
 
+/** Wie die Engine eine Befehlsantwort beginnt: die Namen der Mods, die den Befehl hooken, mit + verbunden. */
+const VORSATZ = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+/** Steht statt des Vorsatzes am Ende einer Antwort der Statistik. */
+export const GEMELDET = '(gemeldet vom Mod Statistik)'
+
+/**
+ * Die gespeicherte Zeile einer Befehlsantwort ohne `name` im Vorsatz; andere Namen bleiben stehen.
+ *
+ * Mit `gemeldet` steht am Ende, von wem die Antwort kommt: nach einer Zeile mit
+ * Leerzeichen, nach mehreren in einer eigenen letzten Zeile.
+ */
+export function ohneVorsatz(text: string, name: string, gemeldet: string | null): string {
+    const m = VORSATZ.exec(text)
+    const namen = m?.[2]?.split('+') ?? []
+    if (!m || !namen.includes(name)) {
+        return text
+    }
+    const rest = namen.filter(n => n !== name)
+    const kopf = (m[1] ?? '') + (rest.length > 0 ? `${rest.join('+')}: ` : '')
+    const rumpf = text.slice(m[0].length)
+    if (gemeldet === null) {
+        return kopf + rumpf
+    }
+    const ende = rumpf.lastIndexOf('</local-command-stdout>')
+    const innen = ende < 0 ? rumpf : rumpf.slice(0, ende)
+    const kern = innen.trimEnd()
+    const schluss = innen.slice(kern.length) + (ende < 0 ? '' : rumpf.slice(ende))
+    return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
+}
+
 export const register: Register = (on, options) => {
     z.gewaehlt = String(options.cacheLaufzeit ?? 'auto')
 
@@ -1421,7 +1451,7 @@ export const register: Register = (on, options) => {
         await $.command
             .register({
                 name: 'statistik',
-                description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Ueberblick (Statistik)',
+                description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick (Statistik)',
                 immediate: true,
             })
             .catch(() => {})
@@ -1621,6 +1651,13 @@ export const register: Register = (on, options) => {
         await chatNeu($)
         await schaerfe($)
         return r
+    }).catch(($, e, next) => next(e))
+
+    // Die Engine setzt die Namen der Mods vor jede Befehlsantwort. Dieser Mod streicht in der
+    // gespeicherten Zeile seinen und sagt stattdessen am Ende, dass die Antwort von ihm kommt.
+    on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+        const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text, 'statistik', GEMELDET) } : b))
+        return next({ ...e, message: { ...e.message, content } })
     }).catch(($, e, next) => next(e))
 
     on('command.run', { command: 'warmhalten' }, async ($, e) => {

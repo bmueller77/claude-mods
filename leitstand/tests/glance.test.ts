@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
-import { activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
+import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
 import { FACTORY_SETTINGS, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
@@ -5354,9 +5354,9 @@ describe('Arbeitsweise und Grill mich', () => {
     }
     let shown = await settingsTexts()
     // Der Abschnitt hat keine Überschrift: nur die Auswahl und die Zeile darunter.
-    expect(shown).not.toContain('Modus')
+    expect(shown.split('\n')).not.toContain('Modus')
     expect(shown).not.toContain('Arbeitsweise')
-    expect(shown).toContain('● Auto-Mode')
+    expect(shown).toContain('● Auto-Modus')
     expect(shown).toContain('Claude entscheidet selbst, ob und welche Helfer')
 
     const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
@@ -5369,11 +5369,11 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(shown).toContain('In der Gruppenarbeit wartet jeder Plan auf deine Freigabe')
 
     const auto = await $.command.run({ command: 'leitstand', args: 'arbeitsweise auto' } as never)
-    expect(String(auto.text)).toContain('Auto-Mode:')
+    expect(String(auto.text)).toContain('Auto-Modus:')
     const toggled = await $.command.run({ command: 'leitstand', args: 'arbeitsweise' } as never)
     expect(String(toggled.text)).toContain('Gruppenarbeit:')
     // Die neuen Namen nimmt der Befehl auch.
-    expect(String((await $.command.run({ command: 'leitstand', args: 'modus auto-mode' } as never)).text)).toContain('Auto-Mode:')
+    expect(String((await $.command.run({ command: 'leitstand', args: 'modus auto-mode' } as never)).text)).toContain('Auto-Modus:')
     expect(String((await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)).text)).toContain('Gruppenarbeit:')
   })
 
@@ -6520,7 +6520,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
     const asked = await $.command.run({ command: 'leitstand', args: 'arbeitsweise' } as never)
     // Ohne Wert schaltet der Befehl um: von Gruppenarbeit zurück auf Auto-Mode.
-    expect(String(asked.text)).toContain('Auto-Mode:')
+    expect(String(asked.text)).toContain('Auto-Modus:')
   })
 
   test('im Terminal hat die Leiste in keiner Breite einen Umschalter für die Arbeitsweise', async ($, on) => {
@@ -6542,7 +6542,7 @@ describe('Arbeitsweise und Grill mich', () => {
       expect(all.some(one => one.props.key === 'workmode')).toBe(false)
       await ui.unmount()
     }
-    expect((await texts($, 'desktop')).some(one => one.startsWith('Auto-Mode') || one.startsWith('Gruppenarbeit'))).toBe(false)
+    expect((await texts($, 'desktop')).some(one => one.startsWith('Auto-Modus') || one.startsWith('Gruppenarbeit'))).toBe(false)
   })
 })
 
@@ -8225,3 +8225,71 @@ describe('Einstellungen je Chat', () => {
     expect(SETTINGS_DAYS).toBe(30)
   })
 })
+
+describe('Vorsatz vor Befehlsantworten', () => {
+  const setup = (on: On) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on)
+    on('ui.toast', () => ({ value: undefined }) as never)
+  }
+  const CALM = 'Ruhemodus ist an: Nichts bewegt sich, der Status steht fett.'
+
+  test('die eigene Antwort nennt den Leitstand am Ende statt davor, die Antwort selbst bleibt ohne', async ($, on) => {
+    setup(on)
+    const sitzung = mock.session(on)
+    const result = await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    expect(result.text).toBe(CALM)
+    await append($, `<local-command-stdout>leitstand: ${CALM}</local-command-stdout>`)
+    expect(rows(sitzung)).toEqual([`<local-command-stdout>${CALM} (gemeldet vom Mod Leitstand)</local-command-stdout>`])
+  })
+
+  test('bei der eigenen Antwort bleiben die Namen anderer Mods davor stehen', async ($, on) => {
+    setup(on)
+    const sitzung = mock.session(on)
+    await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    await append($, `<local-command-stdout>leitstand+prompt-upgrade: ${CALM}</local-command-stdout>`)
+    expect(rows(sitzung)).toEqual([`<local-command-stdout>prompt-upgrade: ${CALM} (gemeldet vom Mod Leitstand)</local-command-stdout>`])
+  })
+
+  test('bei einem fremden Befehl streicht der Leitstand nur seinen Namen, ohne Herkunft', async ($, on) => {
+    setup(on)
+    const sitzung = mock.session(on)
+    await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    await append($, `<local-command-stdout>leitstand: ${CALM}</local-command-stdout>`)
+    await append($, '<local-command-stdout>leitstand+prompt-upgrade: Dein Prompt ist jetzt klarer.</local-command-stdout>')
+    await append($, '<local-command-stdout>leitstand: Fremde Antwort.</local-command-stdout>')
+    expect(rows(sitzung).slice(1)).toEqual(['<local-command-stdout>prompt-upgrade: Dein Prompt ist jetzt klarer.</local-command-stdout>', '<local-command-stdout>Fremde Antwort.</local-command-stdout>'])
+  })
+
+  test('Zeilen ohne den Namen des Leitstands bleiben, wie sie sind', async ($, on) => {
+    setup(on)
+    const sitzung = mock.session(on)
+    await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
+    const zeilen = [`<local-command-stdout>prompt-upgrade: ${CALM}</local-command-stdout>`, '<local-command-stdout>leitstandx: Text</local-command-stdout>', `<local-command-stdout>${CALM}</local-command-stdout>`]
+    for (const z of zeilen) await append($, z)
+    expect(rows(sitzung)).toEqual(zeilen)
+  })
+
+  test('nach einer mehrzeiligen Antwort steht die Herkunft in einer eigenen Zeile', () => {
+    expect(ohneVorsatz('<local-command-stdout>leitstand: Eins\nZwei</local-command-stdout>', 'leitstand', GEMELDET)).toBe('<local-command-stdout>Eins\nZwei\n(gemeldet vom Mod Leitstand)</local-command-stdout>')
+    expect(ohneVorsatz('<local-command-stdout>leitstand+autopilot: Eins</local-command-stdout>', 'leitstand', GEMELDET)).toBe('<local-command-stdout>autopilot: Eins (gemeldet vom Mod Leitstand)</local-command-stdout>')
+    expect(ohneVorsatz('<local-command-stdout>leitstand: Eins</local-command-stdout>', 'leitstand', null)).toBe('<local-command-stdout>Eins</local-command-stdout>')
+    expect(ohneVorsatz('<local-command-stdout>autopilot: Eins</local-command-stdout>', 'leitstand', GEMELDET)).toBe('<local-command-stdout>autopilot: Eins</local-command-stdout>')
+  })
+})
+
+async function append($: Engine, text: string): Promise<void> {
+  await $.session.append({
+    message: { type: 'system', name: 'local_command', content: [{ type: 'text', text }] },
+    door: 'command',
+    origin: { kind: 'engine' },
+    uuid: `befehl-${text.length}-${Math.random()}`,
+  } as never)
+}
+
+function rows(sitzung: ReturnType<typeof mock.session>): string[] {
+  return sitzung.appended().map(z => {
+    const b = z.message.content[0]
+    return typeof b?.text === 'string' ? b.text : ''
+  })
+}

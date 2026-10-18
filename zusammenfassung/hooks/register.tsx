@@ -254,7 +254,7 @@ async function schritteAus($: EngineInterface, werkzeug: string, x: Record<strin
         } catch {
             // nicht lesbar: als neue Datei zeigen
         }
-        return [{ werkzeug: 'Write', datei, diff: diff(vorher, x.content), notiz: istNeu ? 'neue Datei' : 'ueberschrieben' }]
+        return [{ werkzeug: 'Write', datei, diff: diff(vorher, x.content), notiz: istNeu ? 'neue Datei' : 'überschrieben' }]
     }
     return []
 }
@@ -467,6 +467,36 @@ async function gehe($: EngineInterface, zu: number): Promise<void> {
     await update($, index, () => Math.max(0, Math.min(zu, n - 1)))
 }
 
+/** Wie die Engine eine Befehlsantwort beginnt: die Namen der Mods, die den Befehl hooken, mit + verbunden. */
+const VORSATZ = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+/** Steht statt des Vorsatzes am Ende einer Antwort der Zusammenfassung. */
+export const GEMELDET = '(gemeldet vom Mod Zusammenfassung)'
+
+/**
+ * Die gespeicherte Zeile einer Befehlsantwort ohne `name` im Vorsatz; andere Namen bleiben stehen.
+ *
+ * Mit `gemeldet` steht am Ende, von wem die Antwort kommt: nach einer Zeile mit
+ * Leerzeichen, nach mehreren in einer eigenen letzten Zeile.
+ */
+export function ohneVorsatz(text: string, name: string, gemeldet: string | null): string {
+    const m = VORSATZ.exec(text)
+    const namen = m?.[2]?.split('+') ?? []
+    if (!m || !namen.includes(name)) {
+        return text
+    }
+    const rest = namen.filter(n => n !== name)
+    const kopf = (m[1] ?? '') + (rest.length > 0 ? `${rest.join('+')}: ` : '')
+    const rumpf = text.slice(m[0].length)
+    if (gemeldet === null) {
+        return kopf + rumpf
+    }
+    const ende = rumpf.lastIndexOf('</local-command-stdout>')
+    const innen = ende < 0 ? rumpf : rumpf.slice(0, ende)
+    const kern = innen.trimEnd()
+    const schluss = innen.slice(kern.length) + (ende < 0 ? '' : rumpf.slice(ende))
+    return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
+}
+
 export const register: Register = (on, options) => {
     const modell = String(options.modell || 'haiku')
     const mindestMs = Math.max(0, Number(options.mindestSekunden ?? 60)) * 1000
@@ -491,7 +521,7 @@ export const register: Register = (on, options) => {
         await $.command
             .register({
                 name: 'replay',
-                description: 'Die Dateiaenderungen der letzten Runde Schritt fuer Schritt zeigen (Zusammenfassung)',
+                description: 'Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen (Zusammenfassung)',
                 immediate: true,
             })
             .catch(() => {})
@@ -502,6 +532,13 @@ export const register: Register = (on, options) => {
         await raeumeChatsAuf($, sid, jetzt)
         return r
     })
+
+    // Die Engine setzt die Namen der Mods vor jede Befehlsantwort. Dieser Mod streicht in der
+    // gespeicherten Zeile seinen und sagt stattdessen am Ende, dass die Antwort von ihm kommt.
+    on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+        const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text, 'zusammenfassung', GEMELDET) } : b))
+        return next({ ...e, message: { ...e.message, content } })
+    }).catch(($, e, next) => next(e))
 
     on('command.run', { command: 'zusammenfassung' }, async $ => {
         const aus = await update($, isAus, v => !v)

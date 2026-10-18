@@ -52,14 +52,14 @@ const TAG_MS = 24 * 60 * 60_000
 const ZURUECK_NACH_MS = 50
 
 /** Was beim Abfangen als Grund erscheint: kurz, die Person sieht ja das Fenster. */
-export const GRUND_ABGEFANGEN = 'Prompt-Upgrade: liegt zum Verbessern im Seitenfenster.'
-export const TEXT_AN = 'Prompt-Upgrade: Automatik in diesem Chat an. Am Rechner getippte Prompts gehen erst ins Seitenfenster; mit > am Anfang gehen sie direkt raus.'
-export const TEXT_AUS = 'Prompt-Upgrade: Automatik in diesem Chat aus.'
-export const TEXT_OFFEN = 'Prompt-Upgrade: dein Prompt liegt im Seitenfenster.'
-export const TEXT_EINGABE = 'Prompt-Upgrade: Seitenfenster offen, tipp deinen Prompt dort ein.'
+export const GRUND_ABGEFANGEN = 'Liegt zum Verbessern im Seitenfenster.'
+export const TEXT_AN = 'Automatik in diesem Chat an. Am Rechner getippte Prompts gehen erst ins Seitenfenster; mit > am Anfang gehen sie direkt raus.'
+export const TEXT_AUS = 'Automatik in diesem Chat aus.'
+export const TEXT_OFFEN = 'Dein Prompt liegt im Seitenfenster.'
+export const TEXT_EINGABE = 'Seitenfenster offen, tipp deinen Prompt dort ein.'
 export const TEXT_HANDY = 'Prompt-Upgrade braucht das Seitenfenster am Rechner. Vom Handy aus gehen /better an, /better aus und /better verlauf. Gesendet wurde nichts.'
-export const TEXT_FEHLER = 'Prompt-Upgrade: Das hat nicht geklappt. Gesendet wurde nichts; versuch es noch einmal.'
-export const TEXT_ZU_SCHMAL = 'Prompt-Upgrade: Das Seitenfenster passt hier gerade nicht hin; dein Prompt steht wieder im Eingabefeld.'
+export const TEXT_FEHLER = 'Das hat nicht geklappt. Gesendet wurde nichts; versuch es noch einmal.'
+export const TEXT_ZU_SCHMAL = 'Das Seitenfenster passt hier gerade nicht hin; dein Prompt steht wieder im Eingabefeld.'
 
 const ablauf = atom({ plugin: 'prompt-upgrade', key: 'ablauf' } as const, null as PromptUpgradeAblauf | null)
 const verlauf = atom({ plugin: 'prompt-upgrade', key: 'verlauf' } as const, [] as PromptUpgradeEintrag[])
@@ -170,7 +170,7 @@ async function merkeVerlauf($: EngineInterface, eintrag: PromptUpgradeEintrag): 
 /** Der Verlauf als Text, fuer die Antwort auf /better verlauf. */
 export function verlaufText(liste: readonly PromptUpgradeEintrag[]): string {
     if (liste.length === 0) {
-        return 'Prompt-Upgrade: noch keine Upgrades.'
+        return 'Noch keine Upgrades.'
     }
     const zeilen = liste.map((v, i) => `${i + 1}. ${kuerze(einzeilig(v.original), 70)} → ${woerter(v.upgrade)} Wörter`)
     return `Prompt-Upgrade, die letzten ${liste.length} (neueste zuerst):\n${zeilen.join('\n')}`
@@ -426,7 +426,7 @@ async function nimmWiederAuf($: EngineInterface): Promise<void> {
     if (!offen) {
         await beende($)
         if (x.original.trim() !== '' && x.schritt !== 'eingabe') {
-            await zurueckInsFeld($, x.original, 'Prompt-Upgrade: Das Fenster war zu; dein Prompt steht wieder im Eingabefeld.')
+            await zurueckInsFeld($, x.original, 'Das Fenster war zu; dein Prompt steht wieder im Eingabefeld.')
         }
         return
     }
@@ -483,10 +483,10 @@ async function sende($: EngineInterface, text: string): Promise<void> {
     try {
         const r = await $.prompt.submit({ text, asUser: true })
         if (r.drop !== undefined) {
-            await zurueckInsFeld($, text, 'Prompt-Upgrade: Gesendet wurde nichts; der Text steht im Eingabefeld.')
+            await zurueckInsFeld($, text, 'Gesendet wurde nichts; der Text steht im Eingabefeld.')
         }
     } catch {
-        await zurueckInsFeld($, text, 'Prompt-Upgrade: Gesendet wurde nichts; der Text steht im Eingabefeld.')
+        await zurueckInsFeld($, text, 'Gesendet wurde nichts; der Text steht im Eingabefeld.')
     }
 }
 
@@ -646,7 +646,36 @@ export function leseBefehl(args: string): Befehl {
     return t === '' ? { art: 'leer' } : { art: 'prompt', text: t }
 }
 
+const VORSATZ_NAME = 'prompt-upgrade'
+const VORSATZ_LABEL = 'Prompt Upgrade'
+/**
+ * Die Engine setzt vor die Antwort eines Befehls die Namen der Mods, die ihn hooken
+ * ("name1+name2: Text"). In der gespeicherten Zeile streicht dieser Mod seinen eigenen
+ * Namen und haengt stattdessen "(gemeldet vom Mod LABEL)" an: einzeilig mit Leerzeichen,
+ * mehrzeilig in einer eigenen letzten Zeile. Andere Namen bleiben stehen.
+ */
+const VORSATZ_KOPF = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+const VORSATZ_ENDE = '</local-command-stdout>'
+export function ohneVorsatz(text: string): string {
+    const m = VORSATZ_KOPF.exec(text)
+    if (!m) return text
+    const namen = (m[2] ?? '').split('+')
+    if (!namen.includes(VORSATZ_NAME)) return text
+    const rest = namen.filter(n => n !== VORSATZ_NAME)
+    let rumpf = text.slice(m[0].length)
+    const ende = rumpf.endsWith(VORSATZ_ENDE) ? VORSATZ_ENDE : ''
+    rumpf = rumpf.slice(0, rumpf.length - ende.length).replace(/\s+$/, '')
+    const zusatz = `(gemeldet vom Mod ${VORSATZ_LABEL})`
+    const trenner = rumpf === '' ? '' : rumpf.includes('\n') ? '\n' : ' '
+    return (m[1] ?? '') + (rest.length ? `${rest.join('+')}: ` : '') + rumpf + trenner + zusatz + ende
+}
+
 export const register: Register = (on, options) => {
+    on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+        const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text) } : b))
+        return next({ ...e, message: { ...e.message, content } })
+    }).catch(($, e, next) => next(e))
+
     einstellungen.modell = typeof options.modell === 'string' && options.modell.trim() !== '' ? options.modell.trim() : 'haiku'
     einstellungen.automatik = options.automatik === true
 
@@ -659,7 +688,7 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
         } catch (err) {
-            $.ui.log(`Prompt-Upgrade: /better liess sich nicht anmelden: ${fehlerText(err)}`, { to: 'debug' })
+            $.ui.log(`Prompt-Upgrade: /better ließ sich nicht anmelden: ${fehlerText(err)}`, { to: 'debug' })
         }
         try {
             const liste = await ladeVerlauf($)

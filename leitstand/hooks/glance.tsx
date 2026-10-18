@@ -172,7 +172,7 @@ const VAULT = '\u{1F6E1}\uFE0F'
 /** Remote Control, as a wireless sign: highlighted while connected. */
 const REMOTE = '\u{1F6DC}'
 /** The two work modes, as the person reads them. */
-const WORK_MODE_WORDS: Record<WorkMode, string> = { auto: 'Auto-Mode', dynamisch: 'Gruppenarbeit' }
+const WORK_MODE_WORDS: Record<WorkMode, string> = { auto: 'Auto-Modus', dynamisch: 'Gruppenarbeit' }
 /** The work mode on its button: one person while Claude decides alone, two for the team. */
 const WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F464}', dynamisch: '\u{1F465}' }
 const HANDOFF_KEY = 'lastHandoff'
@@ -355,6 +355,8 @@ let isRefreshing = false
 let failuresInARow = 0
 // A message held back for a password: memory only, never stored, and only to let the same one through on a resend.
 let heldMessage: { text: string; at: number } | null = null
+// The text of the last answer to /leitstand, until its stored row has passed session.append.
+let lastOwnAnswer: string | null = null
 // The secrets the shield just moved into the .env, until its tidy-up is over: a compaction of the main chat in that time
 // has their values replaced in what it leaves. Memory only; it lapses at `until` should the run never end.
 let pendingVault: { secrets: readonly Secret[]; until: number } | null = null
@@ -2081,6 +2083,41 @@ const splitSharedDays = async ($: $) => {
   }
 }
 
+/** Wie die Engine eine Befehlsantwort beginnt: die Namen der Mods, die den Befehl hooken, mit + verbunden. */
+const VORSATZ = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+/** Steht statt des Vorsatzes am Ende einer Antwort des Leitstands. */
+export const GEMELDET = '(gemeldet vom Mod Leitstand)'
+
+/**
+ * Die gespeicherte Zeile einer Befehlsantwort ohne `name` im Vorsatz; andere Namen bleiben stehen.
+ *
+ * Mit `gemeldet` steht am Ende, von wem die Antwort kommt: nach einer Zeile mit
+ * Leerzeichen, nach mehreren in einer eigenen letzten Zeile.
+ */
+export function ohneVorsatz(text: string, name: string, gemeldet: string | null): string {
+  const m = VORSATZ.exec(text)
+  const namen = m?.[2]?.split('+') ?? []
+  if (!m || !namen.includes(name)) {
+    return text
+  }
+  const rest = namen.filter(n => n !== name)
+  const kopf = (m[1] ?? '') + (rest.length > 0 ? `${rest.join('+')}: ` : '')
+  const rumpf = text.slice(m[0].length)
+  if (gemeldet === null) {
+    return kopf + rumpf
+  }
+  const ende = rumpf.lastIndexOf('</local-command-stdout>')
+  const innen = ende < 0 ? rumpf : rumpf.slice(0, ende)
+  const kern = innen.trimEnd()
+  const schluss = innen.slice(kern.length) + (ende < 0 ? '' : rumpf.slice(ende))
+  return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
+}
+
+/** What a stored command row says, without the plugin names before it and the frame around it. */
+function answerOf(text: string): string {
+  return text.replace(VORSATZ, '').replace(/<\/local-command-stdout>\s*$/, '').trim()
+}
+
 export function registerGlance(on: On, options: PluginOptions = {}): void {
   // What a new chat starts with; a change in the config menu reloads the module with the new values.
   defaults = defaultSettings(options)
@@ -2209,186 +2246,205 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   })
 
   on('command.run', { command: ['leitstand'] }, async ($, e) => {
-    const arg = e.args.trim().toLowerCase()
-    if (arg.startsWith('arbeitsweise') || arg.startsWith('modus')) {
-      const choice = arg.replace(/^(arbeitsweise|modus)/, '').trim()
-      const current = await read($, workModeAtom)
-      const mode: WorkMode =
-        choice === 'dynamisch' || choice === 'gruppenarbeit'
-          ? 'dynamisch'
-          : choice === 'auto' || choice === 'auto-mode'
-            ? 'auto'
-            : current === 'auto'
-              ? 'dynamisch'
-              : 'auto'
-      await setWorkMode($, mode)
-      return {
-        text:
-          mode === 'dynamisch'
-            ? 'Gruppenarbeit: Claude plant und prüft, Arbeiter in sechs Stufen von Haiku bis Fable setzen um. Jeder Plan wartet auf deine Freigabe.'
-            : 'Auto-Mode: Claude entscheidet selbst, ob und welche Helfer es einsetzt.',
+    const answer = await (async () => {
+      const arg = e.args.trim().toLowerCase()
+      if (arg.startsWith('arbeitsweise') || arg.startsWith('modus')) {
+        const choice = arg.replace(/^(arbeitsweise|modus)/, '').trim()
+        const current = await read($, workModeAtom)
+        const mode: WorkMode =
+          choice === 'dynamisch' || choice === 'gruppenarbeit'
+            ? 'dynamisch'
+            : choice === 'auto' || choice === 'auto-mode' || choice === 'auto-modus'
+              ? 'auto'
+              : current === 'auto'
+                ? 'dynamisch'
+                : 'auto'
+        await setWorkMode($, mode)
+        return {
+          text:
+            mode === 'dynamisch'
+              ? 'Gruppenarbeit: Claude plant und prüft, Arbeiter in sechs Stufen von Haiku bis Fable setzen um. Jeder Plan wartet auf deine Freigabe.'
+              : 'Auto-Modus: Claude entscheidet selbst, ob und welche Helfer es einsetzt.',
+        }
       }
-    }
-    if (arg.startsWith('sound')) {
-      const choice = arg.slice('sound'.length).trim()
-      const current = await read($, soundAtom)
-      const mode = choice === 'voice' ? 'voice' : choice === 'off' ? 'off' : choice === 'on' || current === 'off' ? 'chime' : 'off'
-      await setSound($, mode)
-      return {
-        text:
-          mode === 'off'
-            ? 'Töne sind aus.'
-            : mode === 'voice'
-              ? 'Töne und Stimme sind an: Du hörst, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.'
-              : 'Töne sind an: ein Signalton, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.',
+      if (arg.startsWith('sound')) {
+        const choice = arg.slice('sound'.length).trim()
+        const current = await read($, soundAtom)
+        const mode = choice === 'voice' ? 'voice' : choice === 'off' ? 'off' : choice === 'on' || current === 'off' ? 'chime' : 'off'
+        await setSound($, mode)
+        return {
+          text:
+            mode === 'off'
+              ? 'Töne sind aus.'
+              : mode === 'voice'
+                ? 'Töne und Stimme sind an: Du hörst, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.'
+                : 'Töne sind an: ein Signalton, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.',
+        }
       }
-    }
-    if (arg.startsWith('calm')) {
-      const choice = arg.slice('calm'.length).trim()
-      await setCalm($, toggled(choice, await read($, calmAtom)))
-      return { text: isCalmMode ? 'Ruhemodus ist an: Nichts bewegt sich, der Status steht fett.' : 'Ruhemodus ist aus.' }
-    }
-    if (arg.startsWith('guard')) {
-      const choice = arg.slice('guard'.length).trim()
-      const isOn = toggled(choice, await read($, guardAtom))
-      await setGuard($, isOn)
-      return {
-        text: isOn
-          ? 'Der Passwortschutz ist an: Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten.'
-          : 'Der Passwortschutz ist aus: Jede Nachricht wird so gesendet, wie du sie schreibst.',
+      if (arg.startsWith('calm')) {
+        const choice = arg.slice('calm'.length).trim()
+        await setCalm($, toggled(choice, await read($, calmAtom)))
+        return { text: isCalmMode ? 'Ruhemodus ist an: Nichts bewegt sich, der Status steht fett.' : 'Ruhemodus ist aus.' }
       }
-    }
-    if (arg.startsWith('privacy')) {
-      const isOn = toggled(arg.slice('privacy'.length).trim(), await read($, maskAtom))
-      await setMasking($, isOn)
-      return { text: isOn ? MASKING_WORDS.on : MASKING_WORDS.off }
-    }
-    if (arg === 'tour') {
-      await update($, enabledAtom, () => true)
-      await update($, tourAtom, () => 0)
-      return { text: 'Die Begrüßung steht über dem Eingabefeld: Drück Weiter, um sie durchzugehen.' }
-    }
-    if (arg.startsWith('notify')) {
-      const choice = arg.slice('notify'.length).trim()
-      const isOn = toggled(choice, await read($, noticeAtom))
-      await setNotice($, isOn)
-      return {
-        text: isOn
-          ? 'Desktop-Benachrichtigungen sind an: Dein Computer sagt dir Bescheid, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.'
-          : 'Desktop-Benachrichtigungen sind aus.',
+      if (arg.startsWith('guard')) {
+        const choice = arg.slice('guard'.length).trim()
+        const isOn = toggled(choice, await read($, guardAtom))
+        await setGuard($, isOn)
+        return {
+          text: isOn
+            ? 'Der Passwortschutz ist an: Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten.'
+            : 'Der Passwortschutz ist aus: Jede Nachricht wird so gesendet, wie du sie schreibst.',
+        }
       }
-    }
-    if (arg.startsWith('others')) {
-      const isOn = toggled(arg.slice('others'.length).trim(), await read($, showsOthersAtom))
-      await setOthers($, isOn)
-      return { text: isOn ? 'Die Leiste nennt einen anderen Chat auf diesem Computer, der dich braucht.' : 'Die Leiste erwähnt keine anderen Chats mehr.' }
-    }
-    if (arg.startsWith('approve')) {
-      const choice = arg.slice('approve'.length).trim()
-      const isOn = toggled(choice, await read($, approveAtom))
-      await setApprove($, isOn)
-      return {
-        text: isOn
-          ? 'Claude zeigt jetzt erst seinen Plan und wartet: Drück Start oder sag Claude, was sich ändern soll.'
-          : 'Claude legt direkt los, sobald der Plan steht.',
+      if (arg.startsWith('privacy')) {
+        const isOn = toggled(arg.slice('privacy'.length).trim(), await read($, maskAtom))
+        await setMasking($, isOn)
+        return { text: isOn ? MASKING_WORDS.on : MASKING_WORDS.off }
       }
-    }
-    if (arg.startsWith('ship')) {
-      const choice = arg.slice('ship'.length).trim()
-      if (choice === '') {
-        void shipIt($)
-        return { text: 'Liefere auf GitHub aus…' }
+      if (arg === 'tour') {
+        await update($, enabledAtom, () => true)
+        await update($, tourAtom, () => 0)
+        return { text: 'Die Begrüßung steht über dem Eingabefeld: Drück Weiter, um sie durchzugehen.' }
       }
-      const isOn = toggled(choice, await read($, shipOnGithubAtom))
-      await setShipOnGithub($, isOn)
-      return {
-        text: isOn
-          ? 'Ein fertiger Auftrag bietet jetzt den Knopf Push an: Commit, Pull Request und Merge, sobald du freigibst.'
-          : 'Auf GitHub abschließen ist aus. Fertige Aufträge bleiben auf ihrem Branch.',
+      if (arg.startsWith('notify')) {
+        const choice = arg.slice('notify'.length).trim()
+        const isOn = toggled(choice, await read($, noticeAtom))
+        await setNotice($, isOn)
+        return {
+          text: isOn
+            ? 'Desktop-Benachrichtigungen sind an: Dein Computer sagt dir Bescheid, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.'
+            : 'Desktop-Benachrichtigungen sind aus.',
+        }
       }
-    }
-    if (arg === 'week') {
-      const opened = await showHistory($, dayKey(await now($)), true)
-      const view = await read($, historyAtom)
-      if (view === null) return { text: 'Noch kein Verlauf.' }
-      await showReportSpan($, 'mine')
-      const summary = weekSummary(view.myWeekEntries, view.day).split('\n')
+      if (arg.startsWith('others')) {
+        const isOn = toggled(arg.slice('others'.length).trim(), await read($, showsOthersAtom))
+        await setOthers($, isOn)
+        return { text: isOn ? 'Die Leiste nennt einen anderen Chat auf diesem Computer, der dich braucht.' : 'Die Leiste erwähnt keine anderen Chats mehr.' }
+      }
+      if (arg.startsWith('approve')) {
+        const choice = arg.slice('approve'.length).trim()
+        const isOn = toggled(choice, await read($, approveAtom))
+        await setApprove($, isOn)
+        return {
+          text: isOn
+            ? 'Claude zeigt jetzt erst seinen Plan und wartet: Drück Start oder sag Claude, was sich ändern soll.'
+            : 'Claude legt direkt los, sobald der Plan steht.',
+        }
+      }
+      if (arg.startsWith('ship')) {
+        const choice = arg.slice('ship'.length).trim()
+        if (choice === '') {
+          void shipIt($)
+          return { text: 'Liefere auf GitHub aus…' }
+        }
+        const isOn = toggled(choice, await read($, shipOnGithubAtom))
+        await setShipOnGithub($, isOn)
+        return {
+          text: isOn
+            ? 'Ein fertiger Auftrag bietet jetzt den Knopf Push an: Commit, Pull Request und Merge, sobald du freigibst.'
+            : 'Auf GitHub abschließen ist aus. Fertige Aufträge bleiben auf ihrem Branch.',
+        }
+      }
+      if (arg === 'week') {
+        const opened = await showHistory($, dayKey(await now($)), true)
+        const view = await read($, historyAtom)
+        if (view === null) return { text: 'Noch kein Verlauf.' }
+        await showReportSpan($, 'mine')
+        const summary = weekSummary(view.myWeekEntries, view.day).split('\n')
 
-      return { text: opened?.isPlaced ? summary[2] ?? summary[0]! : summary.join('\n') }
-    }
-    if (arg.startsWith('history')) {
-      const day = dayFromArgument(arg.slice('history'.length), await now($))
-      if (day === null) {
-        return { text: 'Versuch /leitstand history, /leitstand history gestern oder /leitstand history 2026-10-06.' }
+        return { text: opened?.isPlaced ? summary[2] ?? summary[0]! : summary.join('\n') }
       }
-      const opened = await showHistory($, day, true)
-      const entries = (await read($, historyAtom))?.entries ?? []
-      const count = `${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}`
+      if (arg.startsWith('history')) {
+        const day = dayFromArgument(arg.slice('history'.length), await now($))
+        if (day === null) {
+          return { text: 'Versuch /leitstand history, /leitstand history gestern oder /leitstand history 2026-10-06.' }
+        }
+        const opened = await showHistory($, day, true)
+        const entries = (await read($, historyAtom))?.entries ?? []
+        const count = `${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}`
 
-      return {
-        text: opened?.isPlaced
-          ? `Verlauf für ${germanDay(day)}: ${count}.`
-          : `Verlauf für ${germanDay(day)}: ${count}. Mach das Fenster breiter, um die Seitenleiste zu sehen.`,
+        return {
+          text: opened?.isPlaced
+            ? `Verlauf für ${germanDay(day)}: ${count}.`
+            : `Verlauf für ${germanDay(day)}: ${count}. Mach das Fenster breiter, um die Seitenleiste zu sehen.`,
+        }
       }
-    }
-    if (arg === 'pause') {
-      await pauseJob($)
-      return { text: 'Pausiert.' }
-    }
-    if (arg.startsWith('tidy')) {
-      const choice = arg.slice('tidy'.length).trim().replace(/^at\s+/, '').replace('%', '')
-      if (choice === '') {
-        void tidyUp($)
-        return { text: 'Speichere einen Sicherungspunkt und räume dann den Chat auf.' }
+      if (arg === 'pause') {
+        await pauseJob($)
+        return { text: 'Pausiert.' }
       }
-      return {
-        text: 'Wie voll der Chat ist, zeigt jetzt der Statistik-Mod, und sein Schwamm räumt auf. /leitstand tidy räumt sofort auf, mit Sicherungspunkt.',
+      if (arg.startsWith('tidy')) {
+        const choice = arg.slice('tidy'.length).trim().replace(/^at\s+/, '').replace('%', '')
+        if (choice === '') {
+          void tidyUp($)
+          return { text: 'Speichere einen Sicherungspunkt und räume dann den Chat auf.' }
+        }
+        return {
+          text: 'Wie voll der Chat ist, zeigt jetzt der Statistik-Mod, und sein Schwamm räumt auf. /leitstand tidy räumt sofort auf, mit Sicherungspunkt.',
+        }
       }
-    }
-    if (arg === 'settings') {
-      await showSettings($)
-      return { text: 'Die Einstellungen sind in der Seitenleiste.' }
-    }
-    if (arg === 'checkpoint') {
-      if ((await checkpointOf($).catch(() => null)) === null) return { text: 'In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.' }
-      await showRecap($)
-      return { text: 'Der letzte Stand ist in der Seitenleiste.' }
-    }
-    if (arg === 'plan') {
-      await showPlan($)
-      return { text: 'Der Plan ist in der Seitenleiste.' }
-    }
-    if (arg === 'continue') {
-      void continueJob($)
-      return { text: 'Mache weiter…' }
-    }
-    if (arg === 'handoff note') {
-      const saved = (await $.store.get(HANDOFF_KEY)) as { note?: string } | undefined
-      if (!saved?.note) return { text: 'Noch keine Übergabenotiz gespeichert.' }
-      // The phone (Remote Control) shows no prompt box: there the note is the command's answer.
-      if (e.origin.kind === 'bridge') return { text: saved.note }
-      await $.prompt.fill({ text: saved.note })
-      return { text: 'Die letzte Übergabenotiz steht im Eingabefeld.' }
-    }
-    if (arg === 'handoff') {
-      void startFreshChat($)
-      // On the phone neither the toasts nor the prompt box show where the note went should sending it fail.
-      return {
-        text: `Starte einen neuen Chat mit Übergabenotiz…${e.origin.kind === 'bridge' ? ' Kommt danach nichts, schreib /leitstand handoff note.' : ''}`,
+      if (arg === 'settings') {
+        await showSettings($)
+        return { text: 'Die Einstellungen sind in der Seitenleiste.' }
       }
-    }
-    if (arg.startsWith('details')) {
-      const choice = arg.slice('details'.length).trim()
-      const isDetailed = toggled(choice, (await read($, detailAtom)) === 'detailed')
-      await setDetail($, isDetailed)
+      if (arg === 'checkpoint') {
+        if ((await checkpointOf($).catch(() => null)) === null) return { text: 'In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.' }
+        await showRecap($)
+        return { text: 'Der letzte Stand ist in der Seitenleiste.' }
+      }
+      if (arg === 'plan') {
+        await showPlan($)
+        return { text: 'Der Plan ist in der Seitenleiste.' }
+      }
+      if (arg === 'continue') {
+        void continueJob($)
+        return { text: 'Mache weiter…' }
+      }
+      if (arg === 'handoff note') {
+        const saved = (await $.store.get(HANDOFF_KEY)) as { note?: string } | undefined
+        if (!saved?.note) return { text: 'Noch keine Übergabenotiz gespeichert.' }
+        // The phone (Remote Control) shows no prompt box: there the note is the command's answer.
+        if (e.origin.kind === 'bridge') return { text: saved.note }
+        await $.prompt.fill({ text: saved.note })
+        return { text: 'Die letzte Übergabenotiz steht im Eingabefeld.' }
+      }
+      if (arg === 'handoff') {
+        void startFreshChat($)
+        // On the phone neither the toasts nor the prompt box show where the note went should sending it fail.
+        return {
+          text: `Starte einen neuen Chat mit Übergabenotiz…${e.origin.kind === 'bridge' ? ' Kommt danach nichts, schreib /leitstand handoff note.' : ''}`,
+        }
+      }
+      if (arg.startsWith('details')) {
+        const choice = arg.slice('details'.length).trim()
+        const isDetailed = toggled(choice, (await read($, detailAtom)) === 'detailed')
+        await setDetail($, isDetailed)
 
-      return { text: isDetailed ? 'Leitstand-Details sind an.' : 'Leitstand-Details sind aus.' }
-    }
-    const isEnabled = toggled(arg, await read($, enabledAtom))
-    await setEnabled($, isEnabled)
+        return { text: isDetailed ? 'Leitstand-Details sind an.' : 'Leitstand-Details sind aus.' }
+      }
+      const isEnabled = toggled(arg, await read($, enabledAtom))
+      await setEnabled($, isEnabled)
 
-    return { text: isEnabled ? 'Der Leitstand ist an.' : 'Der Leitstand ist aus.' }
+      return { text: isEnabled ? 'Der Leitstand ist an.' : 'Der Leitstand ist aus.' }
+    })()
+    // Only this answer gets "(gemeldet vom Mod Leitstand)" in its stored row (session.append below).
+    lastOwnAnswer = answer.text
+    return answer
   })
+
+  // The engine puts the names of the plugins hooking a command before its answer. The Leitstand takes its own out of the
+  // stored row and, below its own answer, says where it came from. Its hook on every command (passwords from the phone)
+  // makes it a party to the commands of other mods too: there it only takes its name out.
+  on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+    const own = lastOwnAnswer
+    const content = e.message.content.map(b => {
+      if (b.type !== 'text' || typeof b.text !== 'string') return b
+      const isOwn = own !== null && answerOf(b.text) === own.trim()
+      if (isOwn) lastOwnAnswer = null
+      return { ...b, text: ohneVorsatz(b.text, PLUGIN, isOwn ? GEMELDET : null) }
+    })
+    return next({ ...e, message: { ...e.message, content } })
+  }).catch(($, e, next) => next(e))
 
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)

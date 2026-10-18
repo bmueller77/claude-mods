@@ -23,9 +23,18 @@ const FEHLER_PAUSE_MS = 60_000
  * Runde fest, solange er laeuft; abschicken geht erst, wenn er durch ist.
  */
 const START_PAUSE_MS = 1000
+/**
+ * So lange darf ein eingereichter Anstoss warten, waehrend keine Runde laeuft,
+ * bevor er als verloren gilt (etwa aus der Schlange genommen). Gezaehlt wird nur
+ * die Ruhe: Waehrend eine Runde laeuft, kann er nicht beginnen, und die Uhr steht.
+ */
+const AUSSTEHEND_VERFALL_MS = 10 * 60_000
 
 /** Der Grund im Bericht, wenn die Person den Autopiloten mit 🅰️ im Leitstand beendet hat. */
 export const GRUND_KNOPF = 'du hast ihn über 🅰️ beendet'
+
+/** Der Grund im Bericht, wenn Claude mit der Marke meldet, dass alles erledigt ist. */
+export const GRUND_FERTIG = 'Claude meldet: alles erledigt'
 
 /** Der Grund im Bericht, wenn der Autopilot so oft angeschoben hat, wie maxRunden erlaubt. */
 export const GRUND_GRENZE = 'Rundengrenze'
@@ -55,12 +64,12 @@ const bericht = atom({ plugin: 'autopilot', key: 'bericht' } as const, null as B
 const zeigeFragen = atom({ plugin: 'autopilot', key: 'zeigeFragen' } as const, false)
 
 const REGELN =
-    'Stell keine Rueckfragen, weder mit einem Werkzeug noch am Ende deiner Antwort. ' +
-    'Wo du eine Entscheidung brauchst, triff sie selbst: nimm die Option, die du empfehlen wuerdest, ' +
-    'bei Zweifeln die vorsichtigere, die sich leicht rueckgaengig machen laesst, und halte sie in einem Satz fest. ' +
-    'Nichts Unumkehrbares, das die Person nicht vorher ausdruecklich verlangt hat: nichts loeschen, ' +
-    'veroeffentlichen, verschicken oder pushen. Was nur mit der Person geht, laesst du liegen und schreibst es auf. ' +
-    'Wenn alles erledigt ist, was ohne die Person geht, schreib eine kurze Uebergabe ' +
+    'Stell keine Rückfragen, weder mit einem Werkzeug noch am Ende deiner Antwort. ' +
+    'Wo du eine Entscheidung brauchst, triff sie selbst: Nimm die Option, die du empfehlen würdest, ' +
+    'bei Zweifeln die vorsichtigere, die sich leicht rückgängig machen lässt, und halte sie in einem Satz fest. ' +
+    'Nichts Unumkehrbares, das die Person nicht vorher ausdrücklich verlangt hat: nichts löschen, ' +
+    'veröffentlichen, verschicken oder pushen. Was nur mit der Person geht, lässt du liegen und schreibst es auf. ' +
+    'Wenn alles erledigt ist, was ohne die Person geht, schreib eine kurze Übergabe ' +
     '(was fertig ist, was du selbst entschieden hast, was liegen blieb) ' +
     `und als letzte Zeile ${FERTIG}.`
 
@@ -75,7 +84,7 @@ export const WEITER =
 /** Was Claude liest, wenn es waehrend der Schicht eine Rueckfrage stellen will. */
 export const FRAGE_ABGELEHNT =
     'Autopilot: Die Person ist nicht am Platz und kann nicht antworten. ' +
-    'Entscheide diese Frage selbst (die Option, die du empfehlen wuerdest, bei Zweifeln die vorsichtigere), ' +
+    'Entscheide diese Frage selbst (die Option, die du empfehlen würdest, bei Zweifeln die vorsichtigere), ' +
     'halte die Entscheidung in einem Satz fest und arbeite weiter.'
 
 /**
@@ -107,8 +116,8 @@ function zahlen(geschoben: number, fragen: number): string {
 }
 
 const STATUS: Record<Phase, string> = {
-    laeuft: 'Claude arbeitet ohne Rueckfragen weiter',
-    fertig: 'Claude meldet fertig. Ein neuer Auftrag laeuft wieder ohne Rueckfragen.',
+    laeuft: 'Claude arbeitet ohne Rückfragen weiter',
+    fertig: 'Claude meldet: alles erledigt',
     angehalten: 'angehalten',
 }
 
@@ -117,8 +126,12 @@ const STATUS: Record<Phase, string> = {
 
 /** Hoechstens so oft schiebt die Schicht an, bis die Person wieder schreibt (userConfig). */
 let maxRunden = 10
-/** Ob gerade eine Runde der Hauptschleife laeuft. */
-let laeuft = false
+/** Die Runde der Hauptschleife, die gerade laeuft (von turn.start bis zu ihrem turn.complete); null, wenn keine. */
+let laufend: string | null = null
+/** Ob ein Anstoss eingereicht ist, dessen Runde noch nicht begonnen hat: Er wartet in der Schlange. */
+let ausstehend = false
+/** Laesst `ausstehend` verfallen, wenn der Anstoss in der Ruhe nicht beginnt; null, solange die Uhr steht. */
+let verfall: { cancel: () => void } | null = null
 /** Ob es in dieser Sitzung schon eine Runde gab, an die eine neue Schicht anschliessen kann. */
 let hatRunde = false
 /** Werkzeugaufrufe der laufenden Runde. */
@@ -133,6 +146,25 @@ let hintergrund: number | null = null
 let fehler = 0
 /** Das Anschieben nach einem API-Fehler, solange es noch wartet. */
 let warte: { cancel: () => void } | null = null
+
+function verfallStoppen(): void {
+    verfall?.cancel()
+    verfall = null
+}
+
+/** Startet die Uhr fuer den wartenden Anstoss neu: Ab jetzt ist Ruhe, er sollte gleich beginnen. */
+function verfallStellen($: EngineInterface): void {
+    verfallStoppen()
+    verfall = $.clock.after(AUSSTEHEND_VERFALL_MS, () => {
+        verfall = null
+        ausstehend = false
+    })
+}
+
+function ausstehendLoeschen(): void {
+    ausstehend = false
+    verfallStoppen()
+}
 
 function zaehlerAuf0(): void {
     fehler = 0
@@ -156,6 +188,12 @@ async function sollAus($: EngineInterface, s: Schicht): Promise<boolean> {
 }
 
 async function anschieben($: EngineInterface): Promise<void> {
+    // Hoechstens ein Anstoss unterwegs, und keiner, waehrend schon eine Runde laeuft: deren Ende entscheidet.
+    if (laufend !== null || ausstehend) {
+        return
+    }
+    ausstehend = true
+    verfallStellen($)
     // Die Markierung setzt anschieben selbst, vor dem Einreichen: Den eigenen
     // $.prompt.submit sieht der prompt.submit-Hook dieses Mods nie (Re-entry-Regel,
     // reference.md: er wird unter den Frames des aufrufenden Hooks erhoben). Darum
@@ -163,7 +201,9 @@ async function anschieben($: EngineInterface): Promise<void> {
     await update($, schicht, s =>
         s ? { ...s, geschoben: s.geschoben + 1, runden: (s.runden ?? 0) + 1, angeschoben: true } : s,
     )
-    void $.prompt.submit({ text: WEITER }).catch(() => {})
+    void $.prompt.submit({ text: WEITER }).catch(() => {
+        ausstehendLoeschen()
+    })
 }
 
 /**
@@ -209,7 +249,7 @@ async function anhalten($: EngineInterface, phase: Phase, grund: string): Promis
 async function anschiebenWennNoetig($: EngineInterface): Promise<void> {
     warte = null
     const s = await read($, schicht)
-    if (s?.phase === 'laeuft' && !laeuft) {
+    if (s?.phase === 'laeuft' && laufend === null && !ausstehend) {
         // Kam in der Pause 🅰️ im Leitstand, endet die Schicht, statt anzuschieben.
         if (await sollAus($, s)) {
             await beenden($, GRUND_KNOPF)
@@ -233,7 +273,7 @@ function spaeterAnschieben($: EngineInterface, ms: number): void {
  * Claude vermutlich auf eine Antwort. Dann geht es gleich weiter; true.
  */
 function gleichWeiter($: EngineInterface): boolean {
-    if (hatRunde && !laeuft) {
+    if (hatRunde && laufend === null) {
         spaeterAnschieben($, START_PAUSE_MS)
         return true
     }
@@ -243,6 +283,7 @@ function gleichWeiter($: EngineInterface): boolean {
 /** Startet eine Schicht; true, wenn Claude gleich weitermacht. */
 async function beginnen($: EngineInterface): Promise<boolean> {
     zaehlerAuf0()
+    ausstehendLoeschen()
     const seit = await $.clock.now()
     await update($, bericht, () => null)
     await update($, zeigeFragen, () => false)
@@ -253,6 +294,7 @@ async function beginnen($: EngineInterface): Promise<boolean> {
 /** Laesst eine angehaltene oder fertige Schicht weiterlaufen; true, wenn Claude gleich weitermacht. */
 async function fortsetzen($: EngineInterface): Promise<boolean> {
     zaehlerAuf0()
+    ausstehendLoeschen()
     await update($, schicht, s =>
         s ? { ...s, phase: 'laeuft' as const, grund: null, runden: 0, angeschoben: false, leerlauf: 0 } : s,
     )
@@ -282,6 +324,36 @@ async function berichtWeg($: EngineInterface): Promise<void> {
     await update($, bericht, () => null)
 }
 
+/** Wie die Engine eine Befehlsantwort beginnt: die Namen der Mods, die den Befehl hooken, mit + verbunden. */
+const VORSATZ = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+/** Steht statt des Vorsatzes am Ende einer Antwort des Autopiloten. */
+export const GEMELDET = '(gemeldet vom Mod Autopilot)'
+
+/**
+ * Die gespeicherte Zeile einer Befehlsantwort ohne `name` im Vorsatz; andere Namen bleiben stehen.
+ *
+ * Mit `gemeldet` steht am Ende, von wem die Antwort kommt: nach einer Zeile mit
+ * Leerzeichen, nach mehreren in einer eigenen letzten Zeile.
+ */
+export function ohneVorsatz(text: string, name: string, gemeldet: string | null): string {
+    const m = VORSATZ.exec(text)
+    const namen = m?.[2]?.split('+') ?? []
+    if (!m || !namen.includes(name)) {
+        return text
+    }
+    const rest = namen.filter(n => n !== name)
+    const kopf = (m[1] ?? '') + (rest.length > 0 ? `${rest.join('+')}: ` : '')
+    const rumpf = text.slice(m[0].length)
+    if (gemeldet === null) {
+        return kopf + rumpf
+    }
+    const ende = rumpf.lastIndexOf('</local-command-stdout>')
+    const innen = ende < 0 ? rumpf : rumpf.slice(0, ende)
+    const kern = innen.trimEnd()
+    const schluss = innen.slice(kern.length) + (ende < 0 ? '' : rumpf.slice(ende))
+    return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
+}
+
 export const register: Register = (on, options) => {
     maxRunden = Math.max(1, Math.floor(Number(options.maxRunden ?? 10)))
 
@@ -293,13 +365,20 @@ export const register: Register = (on, options) => {
         await $.command
             .register({
                 name: 'autopilot',
-                description: 'Autopilot ein- oder ausschalten: Claude arbeitet ohne Rueckfragen weiter, waehrend du weg bist',
+                description: 'Autopilot ein- oder ausschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist',
                 argumentHint: '[an|aus]',
                 immediate: true,
             })
             .catch(() => {})
         return next(e)
     })
+
+    // Die Engine setzt die Namen der Mods vor jede Befehlsantwort. Dieser Mod streicht in der
+    // gespeicherten Zeile seinen und sagt stattdessen am Ende, dass die Antwort von ihm kommt.
+    on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+        const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text, 'autopilot', GEMELDET) } : b))
+        return next({ ...e, message: { ...e.message, content } })
+    }).catch(($, e, next) => next(e))
 
     on('command.run', { command: 'autopilot' }, async ($, e) => {
         const arg = e.args.trim().toLowerCase()
@@ -323,17 +402,17 @@ export const register: Register = (on, options) => {
             }
         }
         if (s?.phase === 'laeuft') {
-            return { text: 'Der Autopilot laeuft schon. /autopilot aus beendet ihn.' }
+            return { text: 'Der Autopilot läuft schon. /autopilot aus beendet ihn.' }
         }
         if (s) {
             // Angehalten oder fertig: dieselbe Schicht geht weiter, die Zaehler von vorn.
             const gleich = await fortsetzen($)
-            return { text: `Der Autopilot laeuft wieder.${gleich ? ' Claude macht jetzt gleich weiter.' : ''}` }
+            return { text: `Der Autopilot läuft wieder.${gleich ? ' Claude macht jetzt gleich weiter.' : ''}` }
         }
         const gleich = await beginnen($)
         return {
             text:
-                'Der Autopilot ist an: Claude arbeitet ohne Rueckfragen weiter und schreibt am Ende eine Uebergabe. ' +
+                'Der Autopilot ist an: Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe. ' +
                 (gleich ? 'Es macht jetzt gleich weiter. ' : '') +
                 'Freigabe-Dialoge halten ihn trotzdem an. /autopilot schaltet ihn wieder aus.',
         }
@@ -346,6 +425,11 @@ export const register: Register = (on, options) => {
         }
         // Die Person hat selbst geschrieben: ein neuer Auftrag, die Zaehler beginnen von vorn.
         zaehlerAuf0()
+        // Eine Schicht, die vor 0.6.0 mit der Marke fertig wurde, endet jetzt, statt wieder anzulaufen.
+        if (s.phase === 'fertig') {
+            await beenden($, GRUND_FERTIG)
+            return next(e)
+        }
         // Sie hat vorher 🅰️ im Leitstand gedrueckt: Die Schicht ist vorbei, die
         // Nachricht geht ohne den Kontext des Autopiloten raus.
         if (await sollAus($, s)) {
@@ -361,9 +445,15 @@ export const register: Register = (on, options) => {
 
     on('turn.start', async ($, e, next) => {
         if (!e.agentId) {
-            laeuft = true
+            laufend = e.turnId
             werkzeuge = 0
             hintergrund = null
+            // Solange eine Runde laeuft, kann der Anstoss nicht beginnen: Die Uhr steht.
+            verfallStoppen()
+            // Der eigene Anstoss hat seine Runde bekommen.
+            if (e.text.includes(WEITER)) {
+                ausstehend = false
+            }
         }
         return next(e)
     })
@@ -399,7 +489,14 @@ export const register: Register = (on, options) => {
         if (e.agentId) {
             return r
         }
-        laeuft = false
+        // Hat die Engine schon die naechste Runde gestartet, laeuft die weiter.
+        if (laufend === e.turnId) {
+            laufend = null
+        }
+        // Wartet noch ein Anstoss, ist ab jetzt Ruhe: Er sollte gleich beginnen.
+        if (ausstehend && laufend === null) {
+            verfallStellen($)
+        }
         hatRunde = true
 
         const s = await read($, schicht)
@@ -439,8 +536,14 @@ export const register: Register = (on, options) => {
             return r
         }
         fehler = 0
+        // Die Marke beendet den Autopiloten: Der Bericht bleibt bis Weg, eine spaetere
+        // Nachricht der Person schaltet ihn nicht wieder ein.
         if (istFertig(e.answer)) {
-            await anhalten($, 'fertig', 'Claude meldet fertig')
+            await beenden($, GRUND_FERTIG)
+            return r
+        }
+        // Eine andere Runde laeuft schon, oder ein Anstoss wartet noch: Deren Ende entscheidet.
+        if (laufend !== null || ausstehend) {
             return r
         }
         // Hintergrundarbeit meldet sich selbst mit einer neuen Runde; an der Rundengrenze ist Schluss.

@@ -1,7 +1,7 @@
 {
   "name": "leitstand",
-  "version": "0.52.1",
-  "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Mode und Gruppenarbeit. In der Knopfzeile Schalter für ADHS-Modus, Remote Control, Autopilot und Verdecken, dazu ein Öffner für Filetree. Läuft der Autopilot, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT).",
+  "version": "0.52.3",
+  "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Modus und Gruppenarbeit. In der Knopfzeile Schalter für ADHS-Modus, Remote Control, Autopilot und Verdecken, dazu ein Öffner für Filetree. Läuft der Autopilot, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT).",
   "author": {
     "name": "Antreas-Strb"
   },

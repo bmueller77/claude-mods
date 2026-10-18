@@ -300,7 +300,7 @@ async function checkOne($: EngineInterface, text: string) {
     // "merke:" kostet keinen Modellaufruf und gilt darum auch bei ausgeschalteter Pruefung.
     const rule = cleanRule(told)
     if (rule === undefined) {
-      $.ui.toast('reflect: nicht übernommen – eine Zeile, keine Geheimnisse, höchstens 200 Zeichen')
+      $.ui.toast('Nicht übernommen – eine Zeile, keine Geheimnisse, höchstens 200 Zeichen')
       return
     }
     await record($, { isRule: true, rule, scope: 'global', confidence: 1 }, root, true, sid)
@@ -407,7 +407,7 @@ async function bearbeite($: EngineInterface, id: string) {
   if (latest === undefined || latest.status !== 'pending') return
   const box = await $.prompt.read()
   if (box.text.trim() !== '') {
-    $.ui.toast('reflect: Erst das Eingabefeld leeren – „Bearbeiten“ legt die Regel dort hinein')
+    $.ui.toast('Erst das Eingabefeld leeren – „Bearbeiten“ legt die Regel dort hinein')
     return
   }
   const filled = await $.prompt.fill({ text: `merke: ${latest.rule}` })
@@ -646,14 +646,14 @@ async function uebergib($: EngineInterface, id: string) {
   const box = await $.prompt.read()
   const leer = box.text.trim() === ''
   const filled = await $.prompt.fill({ text: leer ? text : `\n\n${text}`, mode: leer ? 'replace' : 'append' })
-  $.ui.toast(filled.isFilled ? 'reflect: Der Auftrag steht im Eingabefeld. Prüfen, dann abschicken.' : 'reflect: Das Eingabefeld hat den Text nicht genommen.')
+  $.ui.toast(filled.isFilled ? 'Der Auftrag steht im Eingabefeld. Prüfen, dann abschicken.' : 'Das Eingabefeld hat den Text nicht genommen.')
 }
 
 async function kopiere($: EngineInterface, id: string, surface: Parameters<EngineInterface['ui']['copy']>[0]['surface']) {
   const r = (await read($, reflexionen)).find(x => x.id === id)
   if (r === undefined || r.status !== 'fertig') return
   const kopiert = await $.ui.copy({ text: `${kopfzeile(r)}\n\n${r.text}`, surface })
-  $.ui.toast(kopiert.isCopied ? 'reflect: Reflexion kopiert.' : 'reflect: Kopieren ging hier nicht.')
+  $.ui.toast(kopiert.isCopied ? 'Reflexion kopiert.' : 'Kopieren ging hier nicht.')
 }
 
 /** Blaettert im Fenster: -1 aeltere, +1 neuere; liest dabei den aktuellen Stand, nicht den beim Zeichnen. */
@@ -834,7 +834,36 @@ async function befehl($: EngineInterface, args: string): Promise<string> {
 // Die Hooks
 // ---------------------------------------------------------------------------
 
+const VORSATZ_NAME = 'reflect'
+const VORSATZ_LABEL = 'Reflect'
+/**
+ * Die Engine setzt vor die Antwort eines Befehls die Namen der Mods, die ihn hooken
+ * ("name1+name2: Text"). In der gespeicherten Zeile streicht dieser Mod seinen eigenen
+ * Namen und haengt stattdessen "(gemeldet vom Mod LABEL)" an: einzeilig mit Leerzeichen,
+ * mehrzeilig in einer eigenen letzten Zeile. Andere Namen bleiben stehen.
+ */
+const VORSATZ_KOPF = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+const VORSATZ_ENDE = '</local-command-stdout>'
+export function ohneVorsatz(text: string): string {
+  const m = VORSATZ_KOPF.exec(text)
+  if (!m) return text
+  const namen = (m[2] ?? '').split('+')
+  if (!namen.includes(VORSATZ_NAME)) return text
+  const rest = namen.filter(n => n !== VORSATZ_NAME)
+  let rumpf = text.slice(m[0].length)
+  const ende = rumpf.endsWith(VORSATZ_ENDE) ? VORSATZ_ENDE : ''
+  rumpf = rumpf.slice(0, rumpf.length - ende.length).replace(/\s+$/, '')
+  const zusatz = `(gemeldet vom Mod ${VORSATZ_LABEL})`
+  const trenner = rumpf === '' ? '' : rumpf.includes('\n') ? '\n' : ' '
+  return (m[1] ?? '') + (rest.length ? `${rest.join('+')}: ` : '') + rumpf + trenner + zusatz + ende
+}
+
 export const register: Register = (on, options) => {
+  on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+    const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text) } : b))
+    return next({ ...e, message: { ...e.message, content } })
+  }).catch(($, e, next) => next(e))
+
   if (typeof options.modell === 'string' && options.modell.trim() !== '') modell = options.modell.trim()
   standard = {
     pruefung: options.pruefung !== false,
@@ -932,7 +961,7 @@ export const register: Register = (on, options) => {
     try {
       return { text: await befehl($, e.args) }
     } catch {
-      return { text: 'reflect: Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect hilfe zeigt die Befehle.' }
+      return { text: 'Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect hilfe zeigt die Befehle.' }
     }
   })
 
@@ -956,7 +985,7 @@ export const register: Register = (on, options) => {
                     key={`${z.key}:${l.id}`}
                     label={z.label}
                     {...(z.ziel === l.scope ? { variant: 'primary' as const } : {})}
-                    onPress={() => speichere($, l.id, z.ziel).then(satz => $.ui.toast(`reflect: ${satz}`))}
+                    onPress={() => speichere($, l.id, z.ziel).then(satz => $.ui.toast(satz))}
                   />
                 ))}
                 <Button key={`bearbeiten:${l.id}`} label="Bearbeiten" onPress={() => bearbeite($, l.id)} />

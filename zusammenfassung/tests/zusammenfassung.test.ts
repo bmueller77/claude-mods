@@ -1,9 +1,27 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
 import { aenderungenText, diff, kuerze, leseBericht, relPfad, zeilenUmbruch } from '../hooks/register'
 
 const BAND = { plugin: 'zusammenfassung', component: 'AbovePrompt' } as const
+
+/** Befehlsantworten, wie die Engine sie speichert; zurueck kommen die Zeilen, wie der Mod sie umschrieb. */
+async function gespeichert($: Engine, on: On, ...texte: string[]): Promise<string[]> {
+    const sitzung = mock.session(on)
+    for (const [n, text] of texte.entries()) {
+        await $.session.append({
+            message: { type: 'system', name: 'local_command', content: [{ type: 'text', text }] },
+            door: 'command',
+            origin: { kind: 'engine' },
+            uuid: `befehl-${n}`,
+        } as never)
+    }
+    return sitzung.appended().map(z => {
+        const b = z.message.content[0]
+        return typeof b?.text === 'string' ? b.text : ''
+    })
+}
 const FLAECHEN = ['terminal', 'desktop'] as const
 
 const VERLAUF: SessionMessage[] = [
@@ -632,4 +650,24 @@ test('der alte Schluessel fuer alle Chats wird nicht gelesen und nicht geloescht
     await clock.advance(TAG)
     await start($ as never)
     expect(speicher.has('zusammenfassung.aus:chat-alt')).toBe(false)
+})
+
+test('die gespeicherte Befehlsantwort nennt den Mod am Ende statt davor', async ($, on) => {
+    expect(await gespeichert($, on, '<local-command-stdout>zusammenfassung: Erledigt.</local-command-stdout>')).toEqual(['<local-command-stdout>Erledigt. (gemeldet vom Mod Zusammenfassung)</local-command-stdout>'])
+})
+
+test('vor der Antwort bleiben nur die Namen anderer Mods stehen', async ($, on) => {
+    expect(await gespeichert($, on, '<local-command-stdout>zusammenfassung+leitstand: Erledigt.</local-command-stdout>', '<local-command-stdout>leitstand+zusammenfassung: Erledigt.</local-command-stdout>')).toEqual([
+        '<local-command-stdout>leitstand: Erledigt. (gemeldet vom Mod Zusammenfassung)</local-command-stdout>',
+        '<local-command-stdout>leitstand: Erledigt. (gemeldet vom Mod Zusammenfassung)</local-command-stdout>',
+    ])
+})
+
+test('nach einer mehrzeiligen Antwort steht der Mod in einer eigenen Zeile', async ($, on) => {
+    expect(await gespeichert($, on, '<local-command-stdout>zusammenfassung: Eins\nZwei\n</local-command-stdout>')).toEqual(['<local-command-stdout>Eins\nZwei\n(gemeldet vom Mod Zusammenfassung)\n</local-command-stdout>'])
+})
+
+test('Zeilen ohne den eigenen Namen bleiben, wie sie sind', async ($, on) => {
+    const zeilen = ['<local-command-stdout>leitstand: Erledigt.</local-command-stdout>', '<local-command-stdout>zusammenfassungx: Erledigt.</local-command-stdout>', '<local-command-stdout>Erledigt.</local-command-stdout>', 'Text ohne Rahmen']
+    expect(await gespeichert($, on, ...zeilen)).toEqual(zeilen)
 })
