@@ -1,5 +1,5 @@
 /**
- * GlanceFlow's look: one icon set and one set of tones, so every screen draws the same marks.
+ * Leitstand's look: one icon set and one set of tones, so every screen draws the same marks.
  *
  * Surfaces that draw vectors (the desktop app, VS Code, the phone) get these SVG icons and meters; the terminal draws
  * the glyph named beside each, one cell wide. Both come from the same names, so a status reads the same everywhere.

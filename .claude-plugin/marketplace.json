@@ -1,9 +1,9 @@
 {
   "name": "bjoern-mods",
   "owner": { "name": "Björn Müller" },
-  "metadata": { "description": "Björns eigene Claude-Code-Mods (GlanceFlow, Statistik, Nächste Schritte, Zusammenfassung, Nachtschicht, Visible Compact deutsch) plus filetree und i-have-adhd. Die älteren Mods aus dem Video (savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; die eigenen Mods ersetzen sie." },
+  "metadata": { "description": "Björns eigene Claude-Code-Mods (Leitstand, Statistik, Nächste Schritte, Zusammenfassung, Nachtschicht, Visible Compact deutsch) plus filetree und i-have-adhd. Die älteren Mods aus dem Video (savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; die eigenen Mods ersetzen sie." },
   "plugins": [
-    { "name": "glanceflow", "source": "./glanceflow", "description": "Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf und Teambericht; Arbeitsweisen Auto-Mode und Gruppenarbeit. Deutsche Fassung von GlanceFlow (MIT, Antreas-Strb)" },
+    { "name": "leitstand", "source": "./leitstand", "description": "Der Leitstand über der Eingabe: Checkliste mit Plan, Fortschritt, Helfern, Verlauf und Teambericht; Arbeitsweisen Auto-Mode und Gruppenarbeit; Schalter für ADHS-Modus, Remote Control, Nachtschicht und Verdecken, Öffner für Filetree. Hervorgegangen aus GlanceFlow (MIT, Antreas-Strb)" },
     { "name": "statistik", "source": "./statistik", "description": "Eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr, dazu Warmhalten, Compact und Kontext-Details (Eigenbau)" },
     { "name": "naechste-schritte", "source": "./naechste-schritte", "description": "Nach jeder Antwort zwei oder drei Vorschläge für die nächste Eingabe, per Ziffer oder Knopf ins Feld (Eigenbau nach next-steps von Hamza Zafar)" },
     { "name": "zusammenfassung", "source": "./zusammenfassung", "description": "Nach jeder Arbeitsrunde zwei Zeilen: was getan wurde und was man leicht übersieht, aufklappbar mit Dateiliste und Replay (Eigenbau)" },

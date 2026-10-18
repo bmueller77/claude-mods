@@ -8,11 +8,11 @@ import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, m
 import { OTHER_WAITING_MS, OTHER_WORKING_MS, askedMergeSha, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 
-const PLAN = 'mcp__glanceflow__plan_steps'
-const PROGRESS = 'mcp__glanceflow__report_progress'
+const PLAN = 'mcp__leitstand__plan_steps'
+const PROGRESS = 'mcp__leitstand__report_progress'
 const SURFACES = ['terminal', 'desktop'] as const
 const BAND = {
-  plugin: 'glanceflow',
+  plugin: 'leitstand',
   component: 'AbovePrompt',
   props: {
     hasSurvey: false,
@@ -44,7 +44,7 @@ function world(on: On, toolAnswer: () => unknown = () => ({ result: {} })) {
 
 /** Turns on the detailed view: models, tokens, cache and plan usage. */
 async function detailsOn($: Engine) {
-  await $.command.run({ command: 'glanceflow', args: 'details on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'details on' } as never)
 }
 
 async function texts($: Engine, surface: (typeof SURFACES)[number], bodyColumns = 80): Promise<string[]> {
@@ -150,7 +150,7 @@ test('a to-do list plus a 60% report draws done, current, next and up next rows'
     expect(shown).toContain('60%')
     expect(shown).toContain('Als Nächstes')
     expect(shown).toContain('Später')
-    expect(shown).toContain(isTerminal ? 'GlanceFlow: Einfach' : 'Einfach ▾')
+    expect(shown).toContain(isTerminal ? 'Leitstand: Einfach' : 'Einfach ▾')
     expect(shown).not.toContain('Ansicht')
   }
 })
@@ -168,15 +168,15 @@ test('a permission prompt shows Needs you', async ($, on) => {
   }
 })
 
-test('/glanceflow off hides the band but keeps the button', async ($, on) => {
+test('/leitstand off hides the band but keeps the button', async ($, on) => {
   world(on)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
 
   for (const surface of SURFACES) {
     const shown = (await texts($, surface)).join('\n')
     expect(shown).not.toContain('Verstehe deine Anfrage')
-    expect(shown).toContain(surface === 'terminal' ? 'GlanceFlow: Aus' : 'Aus ▾')
+    expect(shown).toContain(surface === 'terminal' ? 'Leitstand: Aus' : 'Aus ▾')
   }
 })
 
@@ -193,7 +193,7 @@ test('another mod drawing above the prompt still shows, under the checklist', as
     expect(shown.join('\n')).toContain('Build my landing page')
     expect(shown).toContain('X post waiting for your OK')
   }
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   expect(await texts($, 'terminal')).toContain('X post waiting for your OK')
 })
 
@@ -369,7 +369,7 @@ test('with the password guard off, a message with a password is sent straight aw
     entered += 1
     return { text: e.text }
   })
-  const off = await $.command.run({ command: 'glanceflow', args: 'guard off' } as never)
+  const off = await $.command.run({ command: 'leitstand', args: 'guard off' } as never)
   expect(off.text).toContain('Der Passwortschutz ist aus')
   const prompt = { text: `log in with password: ${SAMPLE_PASSWORD}`, wait: false, origin: { kind: 'composer' } } as never
 
@@ -377,7 +377,7 @@ test('with the password guard off, a message with a password is sent straight aw
   expect((sent as { drop?: string }).drop).toBeUndefined()
   expect(entered).toBe(1)
 
-  const on_ = await $.command.run({ command: 'glanceflow', args: 'guard on' } as never)
+  const on_ = await $.command.run({ command: 'leitstand', args: 'guard on' } as never)
   expect(on_.text).toContain('Der Passwortschutz ist an')
   const held = await $.prompt.submit(prompt)
   expect((held as { drop?: string }).drop).toContain('ein Passwort')
@@ -408,7 +408,7 @@ test('overall progress, time left and a grown plan show in the header and footer
   expect(shown).toContain('38%')
   expect(shown).toContain('noch etwa 5 Min.')
 
-  const footer = await $.ui.mount({ plugin: 'glanceflow', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
+  const footer = await $.ui.mount({ plugin: 'leitstand', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
   expect((await footer.find({ type: 'Text' }))?.text).toContain('◎ 38% · noch etwa 5 Min.')
   await footer.unmount()
 
@@ -472,7 +472,7 @@ test('a last message that asks something is a question, in English or Greek', ()
 
 test('a finished job that ends with a question says Needs you and chimes, not All done', async ($, on) => {
   const { heard } = soundWorld(on)
-  await $.command.run({ command: 'glanceflow', args: 'sound on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'sound on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await callTool($, { tool: PROGRESS, task: 'Write it', percent: 100 })
@@ -508,7 +508,7 @@ test('the reply to that question starts a new job, and the History keeps the fir
   const shown = (await texts($, 'terminal')).join('\n')
   expect(shown).not.toContain('Braucht dich')
   expect(shown).toContain('Yes, deploy it to Vercel')
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   const pane = (await paneTexts($)).join('\n')
   expect(pane).toContain('Build my landing page')
   expect(pane).toContain('Gesamt: 1 Aufgabe · 1 fertig')
@@ -570,7 +570,7 @@ test('the desktop notice carries the question too', async ($, on) => {
     shown.push([...argv.slice(-2)])
     return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
   })
-  await $.command.run({ command: 'glanceflow', args: 'notify on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'notify on' } as never)
   await clock.advance(1)
   shown.length = 0
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
@@ -581,7 +581,7 @@ test('the desktop notice carries the question too', async ($, on) => {
 
 test('while a plan waits for Start, the row offers Start and no Pause', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const shown = (await texts($, 'terminal')).join('\n')
@@ -897,7 +897,7 @@ test('the simple view hides models, tokens and low plan usage; the Details butto
   for (const surface of SURFACES) {
     const simple = (await texts($, surface, 120)).join('\n')
     expect(simple).toContain('Find the prices')
-    expect(simple).toContain(surface === 'terminal' ? 'GlanceFlow: Einfach' : 'Einfach ▾')
+    expect(simple).toContain(surface === 'terminal' ? 'Leitstand: Einfach' : 'Einfach ▾')
     expect(simple).not.toContain('Haiku 4.5')
     expect(simple).not.toMatch(/tokens/i)
     expect(simple).not.toContain('aus Cache')
@@ -908,7 +908,7 @@ test('the simple view hides models, tokens and low plan usage; the Details butto
   await ui.press({ key: 'toggle' })
   await ui.unmount()
   const detailed = (await texts($, 'terminal', 120)).join('\n')
-  expect(detailed).toContain('GlanceFlow: Details')
+  expect(detailed).toContain('Leitstand: Details')
   expect(detailed).toContain('Explore · Haiku 4.5')
   expect(detailed).toContain('2,4k neu · 10k aus Cache')
   expect(detailed).toContain('Plan-Nutzung: 5 Std. 42%')
@@ -943,17 +943,17 @@ test('one button cycles Simple, Details and Minimal; from Off it goes back to Si
     await ui.press({ key: 'toggle' })
     await ui.unmount()
   }
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Einfach')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Einfach')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Details')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Details')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Minimal')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Minimal')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Einfach')
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Aus')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Einfach')
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Aus')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Einfach')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Einfach')
 })
 
 test('in details, the current step fills gradually and shows its time; done steps show how long they took', async ($, on) => {
@@ -1057,9 +1057,9 @@ test("Claude's final answer counts in the job's total, not in the last step", as
 })
 
 const PANE = {
-  plugin: 'glanceflow',
+  plugin: 'leitstand',
   component: 'Pane',
-  requestId: 'glanceflow-history',
+  requestId: 'leitstand-history',
   props: { title: 'History', isFocused: true, bodyColumns: 110, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
 } as const
 
@@ -1133,7 +1133,7 @@ test('only the most recent saved checklists stay', () => {
   expect(staleResumeKeys([['a', 3]], 2)).toEqual([])
 })
 
-test('/glanceflow on and off set a setting, and anything else flips it', () => {
+test('/leitstand on and off set a setting, and anything else flips it', () => {
   expect(toggled('on', false)).toBe(true)
   expect(toggled('on', true)).toBe(true)
   expect(toggled('off', true)).toBe(false)
@@ -1142,7 +1142,7 @@ test('/glanceflow on and off set a setting, and anything else flips it', () => {
   expect(toggled('', false)).toBe(true)
 })
 
-test("each finished job is saved, and /glanceflow history shows the day's jobs for this project", async ($, on) => {
+test("each finished job is saved, and /leitstand history shows the day's jobs for this project", async ($, on) => {
   const clock = mock.clock(on, { now: new Date(2026, 9, 6, 9, 42).getTime() })
   mock.store(on)
   const project = { cwd: '/work/landing-site' }
@@ -1174,7 +1174,7 @@ test("each finished job is saved, and /glanceflow history shows the day's jobs f
   await $.turn.complete({ answer: 'Done', durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' })
   project.cwd = '/work/landing-site'
 
-  const result = await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'history' } as never)
   // The day reads as TT.MM.JJJJ; the key under it stays YYYY-MM-DD.
   expect(dayKey(clock.now())).toBe('2026-10-06')
   expect(result.text).toBe('Verlauf für 06.10.2026: 2 Aufgaben.')
@@ -1193,7 +1193,7 @@ test("each finished job is saved, and /glanceflow history shows the day's jobs f
 test('a day with nothing saved says so', async ($, on) => {
   world(on)
   historyWorld(on, { cwd: '/work/landing-site' })
-  await $.command.run({ command: 'glanceflow', args: 'history 2026-01-01' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history 2026-01-01' } as never)
   expect((await paneTexts($)).join('\n')).toContain('Für dieses Projekt sind an diesem Tag noch keine Aufgaben gespeichert.')
 })
 
@@ -1238,7 +1238,7 @@ test('before any work the band says where the plan will show, without a Fresh ch
 test('Details keeps the tool rows in view; Simple hides them', async ($, on) => {
   world(on)
   const PROGRESS_ROW = {
-    plugin: 'glanceflow',
+    plugin: 'leitstand',
     component: 'ToolProgress',
     props: { tool_use_id: 'tu1', kind: 'background_hint', hint: '(ctrl+b to run in background)' },
   } as const
@@ -1311,7 +1311,7 @@ test('with room for one row, the current step is the one shown', async ($, on) =
   expect(shown).not.toContain('One ')
 })
 
-test('the band has History and Fresh chat buttons while GlanceFlow is on', async ($, on) => {
+test('the band has History and Fresh chat buttons while Leitstand is on', async ($, on) => {
   world(on)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   for (const surface of SURFACES) {
@@ -1323,7 +1323,7 @@ test('the band has History and Fresh chat buttons while GlanceFlow is on', async
   }
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
   expect((await texts($, 'desktop')).join('\n')).toContain('Neuer Chat')
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   const off = (await texts($, 'terminal')).join('\n')
   expect(off).not.toContain('≣ Verlauf')
 })
@@ -1446,7 +1446,7 @@ test('in the Desktop app a step row keeps whole words: in a narrow band the name
 test('in the Desktop app the Plan panel says Usage, as the band does, so it does not read as the Plan button', async ($, on) => {
   world(on)
   on('session.measure', (_, e) => ({ changed: e.changed }))
-  await $.command.run({ command: 'glanceflow', args: 'details on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'details on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await $.session.measure({ context: { window: 200_000, tokens: 68_000, percent: 34 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42 }], changed: ['context', 'rateLimits'] } as never)
@@ -1468,7 +1468,7 @@ test('in the Desktop app History reads every time one way, as the report does, a
   on('ui.open', () => ({ value: { isPlaced: true } }) as never)
   on('ui.toast', () => ({ value: undefined }) as never)
   on('ui.copy', () => ({ value: { isCopied: true } }) as never)
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   const list = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const shown = (await list.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   // A job's details sit in empty room under its name: nothing there for a screen reader to say.
@@ -1539,17 +1539,17 @@ test('in the Desktop app the welcome card says Welcome whole in a narrow band an
   on('tool.register', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)
   await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
-  expect(await texts($, 'desktop', 80)).toContain('Willkommen bei GlanceFlow')
+  expect(await texts($, 'desktop', 80)).toContain('Willkommen im Leitstand')
   const narrow = await texts($, 'desktop', 30)
   expect(narrow).toContain('Willkommen')
-  expect(narrow).not.toContain('Willkommen bei GlanceFlow')
+  expect(narrow).not.toContain('Willkommen im Leitstand')
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const words = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'tour-text')
   const alts = (await ui.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
   await ui.unmount()
   expect(JSON.stringify(words ?? null)).not.toContain('"type":"Svg"')
-  // The mark beside "Welcome to GlanceFlow" says Status, as every header's does, so Welcome is heard once.
+  // The mark beside "Welcome to Leitstand" says Status, as every header's does, so Welcome is heard once.
   expect(alts).toContain('Status')
   expect(alts).not.toContain('Willkommen')
 })
@@ -1623,7 +1623,7 @@ test('in the Desktop app no mark says again what the words beside it say, in the
   expect(JSON.stringify(noticeOf(band))).toContain('"alt":"Hinweis"')
 
   // History with nothing saved says so in words; its mark says Notice, History being the panel's title, read just before.
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   const history = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const alts = (await history.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
   const words = (await history.findAll({ type: 'Text' })).map(one => one.text).join('\n')
@@ -1643,18 +1643,18 @@ test("in the Desktop app a panel's marks say neither its title nor the words bes
   }
 
   // Each setting's mark says Setting; its name follows once, in bold.
-  const settings = await read('glanceflow-settings', 'GlanceFlow-Einstellungen')
+  const settings = await read('leitstand-settings', 'Leitstand-Einstellungen')
   expect(settings.echoes).toEqual([])
   expect(settings.alts.length > 0 && settings.alts.every(alt => alt === 'Einstellung')).toBe(true)
 
   // With no checkpoint yet the words say so; the mark says Notice, not Checkpoint again.
-  const recap = await read('glanceflow-recap', 'Letzter Stand')
+  const recap = await read('leitstand-recap', 'Letzter Stand')
   expect(recap.echoes).toEqual([])
   expect(recap.titled).toEqual([])
   expect(recap.alts).toEqual(['Hinweis'])
 
   // An empty Plan: the panel's title says Plan, the words say there is none yet.
-  const plan = await read('glanceflow-plan', 'Plan')
+  const plan = await read('leitstand-plan', 'Plan')
   expect(plan.echoes).toEqual([])
   expect(plan.titled).toEqual([])
   expect(plan.alts).toEqual(['Hinweis'])
@@ -1742,7 +1742,7 @@ test('the band and History draw only symbols every terminal counts as one cell',
   historyWorld(on, { cwd: '/work/landing-site' })
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   const shown = [...(await texts($, 'terminal')), ...(await paneTexts($))]
   expect(shown.filter(text => WIDE_SYMBOLS.test(text))).toEqual([])
 
@@ -1763,8 +1763,8 @@ test('on the desktop every mark is an SVG icon, and no text or button carries a 
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await callTool($, { tool: PROGRESS, task: 'Write it', percent: 100, summary: 'Wrote the page' })
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
-  const SETTINGS = { ...PANE, requestId: 'glanceflow-settings' } as const
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
+  const SETTINGS = { ...PANE, requestId: 'leitstand-settings' } as const
   for (const target of [BAND, PLAN_PANE, PANE, SETTINGS]) {
     const ui = await $.ui.mount({ ...target, surface: 'desktop' } as never)
     const svgs = await ui.findAll({ type: 'Svg' })
@@ -1803,7 +1803,7 @@ test('on the desktop Needs you and Stuck read in the text colour, with the colou
 test('on the desktop every drawing says what it is, in every state of the checklist and in every panel', async ($, on) => {
   world(on)
   historyWorld(on, { cwd: '/work/landing-site' })
-  const SETTINGS = { ...PANE, requestId: 'glanceflow-settings' } as const
+  const SETTINGS = { ...PANE, requestId: 'leitstand-settings' } as const
   const nameless = async (...targets: object[]) => {
     const found: string[] = []
     for (const target of targets) {
@@ -1819,7 +1819,7 @@ test('on the desktop every drawing says what it is, in every state of the checkl
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await callTool($, { tool: PROGRESS, task: 'Write it', percent: 100, summary: 'Wrote the page' })
   await callTool($, { tool: 'Bash', command: 'npm run build' })
-  await $.command.run({ command: 'glanceflow', args: 'details on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'details on' } as never)
   expect(await nameless(BAND, PLAN_PANE, SETTINGS)).toEqual([])
   await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' })
   expect(await nameless(BAND, PLAN_PANE)).toEqual([])
@@ -1828,7 +1828,7 @@ test('on the desktop every drawing says what it is, in every state of the checkl
   await $.turn.start({ text: 'continue', turnId: 't2' })
   await callTool($, { tool: PROGRESS, task: 'Check it', percent: 100 })
   await $.turn.complete({ answer: 'Done', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   expect(await nameless(BAND, PLAN_PANE, PANE)).toEqual([])
 })
 
@@ -1866,7 +1866,7 @@ test('the History button opens the panel; the day picker moves between days', as
   expect(pane).toContain('Später ▶')
 
   const picker = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await $.ui.select({ plugin: 'glanceflow', key: 'day', value: dayKey(clock.now()) })
+  await $.ui.select({ plugin: 'leitstand', key: 'day', value: dayKey(clock.now()) })
   await picker.unmount()
   expect((await paneTexts($)).join('\n')).toContain('noch keine Aufgaben gespeichert')
   expect(shiftDay('2026-10-01', -1)).toBe('2026-09-30')
@@ -1887,7 +1887,7 @@ test('Team report shows the report and copies it', async ($, on) => {
     copied = e.text
     return { value: { isCopied: true } } as never
   })
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'report' })
@@ -1965,13 +1965,13 @@ const finish = async ($: Engine) => {
 test('Ship it shows on a finished job in a GitHub project once Finish on GitHub is on, and ships on a second press', async ($, on) => {
   const { sent } = await shipWorld($, on, 'git@github.com:me/site.git\n')
   // Mid-job, and with the setting off, there is no Ship it.
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   expect((await texts($, 'terminal')).join('\n')).not.toContain('Push')
-  await $.command.run({ command: 'glanceflow', args: 'ship off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship off' } as never)
   await finish($)
   for (const surface of SURFACES) expect((await texts($, surface)).join('\n')).not.toContain('Push')
 
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   expect((await texts($, 'terminal')).join('\n')).toContain('⇡ Push')
   expect(await texts($, 'desktop')).toContain('Push')
 
@@ -2592,7 +2592,7 @@ async function shipping($: Engine, on: On) {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n', () =>
     isFailing ? { isError: true, result: 'merge failed', text: 'merge failed' } : { result: {} },
   )
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   await pressShip($)
   expect(shipped.sent).toHaveLength(1)
@@ -2628,7 +2628,7 @@ test('Ship it merges once at the exact approved head commit, and a merge that wo
   expect(await tries(mergeAt(SHA))).toContain('Merge freigeben')
 
   await $.turn.start({ text: `Merge freigeben ${SHA}`, turnId: 't3' })
-  // The reply starts a new job: GlanceFlow first asks for a plan, and that refusal leaves the approval unused.
+  // The reply starts a new job: Leitstand first asks for a plan, and that refusal leaves the approval unused.
   expect(await tries(mergeAt(SHA))).toContain('plan_steps')
   await callTool($, { tool: PLAN, steps: ['Merge it', 'Report back'] })
   expect(await tries(mergeAt(OTHER_SHA))).toContain('Merge freigeben')
@@ -2777,7 +2777,7 @@ test('Ship it stays guarded through its own first turn, background turns, slash 
 test('Pause and Continue keep Ship it guarded; Esc ends it', async ($, on) => {
   on('turn.abort', () => ({ value: undefined }) as never)
   const { tries } = await shipping($, on)
-  await $.command.run({ command: 'glanceflow', args: 'pause' } as never)
+  await $.command.run({ command: 'leitstand', args: 'pause' } as never)
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' } as never)
   expect(await tries('gh pr merge 12 --squash')).toContain('Merge freigeben')
 
@@ -2802,9 +2802,9 @@ test("the person's next unrelated turn ends a stale Ship it, and Claude's text a
   expect(await tries(mergeAt(OTHER_SHA))).toBeUndefined()
 })
 
-test('the merge guard covers helpers during Ship it and leaves merges alone outside it or with GlanceFlow off', async ($, on) => {
+test('the merge guard covers helpers during Ship it and leaves merges alone outside it or with Leitstand off', async ($, on) => {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const tries = async (command: string, extra: object = {}) => (await callTool($, { tool: 'Bash', command, ...extra })).deny
   expect(await tries('gh pr merge 12 --squash')).toBeUndefined()
@@ -2820,14 +2820,14 @@ test('the merge guard covers helpers during Ship it and leaves merges alone outs
   }
   expect(await tries('git status')).toBeUndefined()
 
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   expect(await tries('gh pr merge 12 --squash')).toBeUndefined()
   for (const command of API_MERGES) expect(await tries(command)).toBeUndefined()
 })
 
-test('Ship it refuses curl and wget merges from Claude and helpers, and leaves them alone before it and with GlanceFlow off', async ($, on) => {
+test('Ship it refuses curl and wget merges from Claude and helpers, and leaves them alone before it and with Leitstand off', async ($, on) => {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const tries = async (command: string, extra: object = {}) => (await callTool($, { tool: 'Bash', command, ...extra })).deny
   for (const command of HTTP_MERGES) {
@@ -2848,7 +2848,7 @@ test('Ship it refuses curl and wget merges from Claude and helpers, and leaves t
   // Refusing them does not end Ship it.
   expect(await tries('gh pr merge 12 --squash')).toContain('Merge freigeben')
 
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   for (const command of HTTP_MERGES) {
     expect(await tries(command)).toBeUndefined()
     expect(await tries(command, { agentId: 'a1' })).toBeUndefined()
@@ -2872,9 +2872,9 @@ test('a refused curl or wget merge leaves the approval and Ship it as they were,
   expect(await tries(HTTP_MERGES[0])).toBeUndefined()
 })
 
-test('Ship it refuses gh api merges sent through stdin from Claude and helpers, and leaves them alone before it and with GlanceFlow off', async ($, on) => {
+test('Ship it refuses gh api merges sent through stdin from Claude and helpers, and leaves them alone before it and with Leitstand off', async ($, on) => {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const tries = async (command: string, extra: object = {}) => (await callTool($, { tool: 'Bash', command, ...extra })).deny
   for (const command of STDIN_MERGES) {
@@ -2893,7 +2893,7 @@ test('Ship it refuses gh api merges sent through stdin from Claude and helpers, 
   // Refusing them does not end Ship it.
   expect(await tries('gh pr merge 12 --squash')).toContain('Merge freigeben')
 
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   for (const command of STDIN_MERGES) {
     expect(await tries(command)).toBeUndefined()
     expect(await tries(command, { agentId: 'a1' })).toBeUndefined()
@@ -2920,9 +2920,9 @@ test('a refused gh api stdin merge leaves the approval and Ship it as they were,
 // Every spelling Ship it refuses at the approved head commit or without it, as Claude or a helper would send it.
 const WORD_REFUSED = [...HIDDEN_MERGES, ...RUN_TIME_GH, ...UNKNOWN_GH, ...PR_FLAG_FIRST, ...SPELLED_API, ...SPELLED_HTTP]
 
-test('Ship it refuses merges Bash spells in other words from Claude and helpers, and leaves them alone before it and with GlanceFlow off', async ($, on) => {
+test('Ship it refuses merges Bash spells in other words from Claude and helpers, and leaves them alone before it and with Leitstand off', async ($, on) => {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const tries = async (command: string, extra: object = {}) => (await callTool($, { tool: 'Bash', command, ...extra })).deny
   for (const command of [...SPELLED_MERGES, ...WORD_REFUSED]) {
@@ -2943,7 +2943,7 @@ test('Ship it refuses merges Bash spells in other words from Claude and helpers,
   // Refusing them does not end Ship it.
   expect(await tries('gh pr merge 12 --squash')).toContain('Merge freigeben')
 
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   for (const command of [...SPELLED_MERGES, ...WORD_REFUSED]) {
     expect(await tries(command)).toBeUndefined()
     expect(await tries(command, { agentId: 'a1' })).toBeUndefined()
@@ -3040,9 +3040,9 @@ test('a refused MCP merge leaves the approval for the gh pr merge it names, and 
   }
 })
 
-test('MCP merge actions are left alone before Ship it and with GlanceFlow off', async ($, on) => {
+test('MCP merge actions are left alone before Ship it and with Leitstand off', async ($, on) => {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const calls = async (tool: string, extra: object = {}) => (await callTool($, { tool, ...extra })).deny
   for (const tool of MCP_MERGES) {
@@ -3054,7 +3054,7 @@ test('MCP merge actions are left alone before Ship it and with GlanceFlow off', 
   expect(shipped.sent).toHaveLength(1)
   for (const tool of MCP_MERGES) expect(await calls(tool)).toContain('nie über ein MCP-Tool')
 
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   for (const tool of MCP_MERGES) {
     expect(await calls(tool)).toBeUndefined()
     expect(await calls(tool, { agentId: 'a1' })).toBeUndefined()
@@ -3164,9 +3164,9 @@ test('unsafePowerShellMerge allows only the exact sanctioned merge at the approv
   expect(unsafeMerge(PS_FALSE_POSITIVE, null)).toBeNull()
 })
 
-test('Ship it refuses PowerShell merges from Claude and helpers, and leaves PowerShell alone before it and with GlanceFlow off', async ($, on) => {
+test('Ship it refuses PowerShell merges from Claude and helpers, and leaves PowerShell alone before it and with Leitstand off', async ($, on) => {
   const shipped = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const tries = async (command: string, extra: object = {}) => (await callTool($, { tool: 'PowerShell', command, ...extra })).deny
   for (const command of [...PS_MERGES, PS_FALSE_POSITIVE, mergeAt(SHA)]) {
@@ -3193,7 +3193,7 @@ test('Ship it refuses PowerShell merges from Claude and helpers, and leaves Powe
   // Bash keeps its own reading: the PowerShell false positive runs there.
   expect((await callTool($, { tool: 'Bash', command: PS_FALSE_POSITIVE })).deny).toBeUndefined()
 
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   for (const command of [...PS_MERGES, PS_FALSE_POSITIVE]) {
     expect(await tries(command)).toBeUndefined()
     expect(await tries(command, { agentId: 'a1' })).toBeUndefined()
@@ -3242,7 +3242,7 @@ test('a helper PowerShell merge uses the approval once, like Claude: a failed on
 
 test("a timer left from an earlier press never cancels a later one, and only one button waits for its second press", async ($, on) => {
   const { sent, clock } = await shipWorld($, on, 'https://github.com/me/site.git\n')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const press = async (key: string) => {
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -3270,7 +3270,7 @@ test("a timer left from an earlier press never cancels a later one, and only one
 
 test('Ship it stays hidden in a folder that does not push to GitHub', async ($, on) => {
   await shipWorld($, on, '')
-  await $.command.run({ command: 'glanceflow', args: 'ship on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   for (const surface of SURFACES) expect((await texts($, surface)).join('\n')).not.toContain('Push')
 })
@@ -3346,7 +3346,7 @@ test("a paused step's time stands still", async ($, on) => {
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   await clock.advance(30_000)
-  await $.command.run({ command: 'glanceflow', args: 'pause' } as never)
+  await $.command.run({ command: 'leitstand', args: 'pause' } as never)
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
 
   const before = (await texts($, 'terminal', 120)).join('\n')
@@ -3358,7 +3358,7 @@ test("a paused step's time stands still", async ($, on) => {
 })
 
 
-/** A world with a clock to move, and the sounds and words GlanceFlow plays. */
+/** A world with a clock to move, and the sounds and words Leitstand plays. */
 function soundWorld(on: On, canSpeak = true) {
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.store(on)
@@ -3389,7 +3389,7 @@ test('sounds are off until turned on; then a chime when Claude needs you, gets s
   await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' } as never)
   expect(heard).toEqual([])
 
-  const result = await $.command.run({ command: 'glanceflow', args: 'sound on' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'sound on' } as never)
   expect(result.text).toContain('Töne sind an')
   heard.length = 0
   await callTool($, { tool: 'Bash', command: 'ls' })
@@ -3409,7 +3409,7 @@ test('sounds are off until turned on; then a chime when Claude needs you, gets s
 
 test('voice mode also says it in a few words', async ($, on) => {
   const { clock, heard } = soundWorld(on)
-  await $.command.run({ command: 'glanceflow', args: 'sound voice' } as never)
+  await $.command.run({ command: 'leitstand', args: 'sound voice' } as never)
   heard.length = 0
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' } as never)
@@ -3434,10 +3434,10 @@ test('desktop notices are off until turned on; then the computer says why Claude
   await clock.advance(1)
   expect(shown).toEqual([])
 
-  const result = await $.command.run({ command: 'glanceflow', args: 'notify on' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'notify on' } as never)
   expect(result.text).toContain('Desktop-Benachrichtigungen sind an')
   await clock.advance(1)
-  expect(shown).toEqual([['Claude braucht dich', 'So sagt dir GlanceFlow Bescheid.']])
+  expect(shown).toEqual([['Claude braucht dich', 'So sagt dir der Leitstand Bescheid.']])
   shown.length = 0
 
   await callTool($, { tool: 'Bash', command: 'ls' })
@@ -3455,7 +3455,7 @@ test('desktop notices are off until turned on; then the computer says why Claude
   await clock.advance(1)
   expect(shown.at(-1)?.[0]).toBe('Fertig')
 
-  await $.command.run({ command: 'glanceflow', args: 'notify off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'notify off' } as never)
   shown.length = 0
   await $.turn.start({ text: 'Fix the footer', turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Fix it', 'Check it'] })
@@ -3480,7 +3480,7 @@ test('on Linux and Windows the chime and the words play through the computer\'s 
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
   on('tool.register', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)
-  await $.command.run({ command: 'glanceflow', args: 'sound voice' } as never)
+  await $.command.run({ command: 'leitstand', args: 'sound voice' } as never)
 
   const alertOn = async (system: string, turnId: string) => {
     world.system = system
@@ -3514,7 +3514,7 @@ test('no news from Claude for 3 minutes says it may be stuck, with a notice; new
     shown.push([...argv.slice(-2)])
     return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
   })
-  await $.command.run({ command: 'glanceflow', args: 'notify on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'notify on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await clock.advance(2 * 60_000)
@@ -3546,7 +3546,7 @@ test('near a plan limit the warning says when it resets, and a notice says so to
     return { value: { exitCode: 0, stdout: '', stderr: '' } } as never
   })
   on('session.measure', (_, e) => ({ changed: e.changed }))
-  await $.command.run({ command: 'glanceflow', args: 'notify on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'notify on' } as never)
   await clock.advance(1)
   shown.length = 0
   const resetsAt = new Date(1_000_000 + 2 * 3_600_000)
@@ -3581,7 +3581,7 @@ test('on Windows the desktop notice is a Windows toast, with the words passed as
   on('command.register', () => ({ value: undefined }) as never)
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
   await clock.advance(1)
-  await $.command.run({ command: 'glanceflow', args: 'notify on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'notify on' } as never)
   await clock.advance(1)
   ran.length = 0
 
@@ -3592,14 +3592,14 @@ test('on Windows the desktop notice is a Windows toast, with the words passed as
   const toast = ran.find(one => one.argv[0] === 'powershell')
   expect(toast?.argv.at(-1)).toContain('ToastNotificationManager')
   expect(toast?.argv.at(-1)).not.toContain('pricing')
-  expect(toast?.env?.GLANCEFLOW_TITLE).toBe('Claude braucht dich')
-  expect(toast?.env?.GLANCEFLOW_BODY).not.toBe('')
+  expect(toast?.env?.LEITSTAND_TITLE).toBe('Claude braucht dich')
+  expect(toast?.env?.LEITSTAND_BODY).not.toBe('')
   expect(ran.some(one => one.argv[0] === 'osascript' || one.argv[0] === 'notify-send')).toBe(false)
 })
 
 test('a finished job with helpers still running chimes only when they finish', async ($, on) => {
   const { clock, heard } = soundWorld(on)
-  await $.command.run({ command: 'glanceflow', args: 'sound on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'sound on' } as never)
   heard.length = 0
   await $.turn.start({ text: 'Merge the pull request', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Merge it', 'Watch the checks'] })
@@ -3658,7 +3658,7 @@ test('calm mode: nothing moves, and statuses read in bold', async ($, on) => {
   on('tool.call', () => ({ result: {} as never }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  const result = await $.command.run({ command: 'glanceflow', args: 'calm on' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'calm on' } as never)
   expect(result.text).toContain('Ruhemodus ist an')
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Read notes', 'Write copy'] })
@@ -3697,22 +3697,22 @@ test("in details, a job shows what it cost, and the history keeps it", async ($,
   await measure(1.42)
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('0,42 $')
   // Simple keeps money out of view.
-  await $.command.run({ command: 'glanceflow', args: 'details off' } as never)
+  await $.command.run({ command: 'leitstand', args: 'details off' } as never)
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('0,42 $')
 
   await callTool($, { tool: PROGRESS, task: 'Check it', percent: 100 })
   await $.turn.complete({ answer: 'Done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   const pane = (await paneTexts($)).join('\n')
   expect(pane).toContain('0,42 $')
 })
 
-/** Jetzt aufräumen in the settings: the same tidy-up /glanceflow tidy starts for the Statistik mod's sponge. */
+/** Jetzt aufräumen in the settings: the same tidy-up /leitstand tidy starts for the Statistik mod's sponge. */
 async function tidyFromSettings($: Engine) {
   const panel = await $.ui.mount({
-    plugin: 'glanceflow',
+    plugin: 'leitstand',
     component: 'Pane',
-    requestId: 'glanceflow-settings',
+    requestId: 'leitstand-settings',
     surface: 'terminal',
     props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
   } as never)
@@ -3759,7 +3759,7 @@ test('when /compact fails too, Tidy it up says why', async ($, on) => {
   expect(toasts.join('\n')).toMatch(/Der Chat ließ sich nicht aufräumen \(.+\)\. Schreib \/compact, um es noch mal zu versuchen\./)
 })
 
-test("once, GlanceFlow brings over Glance's settings and history; another mod's store is left alone", async ($, on) => {
+test("once, Leitstand brings over Glance's settings and history; another mod's store is left alone", async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const store = new Map<string, unknown>()
   on('store.get', (_, e) => ({ value: store.get(e.key) }) as never)
@@ -3936,7 +3936,7 @@ test('the weekly team report covers the 7 days up to the day picked, and This we
     copied = e.text
     return { value: { isCopied: true } } as never
   })
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'report' })
@@ -3980,7 +3980,7 @@ test('your week sums up every project: steps, tasks, time, the busiest day and t
     copied = e.text
     return { value: { isCopied: true } } as never
   })
-  const result = await $.command.run({ command: 'glanceflow', args: 'week' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'week' } as never)
   expect(result.text).toBe('Claude hat 7 Schritte in 3 Aufgaben abgehakt und 3 davon abgeschlossen.')
   expect(copied).toMatch(/Deine Woche mit Claude · 30\. Sept?\. 2026 bis 6\. Okt\. 2026/)
   expect(copied).toContain('Arbeitszeit: 1 Std. 30 Min., verteilt auf 2 Projekte.')
@@ -4042,7 +4042,7 @@ test('the Plan shows long step names whole in a narrow panel', async ($, on) => 
   expect(pane).not.toContain('priva…')
 })
 
-test('someone new gets a three-card welcome once; /glanceflow tour shows it again', async ($, on) => {
+test('someone new gets a three-card welcome once; /leitstand tour shows it again', async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -4051,7 +4051,7 @@ test('someone new gets a three-card welcome once; /glanceflow tour shows it agai
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
 
   const shown = (await texts($, 'terminal', 120)).join('\n')
-  expect(shown).toContain('Willkommen bei GlanceFlow · 1 von 3')
+  expect(shown).toContain('Willkommen im Leitstand · 1 von 3')
   expect(shown).toContain('Hier erscheint eine Checkliste, wenn du Claude')
   expect(shown).toContain('≣ Verlauf')
   for (const card of ['2 von 3', '3 von 3']) {
@@ -4064,28 +4064,28 @@ test('someone new gets a three-card welcome once; /glanceflow tour shows it agai
   const last = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await last.press({ key: 'tour-next' })
   await last.unmount()
-  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen bei GlanceFlow')
+  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
 
   // The next chat does not show it again.
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
-  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen bei GlanceFlow')
+  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
 
-  await $.command.run({ command: 'glanceflow', args: 'tour' } as never)
-  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Willkommen bei GlanceFlow · 1 von 3')
+  await $.command.run({ command: 'leitstand', args: 'tour' } as never)
+  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Willkommen im Leitstand · 1 von 3')
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await band.press({ key: 'tour-skip' })
   await band.unmount()
-  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen bei GlanceFlow')
+  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
 })
 
-test('someone who already uses GlanceFlow is not welcomed again', async ($, on) => {
+test('someone who already uses Leitstand is not welcomed again', async ($, on) => {
   mock.store(on, { glanceSound: 'chime' })
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
   on('tool.register', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
-  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen bei GlanceFlow')
+  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
 })
 
 test('a time Claude writes in UTC shows in the person\'s own time', () => {
@@ -4117,7 +4117,7 @@ test('a request in another language gets an English title', () => {
 
 test('with Approve the plan first on, Claude waits for Start before it works', async ($, on) => {
   world(on)
-  const on_ = await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  const on_ = await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   expect(on_.text).toContain('wartet')
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   const planned = await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
@@ -4138,7 +4138,7 @@ test('with Approve the plan first on, Claude waits for Start before it works', a
 
 test('with Approve the plan first on, a plan Claude makes with its own task list also waits for Start', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: 'TaskCreate', subject: 'Write the page' } as never)
   await callTool($, { tool: 'TaskCreate', subject: 'Check it' } as never)
@@ -4174,7 +4174,7 @@ test('each step shows the files Claude added or changed, in the Plan and in Hist
   expect(plan).toContain('    Neu: contact.html · Geändert: styles.css und index.html')
   expect(plan).not.toContain('bisher')
 
-  await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  await $.command.run({ command: 'leitstand', args: 'history' } as never)
   expect((await paneTexts($)).join('\n')).toContain('Neu: contact.html · Geändert: styles.css und index.html')
 
   // Names only; the folder where two share a name, and a long list cut short.
@@ -4410,19 +4410,19 @@ test('a resumed chat that still waits on the person is saved as open again, so t
   expect(kept.list.phase).toBe('needsYou')
 })
 
-test('the other chats line can be turned off in Settings or with /glanceflow others off', async ($, on) => {
+test('the other chats line can be turned off in Settings or with /leitstand others off', async ($, on) => {
   const saved = { at: 1_000_000, isOpen: true, list: { title: 'Build the pricing page', phase: 'needsYou', tasks: [], helpers: [], startedAt: 1_000_000, finishedAt: null } }
   const { clock, store } = resumeWorld(on, { 'resume:chat-2': saved })
   await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
   await clock.advance(20_000)
   expect((await texts($, 'desktop')).join('\n')).toContain('Ein anderer Chat braucht dich')
-  const result = await $.command.run({ command: 'glanceflow', args: 'others off' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'others off' } as never)
   expect(result.text).toContain('erwähnt keine anderen Chats mehr')
   expect(store.get('glanceOthers')).toBe(false)
   for (const surface of SURFACES) {
     expect((await texts($, surface)).join('\n')).not.toContain('Ein anderer Chat')
   }
-  await $.command.run({ command: 'glanceflow', args: 'others on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'others on' } as never)
   expect((await texts($, 'desktop')).join('\n')).toContain('Ein anderer Chat braucht dich')
 })
 
@@ -4444,9 +4444,9 @@ test('in a narrow band the chat that needs you is named, never left out for the 
 })
 
 const PLAN_PANE = {
-  plugin: 'glanceflow',
+  plugin: 'leitstand',
   component: 'Pane',
-  requestId: 'glanceflow-plan',
+  requestId: 'leitstand-plan',
   props: { title: 'Plan', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
 } as const
 
@@ -4484,7 +4484,7 @@ test('▤ Plan opens the whole plan beside the chat: every step, what it got don
   const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 6 }, surface: 'terminal' })
   await band.press({ key: 'plan' })
   await band.unmount()
-  expect(opened).toEqual(['glanceflow-plan'])
+  expect(opened).toEqual(['leitstand-plan'])
 
   const pane = await planPaneTexts($)
   for (const name of steps) expect(pane).toContain(name)
@@ -4500,11 +4500,11 @@ test('▤ Plan opens the whole plan beside the chat: every step, what it got don
   expect(pane).toContain(' etwa 2 Min.')
 
   // In Details, the same percentage as the band, tokens per step, and what Claude needs from you.
-  await $.command.run({ command: 'glanceflow', args: 'details on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'details on' } as never)
   await clock.advance(60_000)
-  await callTool($, { tool: 'mcp__glanceflow__report_progress', task: 'Write copy', percent: 100 })
+  await callTool($, { tool: 'mcp__leitstand__report_progress', task: 'Write copy', percent: 100 })
   await clock.advance(30_000)
-  await callTool($, { tool: 'mcp__glanceflow__report_progress', task: 'Add pricing', percent: 40 })
+  await callTool($, { tool: 'mcp__leitstand__report_progress', task: 'Add pricing', percent: 40 })
   const band40 = (await texts($, 'terminal')).join('\n')
   const percent = /· (\d+)% ·/.exec(band40)?.[1]
   const details = await planPaneTexts($)
@@ -4519,7 +4519,7 @@ test('▤ Plan opens the whole plan beside the chat: every step, what it got don
   expect((await desktop.findAll({ type: 'Text' })).map(one => one.text).join('\n')).toContain('Ship it')
   await desktop.unmount()
 
-  const result = await $.command.run({ command: 'glanceflow', args: 'plan' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'plan' } as never)
   expect(result.text).toBe('Der Plan ist in der Seitenleiste.')
   expect(opened).toHaveLength(2)
 })
@@ -4574,7 +4574,7 @@ test('"mach weiter" typed after Esc picks the same job up', async ($, on) => {
 
 test('with Approve the plan first on, "nein" leaves the plan waiting and "los" starts it', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
@@ -4633,7 +4633,7 @@ test('a go-ahead inside a longer message counts; a no, a question, a condition o
 
 test('with Approve the plan first on, a go-ahead said inside a longer message starts the waiting plan', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   await $.turn.start({ text: 'Gut, aber du hattest ja alle Fragen abgeschlossen …', turnId: 't2' })
@@ -4650,7 +4650,7 @@ for (const [setting, args] of [
 ] as const) {
   test(`${setting}, a plan made in a turn the person started with a go-ahead does not wait; the next job's plan does`, async ($, on) => {
     world(on)
-    await $.command.run({ command: 'glanceflow', args } as never)
+    await $.command.run({ command: 'leitstand', args } as never)
     await $.turn.start({ text: SAID_START[1], turnId: 't1' })
     const planned = await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     expect(String(planned.result)).toContain('Der erste hat begonnen')
@@ -4667,7 +4667,7 @@ for (const [setting, args] of [
 
 test("in Gruppenarbeit, a helper's brief is no go-ahead: a waiting plan keeps waiting", async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'modus gruppenarbeit' } as never)
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
   await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Plane die Aufgaben', 'Prüfe die Ergebnisse'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
@@ -4679,7 +4679,7 @@ test("in Gruppenarbeit, a helper's brief is no go-ahead: a waiting plan keeps wa
 
 test("in Gruppenarbeit, a helper's turn leaves the person's go-ahead standing: Claude's plan after it does not wait", async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'modus gruppenarbeit' } as never)
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
   await $.turn.start({ text: 'Ja, leg los', turnId: 't1' })
   await $.turn.start({ text: 'Lies die Datei und berichte, was drinsteht.', turnId: 'w-t1', agentId: 'w1' } as never)
   const planned = await callTool($, { tool: PLAN, steps: ['Plane die Aufgaben', 'Prüfe die Ergebnisse'] })
@@ -4687,7 +4687,7 @@ test("in Gruppenarbeit, a helper's turn leaves the person's go-ahead standing: C
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
 })
 
-test('a GlanceFlow worker shows by its tier, without "glanceflow:"; other helpers as named', async ($, on) => {
+test('a Leitstand worker shows by its tier, without "leitstand:"; other helpers as named', async ($, on) => {
   world(on)
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'w1' }) as never)
   on('turn.step', async function* (_, e) {
@@ -4700,8 +4700,8 @@ test('a GlanceFlow worker shows by its tier, without "glanceflow:"; other helper
     tool_use_id: 'tu1',
     prompt: 'Write the page',
     description: 'Write the page carefully',
-    subagentType: 'glanceflow:sorgfaeltig',
-    provider: { plugin: 'glanceflow', tier: 'user' },
+    subagentType: 'leitstand:sorgfaeltig',
+    provider: { plugin: 'leitstand', tier: 'user' },
     parentModel: 'claude-opus-5-5',
     background: false,
     fork: false,
@@ -4714,11 +4714,11 @@ test('a GlanceFlow worker shows by its tier, without "glanceflow:"; other helper
     const shown = (await texts($, surface)).join('\n')
     expect(shown).toContain('Write the page carefully')
     expect(shown).toContain('sorgfältig · Opus 5.5')
-    expect(shown).not.toContain('glanceflow:')
+    expect(shown).not.toContain('leitstand:')
   }
   const pane = await planPaneTexts($)
   expect(pane).toContain('sorgfältig')
-  expect(pane).not.toContain('glanceflow:')
+  expect(pane).not.toContain('leitstand:')
 })
 
 test('the step Claude waits on says Waiting', async ($, on) => {
@@ -4753,13 +4753,13 @@ test('in a narrow window the button gets short and the bars go before step names
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Read your brand notes', 'Build the pricing section'] })
   const wide = (await texts($, 'terminal', 80)).join('\n')
-  expect(wide).toContain('● GlanceFlow: Einfach')
+  expect(wide).toContain('● Leitstand: Einfach')
   expect(wide).toContain('░░░░░░░░░░')
 
   // 39, not 36: the status column is 3 cells wider for "Hängt fest", so names get 3 fewer. Still under 40, 50 and 60.
   const narrow = (await texts($, 'terminal', 39)).join('\n')
   expect(narrow).toContain('● Einfach')
-  expect(narrow).not.toContain('GlanceFlow: Einfach')
+  expect(narrow).not.toContain('Leitstand: Einfach')
   expect(narrow).not.toContain('░░░░')
   expect(narrow).toContain('Read your brand notes')
 })
@@ -4782,9 +4782,9 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   on('tool.call', () => ({ result: {} as never }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   const SETTINGS = {
-    plugin: 'glanceflow',
+    plugin: 'leitstand',
     component: 'Pane',
-    requestId: 'glanceflow-settings',
+    requestId: 'leitstand-settings',
     props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
   } as const
   const settingsTexts = async () => {
@@ -4804,7 +4804,7 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await band.press({ key: 'settings' })
   await band.unmount()
-  expect(opened).toEqual(['glanceflow-settings'])
+  expect(opened).toEqual(['leitstand-settings'])
 
   let shown = await settingsTexts()
   expect(shown).toContain('● Einfach')
@@ -4830,17 +4830,17 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   expect(shown).toContain('mergt, sobald du freigibst')
   expect(shown).toContain('● An')
   expect(played).toEqual(['sounds/needs-you.wav'])
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Details')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Details')
 
   await pick('view-off')
-  expect((await texts($, 'terminal')).join('\n')).toContain('GlanceFlow: Aus')
+  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Aus')
 
-  const result = await $.command.run({ command: 'glanceflow', args: 'settings' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'settings' } as never)
   expect(result.text).toBe('Die Einstellungen sind in der Seitenleiste.')
   expect(opened).toHaveLength(2)
 })
 
-test('the band never shows how full the chat is, and /glanceflow tidy at says where that went', async ($, on) => {
+test('the band never shows how full the chat is, and /leitstand tidy at says where that went', async ($, on) => {
   world(on)
   on('session.measure', (_, e) => ({ changed: e.changed }))
   const full = async (percent: number) => {
@@ -4852,15 +4852,15 @@ test('the band never shows how full the chat is, and /glanceflow tidy at says wh
     expect(shown).not.toContain(`${percent}% voll`)
     expect(shown).not.toMatch(/aufräumen/i)
   }
-  const moved = await $.command.run({ command: 'glanceflow', args: 'tidy at 60' } as never)
+  const moved = await $.command.run({ command: 'leitstand', args: 'tidy at 60' } as never)
   expect(moved.text).toContain('Wie voll der Chat ist, zeigt jetzt der Statistik-Mod')
-  const off = await $.command.run({ command: 'glanceflow', args: 'tidy off' } as never)
+  const off = await $.command.run({ command: 'leitstand', args: 'tidy off' } as never)
   expect(off.text).toContain('Statistik-Mod')
 })
 
-test('/glanceflow checkpoint says plainly when there is none yet', async ($, on) => {
+test('/leitstand checkpoint says plainly when there is none yet', async ($, on) => {
   world(on)
-  const result = await $.command.run({ command: 'glanceflow', args: 'checkpoint' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'checkpoint' } as never)
   expect(result.text).toContain('In diesem Chat gibt es noch keinen Sicherungspunkt')
 })
 
@@ -4913,10 +4913,10 @@ test('Tidy it up saves a checkpoint first, compacts keeping it, and Claude reads
   const card = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await card.press({ key: 'recap' })
   await card.unmount()
-  expect(opened).toEqual(['glanceflow-recap'])
+  expect(opened).toEqual(['leitstand-recap'])
   band = (await texts($, 'terminal')).join('\n')
   expect(band).not.toContain('Chat aufgeräumt')
-  const recap = await $.ui.mount({ plugin: 'glanceflow', component: 'Pane', requestId: 'glanceflow-recap', surface: 'terminal', props: { title: 'Letzter Stand', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as never)
+  const recap = await $.ui.mount({ plugin: 'leitstand', component: 'Pane', requestId: 'leitstand-recap', surface: 'terminal', props: { title: 'Letzter Stand', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as never)
   const recapText = (await recap.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await recap.unmount()
   expect(recapText).toContain('the pricing page is done; next, the contact form.')
@@ -4924,7 +4924,7 @@ test('Tidy it up saves a checkpoint first, compacts keeping it, and Claude reads
   expect(recapText).toMatch(/Gespeichert um \d\d:\d\d/)
 
   const composed = await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [], sections: [] } as never)
-  const checkpoint = (composed as unknown as { sections: { id: string; text: string }[] }).sections.find(one => one.id === 'glanceflow:checkpoint')
+  const checkpoint = (composed as unknown as { sections: { id: string; text: string }[] }).sections.find(one => one.id === 'leitstand:checkpoint')
   expect(checkpoint?.text).toContain('the pricing page is done')
 })
 
@@ -4973,7 +4973,7 @@ test("two chats saving jobs the same day keep both; the day's old shared key mov
   // This chat writes only its own key: the other chat's job is never read back and rewritten.
   expect(written.filter(key => key.startsWith('history:'))).not.toContain('history:2026-10-06:chat-2')
   expect(store.get('history:2026-10-06:chat-2')).toEqual([job('b', 'Saved by another chat')])
-  const result = await $.command.run({ command: 'glanceflow', args: 'history' } as never)
+  const result = await $.command.run({ command: 'leitstand', args: 'history' } as never)
   expect(result.text).toBe('Verlauf für 06.10.2026: 3 Aufgaben.')
   const shown = (await paneTexts($)).join('\n')
   expect(shown).toContain('Saved before 0.25')
@@ -4983,9 +4983,9 @@ test("two chats saving jobs the same day keep both; the day's old shared key mov
 
 describe('Arbeitsweise und Grill mich', () => {
   const SETTINGS = {
-    plugin: 'glanceflow',
+    plugin: 'leitstand',
     component: 'Pane',
-    requestId: 'glanceflow-settings',
+    requestId: 'leitstand-settings',
     props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
   } as const
 
@@ -5013,16 +5013,16 @@ describe('Arbeitsweise und Grill mich', () => {
     // Plan zuerst freigeben gilt in Dynamisch immer, und die Einstellung sagt es.
     expect(shown).toContain('In der Gruppenarbeit wartet jeder Plan auf deine Freigabe')
 
-    const auto = await $.command.run({ command: 'glanceflow', args: 'arbeitsweise auto' } as never)
+    const auto = await $.command.run({ command: 'leitstand', args: 'arbeitsweise auto' } as never)
     expect(String(auto.text)).toContain('Auto-Mode:')
-    const toggled = await $.command.run({ command: 'glanceflow', args: 'arbeitsweise' } as never)
+    const toggled = await $.command.run({ command: 'leitstand', args: 'arbeitsweise' } as never)
     expect(String(toggled.text)).toContain('Gruppenarbeit:')
     // Die neuen Namen nimmt der Befehl auch.
-    expect(String((await $.command.run({ command: 'glanceflow', args: 'modus auto-mode' } as never)).text)).toContain('Auto-Mode:')
-    expect(String((await $.command.run({ command: 'glanceflow', args: 'modus gruppenarbeit' } as never)).text)).toContain('Gruppenarbeit:')
+    expect(String((await $.command.run({ command: 'leitstand', args: 'modus auto-mode' } as never)).text)).toContain('Auto-Mode:')
+    expect(String((await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)).text)).toContain('Gruppenarbeit:')
   })
 
-  test('beim Sitzungsstart legt GlanceFlow sechs Arbeiter mit Modell und Aufwand an', async ($, on) => {
+  test('beim Sitzungsstart legt Leitstand sechs Arbeiter mit Modell und Aufwand an', async ($, on) => {
     world(on)
     const registered: Record<string, unknown>[] = []
     on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -5030,7 +5030,7 @@ describe('Arbeitsweise und Grill mich', () => {
     on('command.register', () => ({ value: undefined }) as never)
     on('agent.register', (_, e) => {
       registered.push(e as unknown as Record<string, unknown>)
-      return { value: { agent: `glanceflow:${String((e as unknown as { name: string }).name)}` } } as never
+      return { value: { agent: `leitstand:${String((e as unknown as { name: string }).name)}` } } as never
     })
     await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
 
@@ -5046,7 +5046,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(String(registered[0]?.description)).toContain('Nur in der Gruppenarbeit')
   })
 
-  test('die Arbeiter bietet GlanceFlow nur in Dynamisch an, dort dafür keine allgemeinen Helfer', async ($, on) => {
+  test('die Arbeiter bietet Leitstand nur in Dynamisch an, dort dafür keine allgemeinen Helfer', async ($, on) => {
     world(on)
     on('agent.offer', () => ({ isOffered: true }) as never)
     const offer = async (agent: string) =>
@@ -5057,18 +5057,18 @@ describe('Arbeitsweise und Grill mich', () => {
         provider: { plugin: 'engine', tier: 'core' },
       })) as { isOffered: boolean }).isOffered
 
-    expect(await offer('glanceflow:mittel')).toBe(false)
+    expect(await offer('leitstand:mittel')).toBe(false)
     expect(await offer('general-purpose')).toBe(true)
     expect(await offer('Explore')).toBe(true)
 
-    await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
-    expect(await offer('glanceflow:mittel')).toBe(true)
-    expect(await offer('glanceflow:schnell')).toBe(true)
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+    expect(await offer('leitstand:mittel')).toBe(true)
+    expect(await offer('leitstand:schnell')).toBe(true)
     expect(await offer('general-purpose')).toBe(false)
     expect(await offer('Explore')).toBe(true)
 
-    // Mit GlanceFlow aus gilt keine Arbeitsweise: alles wie von der Engine.
-    await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+    // Mit Leitstand aus gilt keine Arbeitsweise: alles wie von der Engine.
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
     expect(await offer('general-purpose')).toBe(true)
   })
 
@@ -5079,13 +5079,13 @@ describe('Arbeitsweise und Grill mich', () => {
       ((await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [], sections: [] } as never)) as unknown as {
         sections: { id: string; text: string }[]
       }).sections
-    expect((await compose()).some(one => one.id === 'glanceflow:dynamisch')).toBe(false)
+    expect((await compose()).some(one => one.id === 'leitstand:dynamisch')).toBe(false)
 
-    await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
-    const rules = (await compose()).find(one => one.id === 'glanceflow:dynamisch')?.text ?? ''
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+    const rules = (await compose()).find(one => one.id === 'leitstand:dynamisch')?.text ?? ''
     expect(rules).toContain('Gruppenarbeit')
-    expect(rules).toContain('glanceflow:schnell (Haiku)')
-    expect(rules).toContain('glanceflow:fable (Fable, hoher Aufwand)')
+    expect(rules).toContain('leitstand:schnell (Haiku)')
+    expect(rules).toContain('leitstand:fable (Fable, hoher Aufwand)')
     expect(rules).toContain('Kritisch prüfen')
     expect(rules).toContain('Ein Git-Repository legst du nur an, wenn die Person zustimmt')
   })
@@ -5093,7 +5093,7 @@ describe('Arbeitsweise und Grill mich', () => {
   test('in Dynamisch wartet der Plan auf Start, nur Arbeiter mit Stufe dürfen ran, und solange sie laufen, ändert Claude keine Dateien', async ($, on) => {
     world(on)
     on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'w1' }) as never)
-    await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Plane die Aufgaben', 'Prüfe die Ergebnisse'] })
     // Ohne "Plan zuerst freigeben": Dynamisch wartet trotzdem.
@@ -5102,18 +5102,18 @@ describe('Arbeitsweise und Grill mich', () => {
     await $.turn.start({ text: 'los', turnId: 't2' })
     const general = await callTool($, { tool: 'Agent', subagent_type: 'general-purpose', description: 'Baue die Seite', prompt: 'Baue die Seite' })
     expect(general.deny).toContain('Gruppenarbeit')
-    expect(general.deny).toContain('glanceflow:mittel')
+    expect(general.deny).toContain('leitstand:mittel')
     const untyped = await callTool($, { tool: 'Agent', description: 'Baue die Seite', prompt: 'Baue die Seite' })
     expect(untyped.deny).toContain('Gruppenarbeit')
-    expect((await callTool($, { tool: 'Agent', subagent_type: 'glanceflow:mittel', description: 'Baue die Seite', prompt: 'x' })).deny).toBeUndefined()
+    expect((await callTool($, { tool: 'Agent', subagent_type: 'leitstand:mittel', description: 'Baue die Seite', prompt: 'x' })).deny).toBeUndefined()
     expect((await callTool($, { tool: 'Agent', subagent_type: 'Explore', description: 'Suche', prompt: 'x' })).deny).toBeUndefined()
 
     await $.agent.spawn({
       tool_use_id: 'tu1',
       prompt: 'Baue die Seite',
       description: 'Baue die Seite',
-      subagentType: 'glanceflow:mittel',
-      provider: { plugin: 'glanceflow', tier: 'user' },
+      subagentType: 'leitstand:mittel',
+      provider: { plugin: 'leitstand', tier: 'user' },
       parentModel: 'claude-opus-5-5',
       background: true,
       fork: false,
@@ -5261,15 +5261,15 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const skill = (name: string) => ({ name, description: name, source: 'plugin' })
 
-  test('in der App stehen hinter Grill mich Vermenschlichen, ADHS, Nachtschicht, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
+  test('in der App stehen hinter Grill mich Vermenschlichen, ADHS, Filetree, Nachtschicht, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
     await skillWorld($, on)
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
-    const order = ['workmode', 'grill', 'humanize', 'adhd', 'nightshift', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
+    const order = ['workmode', 'grill', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
+    for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F4C2}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
     // Review and Usage are gone.
     for (const key of ['review', 'usage']) expect(row).not.toContain(`"key":"${key}"`)
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
@@ -5278,7 +5278,7 @@ describe('Arbeitsweise und Grill mich', () => {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
       const keys = (await ui.findAll({ type: 'Button' })).map(one => one.props.key)
       await ui.unmount()
-      for (const key of ['review', 'usage', 'humanize', 'adhd', 'nightshift', 'privacy', 'vault']) expect(keys).not.toContain(key)
+      for (const key of ['review', 'usage', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).not.toContain(key)
     }
   })
 
@@ -5292,9 +5292,9 @@ describe('Arbeitsweise und Grill mich', () => {
     return left.map(kid => (kid.type === 'Text' ? `${kid.props.dimColor === true ? 'dim' : ''}${(kid.children ?? []).join('')}` : String(kid.props.key)))
   }
 
-  test('in der App trennen Striche die Gruppen unten links: hinter ADHS und vor Plan, im Terminal keine', async ($, on) => {
+  test('in der App trennen Striche die Gruppen unten links: hinter ADHS, hinter Filetree und vor Plan, im Terminal keine', async ($, on) => {
     await skillWorld($, on)
-    expect(await leftRow($)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'plan', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'plan', 'history'])
 
     for (const bodyColumns of [50, 80, 140]) {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
@@ -5306,7 +5306,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'history'])
   })
 
   test('ADHS (🧠) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
@@ -5314,6 +5314,39 @@ describe('Arbeitsweise und Grill mich', () => {
     const row = await leftRow($)
     expect(row.indexOf('adhd')).toBe(row.indexOf('humanize') + 1)
     expect(row.indexOf('adhd')).toBeLessThan(row.indexOf('dim|'))
+  })
+
+  test('Filetree (📂) steht hinter 🧠 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
+    await skillWorld($, on)
+    const row = await leftRow($)
+    const at = row.indexOf('filetree')
+    expect(row.slice(at - 2, at + 2)).toEqual(['adhd', 'dim|', 'filetree', 'dim|'])
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'filetree')
+    await ui.unmount()
+    expect(button?.props.label).toBe('\u{1F4C2}')
+    expect(button?.props.variant).toBe('secondary')
+  })
+
+  test('ein Druck auf 📂 startet den Befehl filetree; fehlt er, sagt Leitstand das', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('filetree')]
+    await press('filetree')
+    expect(state.runs).toEqual([{ command: 'filetree', args: undefined }])
+
+    // The plugin's command by its full name counts too.
+    state.runs.length = 0
+    state.commands = [skill('filetree:filetree')]
+    await press('filetree')
+    expect(state.runs.map(one => one.command)).toEqual(['filetree:filetree'])
+
+    // Not there: a toast, nothing in the prompt.
+    state.runs.length = 0
+    state.commands = []
+    await press('filetree')
+    expect(state.runs).toEqual([])
+    expect(state.filled).toEqual([])
+    expect(state.toasts).toContain('Filetree ist in dieser Sitzung nicht verfügbar.')
   })
 
   /** The ADHD button's variant in the app, and what is sent as a prompt, with its origin; the chat can start again. */
@@ -5407,7 +5440,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await variant()).toBe('secondary')
   })
 
-  test('Nachtschicht startet ihren Befehl; fehlt er, sagt GlanceFlow das', async ($, on) => {
+  test('Nachtschicht startet ihren Befehl; fehlt er, sagt Leitstand das', async ($, on) => {
     const { state, press } = await skillWorld($, on)
     state.commands = [skill('nachtschicht')]
     await press('nightshift')
@@ -5429,7 +5462,7 @@ describe('Arbeitsweise und Grill mich', () => {
   })
 
   /**
-   * The Nachtschicht mod as far as GlanceFlow sees it, written inline: it keeps its shift in its own state, null when
+   * The Nachtschicht mod as far as Leitstand sees it, written inline: it keeps its shift in its own state, null when
    * there is none. /nachtschicht with no argument ends a shift that is there, else starts one; `an` and `aus` say which.
    * A turn that ends on its mark finishes the shift and a refusal halts it, both keeping it; Esc ends it.
    */
@@ -5547,7 +5580,7 @@ describe('Arbeitsweise und Grill mich', () => {
   })
 
   /**
-   * A plan that waits for Start in Gruppenarbeit, with the night shift on or off; what GlanceFlow sends as the
+   * A plan that waits for Start in Gruppenarbeit, with the night shift on or off; what Leitstand sends as the
    * person's words is kept. The turn that laid it out has ended, as Claude stops to wait.
    */
   const nightPlan = async ($: Engine, on: On, isNightShift: boolean) => {
@@ -5558,7 +5591,7 @@ describe('Arbeitsweise und Grill mich', () => {
       return { text: e.text }
     })
     if (isNightShift) await typeNightShift($)
-    await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     const planned = await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
     await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -5656,7 +5689,7 @@ describe('Arbeitsweise und Grill mich', () => {
   test('während der Chat verdichtet wird, startet die Nachtschicht den Plan nicht, gleich danach schon', WITH_NIGHT_SHIFT, async ($, on) => {
     let isCompacting = false
     on('state.get', async (_, e, next) => {
-      // The read comes back as { value: { value, version } }: the inner value is the one GlanceFlow reads.
+      // The read comes back as { value: { value, version } }: the inner value is the one Leitstand reads.
       const result = (await next(e)) as { value: { value?: unknown; version: number } }
       return (isCompacting && (e as { key?: string }).key === 'isCompacting' ? { value: { ...result.value, value: true } } : result) as never
     })
@@ -5698,7 +5731,7 @@ describe('Arbeitsweise und Grill mich', () => {
     description: isOn ? 'Disconnect Remote Control' : 'Control this session from your phone or claude.ai/code',
     source: 'builtin',
   })
-  /** A main turn ends, so GlanceFlow reads Remote Control's state again. */
+  /** A main turn ends, so Leitstand reads Remote Control's state again. */
   const endTurn = ($: Engine) => $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
   /** The Remote Control button in the app: its variant and label, or null when there is none. */
   const remoteButton = async ($: Engine) => {
@@ -5708,14 +5741,14 @@ describe('Arbeitsweise und Grill mich', () => {
     return button === undefined ? null : { variant: button.props.variant, label: button.props.label }
   }
 
-  test('Remote Control verbunden: 🛜 steht hervorgehoben zwischen dem ersten Strich und Nachtschicht', async ($, on) => {
+  test('Remote Control verbunden: 🛜 steht hervorgehoben zwischen dem Strich hinter Filetree und Nachtschicht', async ($, on) => {
     const { state } = await skillWorld($, on)
     state.commands = [remoteCommand(true), skill('nachtschicht')]
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 7)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'remote', 'nightshift'])
-    expect(row.filter(one => one === 'dim|')).toHaveLength(2)
+    expect(row.slice(0, 9)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote', 'nightshift'])
+    expect(row.filter(one => one === 'dim|')).toHaveLength(3)
   })
 
   test('Remote Control nicht verbunden: 🛜 steht schlicht da', async ($, on) => {
@@ -5736,7 +5769,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 6)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'nightshift'])
+    expect(row.slice(0, 8)).toEqual(['workmode', 'grill', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)
@@ -5955,11 +5988,11 @@ describe('Arbeitsweise und Grill mich', () => {
       { value: 'auto', label: 'Auto-Mode' },
       { value: 'dynamisch', label: 'Gruppenarbeit' },
     ])
-    await $.ui.select({ plugin: 'glanceflow', key: 'workmode', value: 'dynamisch' })
+    await $.ui.select({ plugin: 'leitstand', key: 'workmode', value: 'dynamisch' })
     await ui.unmount()
 
     expect(await texts($, 'desktop')).toContain('Gruppenarbeit ▾')
-    const asked = await $.command.run({ command: 'glanceflow', args: 'arbeitsweise' } as never)
+    const asked = await $.command.run({ command: 'leitstand', args: 'arbeitsweise' } as never)
     // Ohne Wert schaltet der Befehl um: von Gruppenarbeit zurück auf Auto-Mode.
     expect(String(asked.text)).toContain('Auto-Mode:')
   })
@@ -5974,9 +6007,9 @@ describe('Arbeitsweise und Grill mich', () => {
     }
   })
 
-  test('mit GlanceFlow aus gibt es keinen Umschalter für die Arbeitsweise', async ($, on) => {
+  test('mit Leitstand aus gibt es keinen Umschalter für die Arbeitsweise', async ($, on) => {
     world(on)
-    await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...BAND, surface })
       const all = [...(await ui.findAll({ type: 'Button' })), ...(await ui.findAll({ type: 'Select' }))]
@@ -5997,8 +6030,8 @@ test('über dem Band steht ein Trennstrich: in der App eine dünne Linie, im Ter
   expect(alts[0]).toBe('Trennlinie')
   expect((await texts($, 'terminal'))[0]).toBe('─'.repeat(80))
 
-  // Auch mit GlanceFlow aus steht der Strich über der kurzen Zeile.
-  await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+  // Auch mit Leitstand aus steht der Strich über der kurzen Zeile.
+  await $.command.run({ command: 'leitstand', args: 'off' } as never)
   expect((await texts($, 'terminal'))[0]).toBe('─'.repeat(80))
   expect(await texts($, 'desktop')).toContain('[Trennlinie]')
 })
@@ -6006,9 +6039,9 @@ test('über dem Band steht ein Trennstrich: in der App eine dünne Linie, im Ter
 describe('Ansicht Minimal', () => {
   const minimal = async ($: Engine) => {
     const settings = await $.ui.mount({
-      plugin: 'glanceflow',
+      plugin: 'leitstand',
       component: 'Pane',
-      requestId: 'glanceflow-settings',
+      requestId: 'leitstand-settings',
       surface: 'terminal',
       props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
     })
@@ -6040,7 +6073,7 @@ describe('Ansicht Minimal', () => {
       expect(line).toContain('Pause')
       expect(line).toContain(surface === 'terminal' ? 'Grill' : '♨️')
       if (surface === 'desktop') expect(shown).toContain('Auto-Mode ▾')
-      expect(line).toContain(surface === 'terminal' ? 'GlanceFlow: Minimal' : 'Minimal ▾')
+      expect(line).toContain(surface === 'terminal' ? 'Leitstand: Minimal' : 'Minimal ▾')
     }
   })
 
@@ -6049,7 +6082,7 @@ describe('Ansicht Minimal', () => {
     await minimal($)
     expect((await texts($, 'desktop')).join('\n')).toContain('Bereit')
 
-    await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
     for (const surface of SURFACES) {
@@ -6076,9 +6109,9 @@ describe('Ansicht Minimal', () => {
     expect(menu?.props.label).toBeUndefined()
 
     const settings = await $.ui.mount({
-      plugin: 'glanceflow',
+      plugin: 'leitstand',
       component: 'Pane',
-      requestId: 'glanceflow-settings',
+      requestId: 'leitstand-settings',
       surface: 'terminal',
       props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
     })
@@ -6123,11 +6156,11 @@ describe('Zahnrad für die Einstellungen', () => {
     expect(shown.actions).not.toContain('Einstellungen')
     expect(shown.actions).not.toContain('"key":"settings"')
 
-    await $.command.run({ command: 'glanceflow', args: 'details on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'details on' } as never)
     const settings = await $.ui.mount({
-      plugin: 'glanceflow',
+      plugin: 'leitstand',
       component: 'Pane',
-      requestId: 'glanceflow-settings',
+      requestId: 'leitstand-settings',
       surface: 'terminal',
       props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
     })
@@ -6135,13 +6168,13 @@ describe('Zahnrad für die Einstellungen', () => {
     await settings.unmount()
     expect((await top()).order).toEqual(['Select', GEAR_LABEL])
 
-    await $.command.run({ command: 'glanceflow', args: 'off' } as never)
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
     expect((await top()).order).toEqual(['Select', GEAR_LABEL])
 
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
     await band.press({ key: 'settings' })
     await band.unmount()
-    expect(opened).toEqual(['glanceflow-settings'])
+    expect(opened).toEqual(['leitstand-settings'])
   })
 
   test('in der App ist das Zahnrad ein Emoji (U+FE0F), so breit wie die anderen Knöpfe mit Zeichen', async ($, on) => {
@@ -6238,7 +6271,7 @@ describe('Verdecken und Tresor', () => {
     )
     expect(merged.secrets.map(one => one.name)).toEqual(['API_KEY_2', 'DB_PASSWORD', 'PRIVATE_KEY'])
     expect(merged.text).toBe(
-      'API_KEY=old-value\nDB_PASSWORD="letmein!"\n\n# Aus dem Chat übernommen von GlanceFlow am 17.10.2026\n' +
+      'API_KEY=old-value\nDB_PASSWORD="letmein!"\n\n# Aus dem Chat übernommen vom Leitstand am 17.10.2026\n' +
         'API_KEY_2="new value #1"\nPRIVATE_KEY="line \\"one\\"\\nline two"\n',
     )
     const parsed = parseEnv(merged.text)
@@ -6259,7 +6292,7 @@ describe('Verdecken und Tresor', () => {
 
   /** The props a component reaches the engine's own drawing with, as JSON: what shows on screen. */
   const drawn = async ($: Engine, component: string, props: Record<string, unknown>) => {
-    const ui = await $.ui.mount({ plugin: 'glanceflow', surface: 'desktop', component, props } as never)
+    const ui = await $.ui.mount({ plugin: 'leitstand', surface: 'desktop', component, props } as never)
     await ui.unmount()
     return JSON.stringify(engineDrew.at(-1) ?? null)
   }
@@ -6404,14 +6437,14 @@ describe('Verdecken und Tresor', () => {
     expect(await shows()).toEqual(hidden)
 
     // The command and the settings switch it too.
-    const off = await $.command.run({ command: 'glanceflow', args: 'privacy off' } as never)
+    const off = await $.command.run({ command: 'leitstand', args: 'privacy off' } as never)
     expect(JSON.stringify(off)).toContain('Verdecken aus')
     expect(await bandButton($, 'privacy')).toBe(OPEN_LOCK)
     expect(await shows()).toEqual(visible)
     const settings = await $.ui.mount({
-      plugin: 'glanceflow',
+      plugin: 'leitstand',
       component: 'Pane',
-      requestId: 'glanceflow-settings',
+      requestId: 'leitstand-settings',
       surface: 'terminal',
       props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} },
     } as never)
@@ -6420,8 +6453,8 @@ describe('Verdecken und Tresor', () => {
     await settings.unmount()
     expect(await bandButton($, 'privacy')).toBe(LOCK)
     expect(await shows()).toEqual(hidden)
-    await $.command.run({ command: 'glanceflow', args: 'privacy off' } as never)
-    await $.command.run({ command: 'glanceflow', args: 'privacy on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'privacy off' } as never)
+    await $.command.run({ command: 'leitstand', args: 'privacy on' } as never)
     expect(await bandButton($, 'privacy')).toBe(LOCK)
   })
 
@@ -6442,9 +6475,9 @@ describe('Verdecken und Tresor', () => {
     expect(await privacy()).toEqual(open)
     await pressBand($, 'privacy')
     expect(await privacy()).toEqual(locked)
-    await $.command.run({ command: 'glanceflow', args: 'privacy off' } as never)
+    await $.command.run({ command: 'leitstand', args: 'privacy off' } as never)
     expect(await privacy()).toEqual(open)
-    await $.command.run({ command: 'glanceflow', args: 'privacy on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'privacy on' } as never)
     expect(await privacy()).toEqual(locked)
   })
 
@@ -6473,7 +6506,7 @@ describe('Verdecken und Tresor', () => {
     expect(await bandButton($, 'vault')).toBe(SHIELD)
     const env = state.files.get('C:/work/shop/.env') ?? ''
     // What was there stays; the value already there keeps its key; a taken name gets _2.
-    expect(env.startsWith('DB_PASSWORD=letmein!\nGITHUB_TOKEN=old\n\n# Aus dem Chat übernommen von GlanceFlow am ')).toBe(true)
+    expect(env.startsWith('DB_PASSWORD=letmein!\nGITHUB_TOKEN=old\n\n# Aus dem Chat übernommen vom Leitstand am ')).toBe(true)
     expect(env).toContain(`GITHUB_TOKEN_2=${GITHUB}\n`)
     expect(env).toContain(`KARTENNUMMER="${CARD}"\n`)
     expect(env).not.toContain('jane@example.com')
@@ -6690,7 +6723,7 @@ test('a clear request to carry out work counts as a go-ahead, worded any way; a 
 
 test('with Approve the plan first on, a clear request to carry out work starts the waiting plan; a new request still gets its plan shown first', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Bau mir eine Kontaktseite ein', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
@@ -6708,7 +6741,7 @@ test('with Approve the plan first on, a clear request to carry out work starts t
 
 test('mit Freigabe-Pflicht gibt „los“ den wartenden Plan frei; ein anderer Plan in derselben Runde wartet wieder', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Bau mir eine Kontaktseite ein', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -6723,7 +6756,7 @@ test('mit Freigabe-Pflicht gibt „los“ den wartenden Plan frei; ein anderer P
 
 test('mit Freigabe-Pflicht und „los“ ohne wartenden Plan ist der erste Plan der Runde frei, ein zweiter, anderer wartet', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'los', turnId: 't1' })
   const first = await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect(String(first.result)).toContain('Der erste hat begonnen')
@@ -6736,7 +6769,7 @@ test('mit Freigabe-Pflicht und „los“ ohne wartenden Plan ist der erste Plan 
 
 test('mit Freigabe-Pflicht bleibt derselbe Plan, noch einmal angelegt, frei, auch in einer späteren Runde mit „weiter“', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Bau mir eine Kontaktseite ein', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -6770,7 +6803,7 @@ for (const surface of SURFACES) {
       return next(e)
     })
     const tick = async () => ticks
-    await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
     await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -6834,7 +6867,7 @@ describe('Verdichtung des Chats', () => {
       await state.onCompact()
       return { messages: [{ role: 'user', text: 'Zusammenfassung.', toolUses: [] }] } as never
     })
-    await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
     await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -6842,9 +6875,9 @@ describe('Verdichtung des Chats', () => {
   }
   const viewMinimal = async ($: Engine) => {
     const settings = await $.ui.mount({
-      plugin: 'glanceflow',
+      plugin: 'leitstand',
       component: 'Pane',
-      requestId: 'glanceflow-settings',
+      requestId: 'leitstand-settings',
       surface: 'terminal',
       props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
     })
@@ -6944,7 +6977,7 @@ async function answered($: Engine, turnId: string, answer: string) {
 
 test('in Gruppenarbeit, a clear request in reply to Claude\'s question starts the plan Claude makes for it', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await answered($, 't1', 'a) eine neue Seite, b) die alte umbauen. Welche Variante meinst du?')
   await $.turn.start({ text: SAID_DO[0], turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
@@ -6954,7 +6987,7 @@ test('in Gruppenarbeit, a clear request in reply to Claude\'s question starts th
 
 test('in Gruppenarbeit, a new request out of the blue still gets its plan shown first', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await answered($, 't1', 'Die Startseite steht.')
   await $.turn.start({ text: 'Baue mir eine Preisseite.', turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
@@ -6964,7 +6997,7 @@ test('in Gruppenarbeit, a new request out of the blue still gets its plan shown 
 
 test('with Approve the plan first on, "Nimm b." after "Sag mir, welche du willst." starts the plan Claude makes for it', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await answered($, 't1', 'a) schlicht, b) mit Tabelle. Sag mir, welche du willst.')
   await $.turn.start({ text: 'Nimm b.', turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
@@ -6973,7 +7006,7 @@ test('with Approve the plan first on, "Nimm b." after "Sag mir, welche du willst
 
 test("with Approve the plan first on, a question back to Claude's choice starts nothing", async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await answered($, 't1', 'a) schlicht, b) mit Tabelle. Sag mir, welche du willst.')
   await $.turn.start({ text: 'Was kostet b?', turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
@@ -6982,7 +7015,7 @@ test("with Approve the plan first on, a question back to Claude's choice starts 
 
 test('with Approve the plan first on, "Nimm b." with no question before it starts no plan Claude makes for it', async ($, on) => {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await answered($, 't1', 'Die Startseite steht.')
   await $.turn.start({ text: 'Nimm b.', turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
@@ -7035,7 +7068,7 @@ test('Anweisungen zum Nachmessen, Prüfen und Nachsehen geben frei; ein Einwand,
 /** With Approve the plan first on, a plan waits for Start; then the person says this. */
 async function waitingThenSaid($: Engine, on: On, said: string) {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'approve on' } as never)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Bau mir eine Kontaktseite ein', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
@@ -7065,7 +7098,7 @@ const RESTARTED = 'Ich habe die App neu gestartet. Schau bitte nach, ob Striche 
  */
 async function askedInBox($: Engine, on: On, calls: Record<string, unknown>[], between: string[] = []) {
   world(on)
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await $.turn.start({ text: 'los', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   for (const call of calls) await callTool($, call)
@@ -7102,7 +7135,7 @@ for (const [name, calls, between] of NO_BOX_QUESTION) {
 type Row = { role: 'user' | 'assistant'; text: string; toolUses: { tool_use_id: string; tool: string; input: Record<string, unknown> }[] }
 const DO_A = 'Ja, setz Variante A um'
 
-/** Freshly loaded in Gruppenarbeit: the transcript holds `rows`; counts how often GlanceFlow reads it. */
+/** Freshly loaded in Gruppenarbeit: the transcript holds `rows`; counts how often Leitstand reads it. */
 function reloaded(on: On, rows: Row[]) {
   world(on)
   const reads = { count: 0 }
@@ -7119,7 +7152,7 @@ test('frisch geladen gibt eine Anweisung auf „Soll ich das umsetzen?“ im Ver
     { role: 'assistant', text: 'Variante A ist schlicht, Variante B hat eine Tabelle. Soll ich das umsetzen?', toolUses: [] },
     { role: 'user', text: DO_A, toolUses: [] },
   ])
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await $.turn.start({ text: DO_A, turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
@@ -7131,7 +7164,7 @@ test('frisch geladen gibt dieselbe Anweisung nichts frei, wenn die Antwort im Ve
     { role: 'user', text: 'Wie bauen wir die Preisseite?', toolUses: [] },
     { role: 'assistant', text: 'Variante A ist schlicht, Variante B hat eine Tabelle.', toolUses: [] },
   ])
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await $.turn.start({ text: DO_A, turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
@@ -7144,15 +7177,15 @@ test('frisch geladen gibt eine Anweisung frei, wenn im Verlauf wrap_up mit ask g
     { role: 'assistant', text: 'Die Striche sind dünner.', toolUses: [] },
     { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'w1', tool: BOX, input: { recap: 'Die Striche sind dünner.', ask: 'Passen die Striche jetzt?' } }] },
   ])
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await $.turn.start({ text: RESTARTED, turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Measure the lines', 'Report the widths'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
 })
 
-test('nach einer Runde mit turn.complete liest GlanceFlow den Verlauf nicht mehr nach', async ($, on) => {
+test('nach einer Runde mit turn.complete liest Leitstand den Verlauf nicht mehr nach', async ($, on) => {
   const reads = reloaded(on, [{ role: 'assistant', text: 'Soll ich das umsetzen?', toolUses: [] }])
-  await $.command.run({ command: 'glanceflow', args: 'arbeitsweise dynamisch' } as never)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
   await $.turn.start({ text: 'Wie bauen wir die Preisseite?', turnId: 't1' })
   expect(reads.count).toBe(1)
   await $.turn.complete({ answer: 'Die Preisseite steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })

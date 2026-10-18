@@ -1219,23 +1219,31 @@ async function verdichte(
 }
 
 /**
- * Der Wisch-Knopf: Mit GlanceFlow speichert Claude erst einen Sicherungspunkt der
- * Arbeit und verdichtet dann so, dass er bleibt (/glanceflow tidy). Ohne GlanceFlow
- * ein schlichtes /compact.
+ * Der Wisch-Knopf: Mit dem Leitstand speichert Claude erst einen Sicherungspunkt der
+ * Arbeit und verdichtet dann so, dass er bleibt (/leitstand tidy). Fehlt der Leitstand,
+ * tut es GlanceFlow, aus dem er hervorging (/glanceflow tidy). Ohne Leitstand und
+ * GlanceFlow ein schlichtes /compact.
  */
 async function wische($: EngineInterface, istBeschaeftigt: boolean, flaeche: RenderSurface, schonEingereiht: boolean): Promise<void> {
     if (schonEingereiht) {
         return
     }
-    let glanceflow: string | undefined
+    let aufraeumer: string | undefined
     try {
-        glanceflow = (await $.command.list()).map(b => b.name).find(name => name === 'glanceflow' || name.endsWith(':glanceflow'))
+        const namen = (await $.command.list()).map(b => b.name)
+        // Zuerst der Leitstand, sonst GlanceFlow; je unter eigenem Namen oder als Kopie eines Plugins.
+        for (const mod of ['leitstand', 'glanceflow']) {
+            aufraeumer = namen.find(name => name === mod || name.endsWith(`:${mod}`))
+            if (aufraeumer !== undefined) {
+                break
+            }
+        }
     } catch {
-        glanceflow = undefined
+        aufraeumer = undefined
     }
-    if (glanceflow !== undefined) {
+    if (aufraeumer !== undefined) {
         try {
-            await $.command.run({ command: glanceflow, args: 'tidy' })
+            await $.command.run({ command: aufraeumer, args: 'tidy' })
             return
         } catch {
             // Dann eben schlicht verdichten.

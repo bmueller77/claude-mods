@@ -2,20 +2,20 @@
 
 ## Supported versions
 
-Only the latest GlanceFlow release gets fixes. Update with:
+Only the latest release of the Leitstand gets fixes. Update with:
 
 ```
-claude plugin marketplace update claude-mods
-claude plugin update glanceflow@claude-mods
+claude plugin marketplace update bjoern-mods
+claude plugin update leitstand@bjoern-mods
 ```
 
 ## Reporting a vulnerability
 
-Please don't open a public issue. Report it privately on GitHub: open the [Security tab](https://github.com/Antreas-Strb/glanceflow/security) and press **Report a vulnerability**.
+Please don't open a public issue. The Leitstand grew out of GlanceFlow (Antreas-Strb): a vulnerability that GlanceFlow has too, report privately on GitHub as well, in GlanceFlow's [Security tab](https://github.com/Antreas-Strb/glanceflow/security) under **Report a vulnerability**. One that is the Leitstand's alone goes to Björn Müller directly.
 
-Say what you found, how to reproduce it, and which version you use. You'll get an answer within 7 days.
+Say what you found, how to reproduce it, and which version you use.
 
-## What GlanceFlow touches
+## What the Leitstand touches
 
 - It runs inside Claude Code as a mod and makes no network requests of its own. It asks Claude, through Claude Code, for short texts such as a job's title, a handoff note or a checkpoint.
 - For sounds and desktop notices, when you turn them on, it runs your computer's own sound and notification programs.

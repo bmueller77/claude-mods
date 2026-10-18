@@ -1,8 +1,8 @@
-// Arbeitsweise Dynamisch: das Prinzip von savvy-flow (MIT, johnnyvizz) in GlanceFlow.
+// Arbeitsweise Dynamisch: das Prinzip von savvy-flow (MIT, johnnyvizz) im Leitstand.
 //
 // Claude leitet: versteht, plant, entscheidet das Design und prueft jedes Ergebnis. Die Umsetzung
 // machen Arbeiter in sechs Stufen, von Haiku bis Fable, jeweils die billigste, die die Aufgabe beim
-// ersten Mal richtig schafft. GlanceFlow legt die Arbeiter selbst an und erzwingt die Regeln: in
+// ersten Mal richtig schafft. Der Leitstand legt die Arbeiter selbst an und erzwingt die Regeln: in
 // Dynamisch nur Arbeiter mit Stufe, keine eigenen Dateiaenderungen, solange Arbeiter laufen, und der
 // Plan wartet auf die Freigabe der Person. In Auto entscheidet Claude selbst ueber Helfer.
 
@@ -10,7 +10,7 @@ export type WorkMode = 'auto' | 'dynamisch'
 
 /** Eine Stufe: Name des Arbeiters, Modell, Aufwand und wofuer sie gedacht ist. */
 export type Tier = {
-  /** Der Name, unter dem GlanceFlow den Arbeiter anlegt; voll heisst er `glanceflow:<name>`. */
+  /** Der Name, unter dem der Leitstand den Arbeiter anlegt; voll heisst er `leitstand:<name>`. */
   name: string
   /** Wie die Person die Stufe liest. */
   label: string
@@ -82,7 +82,7 @@ export const TIERS: readonly Tier[] = [
   },
 ]
 
-const PREFIX = 'glanceflow:'
+const PREFIX = 'leitstand:'
 
 /** Der volle Name, unter dem das Agent-Tool den Arbeiter fuehrt. */
 export const tierAgent = (tier: Tier): string => `${PREFIX}${tier.name}`
@@ -95,7 +95,7 @@ export const DYNAMIC_ALSO: ReadonlySet<string> = new Set(['Explore', 'claude-cod
 
 /** Die Beschreibung, die Claude in der Liste der Helfer liest. */
 export function tierDescription(tier: Tier): string {
-  return `GlanceFlow-Arbeiter, Stufe ${tier.label} (${tier.modelLabel}): ${tier.use}. Nur in der Gruppenarbeit, beauftragt von Claude als Leiter.`
+  return `Leitstand-Arbeiter, Stufe ${tier.label} (${tier.modelLabel}): ${tier.use}. Nur in der Gruppenarbeit, beauftragt von Claude als Leiter.`
 }
 
 /** Die Regeln eines Arbeiters, je nach Stufe. */
@@ -119,7 +119,7 @@ export function workerPrompt(tier: Tier): string {
     'Offene Fragen oder Risiken (wenn keine: "keine").',
   ]
   return [
-    `Du bist ein Arbeiter der Stufe ${tier.label} in der Gruppenarbeit von GlanceFlow. Claude leitet: Plan, Design und das letzte Urteil liegen dort. Du bekommst eine klar umrissene Aufgabe und siehst den Chat nicht, nur deinen Auftrag.`,
+    `Du bist ein Arbeiter der Stufe ${tier.label} in der Gruppenarbeit des Leitstands. Claude leitet: Plan, Design und das letzte Urteil liegen dort. Du bekommst eine klar umrissene Aufgabe und siehst den Chat nicht, nur deinen Auftrag.`,
     '',
     'Regeln:',
     ...rules.map(rule => `- ${rule}`),
@@ -130,14 +130,14 @@ export function workerPrompt(tier: Tier): string {
 }
 
 /** Der Abschnitt fuer den Systemprompt, solange die Arbeitsweise Dynamisch gilt. */
-export const DYNAMIC_SECTION = `# Gruppenarbeit (GlanceFlow)
+export const DYNAMIC_SECTION = `# Gruppenarbeit (Leitstand)
 Die Person hat die Gruppenarbeit gewählt. Du leitest: Du verstehst, planst, entscheidest und prüfst. Die Umsetzung machen Arbeiter. Mach nie die Arbeit eines Arbeiters selbst, und lass nie einen Arbeiter deine machen.
 
 ## 1. Verstehen und planen (nur du)
 - Lies, was du brauchst, um die Anfrage im Zusammenhang zu verstehen. Für breite Suchen nimm den Arbeiter ${PREFIX}schnell oder Explore.
 - Entscheide, ob die Aufgabe Design berührt: sichtbare Oberfläche, Layout, Texte, die Menschen lesen, Abläufe, Farben, Schrift, Abstände. Wenn ja, kommt das Design vor jeder Umsetzung (Abschnitt 2).
 - Zerleg die Arbeit in so viele Aufgaben, wie sinnvoll sind, und nicht mehr. Jede bekommt einen in sich geschlossenen Auftrag (was, wo, Grenzen, wann sie fertig ist, wie sie geprüft wird), ihre Abhängigkeiten und eine Stufe (Abschnitt 3).
-- Leg den Plan mit plan_steps an. GlanceFlow zeigt ihn der Person, und sie gibt ihn frei, bevor du delegierst. Würden verschiedene Lesarten der Anfrage zu wesentlich anderer Arbeit führen, frag vorher.
+- Leg den Plan mit plan_steps an. Der Leitstand zeigt ihn der Person, und sie gibt ihn frei, bevor du delegierst. Würden verschiedene Lesarten der Anfrage zu wesentlich anderer Arbeit führen, frag vorher.
 
 ## 2. Design (nur du, nie delegiert)
 - Kleine Oberflächenteile entscheidest du selbst und schreibst sie als konkrete Vorgaben in den Auftrag: Aufbau, Zustände, Abstände, welche vorhandenen Bausteine wiederverwendet werden.
@@ -153,7 +153,7 @@ schwer und sorgfältig unterscheiden sich in der Art der Schwierigkeit, nicht in
 - Nimm das Agent-Tool mit subagent_type genau wie oben, etwa ${PREFIX}mittel. Andere Helfer sind in der Gruppenarbeit gesperrt, außer Explore für breite Suchen.
 - Unabhängige Aufgaben startest du gleichzeitig in einer Nachricht, abhängige nacheinander. Zwei Arbeiter ändern nie dieselben Dateien.
 - Jeder Auftrag steht für sich, denn der Arbeiter sieht diesen Chat nicht: Dateipfade, die entschiedenen Design-Vorgaben, wichtige Regeln aus CLAUDE.md und die genaue Prüfung, die du erwartest. Kurz halten: diese Aufgabe, nicht der ganze Plan.
-- Solange Arbeiter laufen, änderst du selbst keine Dateien; GlanceFlow sperrt das. Bereite in der Zeit den nächsten Auftrag oder deine Prüfung vor.
+- Solange Arbeiter laufen, änderst du selbst keine Dateien; der Leitstand sperrt das. Bereite in der Zeit den nächsten Auftrag oder deine Prüfung vor.
 
 ## 5. Kritisch prüfen (nur du)
 Jeder Bericht eines Arbeiters ist eine Behauptung, keine Tatsache.

@@ -21,7 +21,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    den Katalogen claude-kit, claude-code-mods, catch-me-up, cache-tax, cache-tax-lokal,
    visible-compact, visible-compact-lokal, claude-code-playground, claude-code-playground-mods,
    savvy-progress-lokal, claude-mods und nateherk-mods, dazu aus bjoern-mods die alten Einträge
-   savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius,
+   glanceflow, savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius,
    antwortzeit, zweiter-blick und context-bar, wo vorhanden. Entferne danach diese Kataloge
    (`claude plugin marketplace remove <katalog>`), aber nicht bjoern-mods. Plugins aus anderen
    Katalogen (Skills, MCP-Server und Ähnliches für deine Arbeit) bleiben; nenne sie im Bericht.
@@ -33,7 +33,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
      `claude plugin marketplace remove bjoern-mods`, dann
      `claude plugin marketplace add ~/.claude/bjoern-mods`.
 4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
-   glanceflow, statistik, naechste-schritte, zusammenfassung, visible-compact, nachtschicht,
+   leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, nachtschicht,
    filetree, i-have-adhd. Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
    (install.sh im Repo tut dasselbe.)
 5. Nur in der Claude-Desktop-App: In ~/.claude/settings.json unter permissions.allow den Eintrag
@@ -49,19 +49,19 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 
 | Mod | Was er tut |
 |---|---|
-| glanceflow | Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf; Knopfzeile mit Schaltern |
+| leitstand | Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf; Knopfzeile mit Schaltern (früher GlanceFlow) |
 | statistik | eine Zeile: Nachrichten, Kontext, Cache-Uhr mit Warmhalten, Limits |
 | naechste-schritte | zwei oder drei Vorschläge für die nächste Eingabe, ganz unten |
 | zusammenfassung | nach jeder Arbeitsrunde zwei Zeilen: getan, und was man leicht übersieht |
 | visible-compact | Chat vor und nach `/compact` nebeneinander |
 | nachtschicht | `/nachtschicht`: Claude arbeitet ohne Rückfragen weiter, mit Übergabe am Ende |
 | filetree | Dateibaum |
-| i-have-adhd | ADHS-Modus, Knopf 🧠 in GlanceFlow |
+| i-have-adhd | ADHS-Modus, Knopf 🧠 im Leitstand |
 
 ## Reihenfolge über dem Eingabefeld
 
 Welcher Mod über dem Eingabefeld oben steht, legt die Engine fest, nicht die Reihenfolge der
-Installation. Die Mods ordnen sich selbst: GlanceFlow oben, darunter die Statistik, die
+Installation. Die Mods ordnen sich selbst: der Leitstand oben, darunter die Statistik, die
 Zusammenfassung, ganz unten Nächste Schritte unter einem Trennstrich. Gleich installiert heißt
 deshalb gleiches Bild auf jeder Instanz.
 
@@ -69,10 +69,10 @@ deshalb gleiches Bild auf jeder Instanz.
 
 - Im Terminal (Server) zeichnen die Mods Text und Tastenkürzel, Knöpfe und Bildchen nur in der
   Desktop-App. 🛜 Remote Control gibt es nur dort.
-- GlanceFlow startet in der Arbeitsweise "Auto-Mode" ohne Plan-Freigabe. Die Freigabe (und die
+- Der Leitstand startet in der Arbeitsweise "Auto-Mode" ohne Plan-Freigabe. Die Freigabe (und die
   Gruppenarbeit) erst einschalten, wenn jemand Start drücken kann. Bei laufender Nachtschicht
   startet ein wartender Plan nach 30 Sekunden von selbst.
 - Kosten: Nächste Schritte und Zusammenfassung rufen je Antwort bzw. Arbeitsrunde Haiku auf;
-  GlanceFlow benennt Aufträge mit Haiku; die Statistik kostet nur beim Warmhalten.
+  der Leitstand benennt Aufträge mit Haiku; die Statistik kostet nur beim Warmhalten.
 - Updates: `claude plugin marketplace update bjoern-mods`, dann `claude plugin update <mod>@bjoern-mods`
   und neu starten.

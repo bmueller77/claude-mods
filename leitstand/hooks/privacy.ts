@@ -320,7 +320,7 @@ export function mergeEnv(existing: string, secrets: readonly Secret[], date: str
   let text = existing
   if (text !== '' && !text.endsWith('\n')) text += eol
   if (text.trim() !== '') text += eol
-  text += [`# Aus dem Chat übernommen von GlanceFlow am ${date}`, ...lines].join(eol) + eol
+  text += [`# Aus dem Chat übernommen vom Leitstand am ${date}`, ...lines].join(eol) + eol
   return { text, secrets: named }
 }
 

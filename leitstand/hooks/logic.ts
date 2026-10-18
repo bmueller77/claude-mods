@@ -2,7 +2,7 @@ import type { GlanceChecklist, GlanceHelper, GlanceHistoryView, GlanceOtherChat,
 import { SIZE_WEIGHT, teamReport, weekSummary } from './history'
 import { maskPrivate } from './privacy'
 
-export const PLUGIN = 'glanceflow'
+export const PLUGIN = 'leitstand'
 
 export const tourNeeds = (mark: string) =>
   `Wenn Claude dich braucht, zeigt die Checkliste Braucht dich ${mark} und sagt, was zu tun ist. Schalte in den Einstellungen Töne oder Desktop-Benachrichtigungen ein, dann hörst oder siehst du es auch in einer anderen App.`
@@ -1256,7 +1256,7 @@ export const buttonsIn = (tree: unknown): unknown[] =>
   (tree as { type?: unknown }).type === 'Button' ? [tree] : childrenOf((tree as { children?: unknown }).children).flatMap(buttonsIn)
 
 /**
- * What other mods draw beneath, split: their lone buttons (Replay, say), which join GlanceFlow's actions, and the
+ * What other mods draw beneath, split: their lone buttons (Replay, say), which join Leitstand's actions, and the
  * rest, which stays under the band. A drawing of nothing but buttons comes up whole; inside a stack (a column) only a
  * button standing on its own does, so a mod's own group of buttons (the next-steps suggestions) stays with its words.
  */
@@ -1356,7 +1356,7 @@ export const reportOf = (view: GlanceHistoryView) =>
       ? teamReport({ ...view, entries: view.weekEntries }, 'week')
       : teamReport(view)
 
-/** The value that `/glanceflow <setting> on` or `off` asks for. With neither word, the opposite of the current value. */
+/** The value that `/leitstand <setting> on` or `off` asks for. With neither word, the opposite of the current value. */
 export const toggled = (choice: string, current: boolean) => (choice === 'on' ? true : choice === 'off' ? false : !current)
 
 /** A chat's checklist as kept for when the chat is resumed, and for the other chats to see; `isOpen` until it ends. */

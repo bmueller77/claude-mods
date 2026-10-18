@@ -144,11 +144,11 @@ const OTHERS_KEY = 'glanceOthers'
 const TOUR_KEY = 'glanceTour'
 /** The welcome, three short cards the first time: what the checklist is, what Needs you means, where the rest lives. */
 const TOUR_FIRST = 'Hier erscheint eine Checkliste, wenn du Claude um etwas mit mehreren Schritten bittest: jeder Schritt, wie weit er ist und wie lange es noch etwa dauert.'
-const TOUR_LAST = 'Unten unter Einstellungen findest du alle Optionen. Der Verlauf zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /glanceflow tour.'
+const TOUR_LAST = 'Unten unter Einstellungen findest du alle Optionen. Der Verlauf zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /leitstand tour.'
 const TOUR = [TOUR_FIRST, tourNeeds('in Gelb'), TOUR_LAST]
 /** Elsewhere than the terminal the words keep the text colour and the yellow is the bell beside them. */
 const TOUR_LAST_VECTOR =
-  'Oben rechts hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /glanceflow tour.'
+  'Oben rechts hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /leitstand tour.'
 const TOUR_VECTOR = [TOUR_FIRST, tourNeeds('neben einer gelben Glocke'), TOUR_LAST_VECTOR]
 /** The settings button beside the view elsewhere than the terminal: a gear, drawn as an emoji (U+FE0F), as wide as the other sign buttons. */
 const GEAR = '\u2699\uFE0F'
@@ -158,6 +158,8 @@ const GRILL = '\u2668\uFE0F'
 const HUMANIZE = '\u{1F9CD}'
 const ADHD = '\u{1F9E0}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
+/** The opener for Filetree's side pane, after ADHD mode: an open folder. */
+const FILETREE = '\u{1F4C2}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
 const MASK_ON = '\u{1F512}'
 const MASK_OFF = '\u{1F513}'
@@ -220,45 +222,45 @@ const STATUS = 'Status'
 const NOTICE = 'Hinweis'
 const APPROVE = 'Lies den Plan, dann drück Start oder sag Claude, was sich ändern soll'
 
-const enabledAtom = atom({ plugin: 'glanceflow', key: 'glanceEnabled' } as const, true)
-const detailAtom = atom({ plugin: 'glanceflow', key: 'detailLevel' } as const, 'simple')
-const checklistAtom = atom({ plugin: 'glanceflow', key: 'checklist' } as const, null)
-const tickAtom = atom({ plugin: 'glanceflow', key: 'tick' } as const, 0)
+const enabledAtom = atom({ plugin: 'leitstand', key: 'glanceEnabled' } as const, true)
+const detailAtom = atom({ plugin: 'leitstand', key: 'detailLevel' } as const, 'simple')
+const checklistAtom = atom({ plugin: 'leitstand', key: 'checklist' } as const, null)
+const tickAtom = atom({ plugin: 'leitstand', key: 'tick' } as const, 0)
 const NO_USAGE: GlanceUsage = { limits: [], limitPercent: null, limitLabel: null, limitResetsAt: null, contextPercent: null, costUsd: null }
-const usageAtom = atom({ plugin: 'glanceflow', key: 'usage' } as const, NO_USAGE)
-const soundAtom = atom({ plugin: 'glanceflow', key: 'soundMode' } as const, 'off')
-const calmAtom = atom({ plugin: 'glanceflow', key: 'isCalm' } as const, false)
-const guardAtom = atom({ plugin: 'glanceflow', key: 'isGuarded' } as const, true)
-const maskAtom = atom({ plugin: 'glanceflow', key: 'masksPrivate' } as const, true)
-const approveAtom = atom({ plugin: 'glanceflow', key: 'approvePlan' } as const, false)
-const workModeAtom = atom({ plugin: 'glanceflow', key: 'workMode' } as const, 'auto' as WorkMode)
-const shipOnGithubAtom = atom({ plugin: 'glanceflow', key: 'shipsOnGithub' } as const, false)
-const hasGithubAtom = atom({ plugin: 'glanceflow', key: 'hasGithub' } as const, false)
-const armedAtom = atom({ plugin: 'glanceflow', key: 'armedButton' } as const, null)
-const noticeAtom = atom({ plugin: 'glanceflow', key: 'isNoticing' } as const, false)
-const tourAtom = atom({ plugin: 'glanceflow', key: 'tourStep' } as const, null)
-const checkpointAtom = atom({ plugin: 'glanceflow', key: 'checkpointAt' } as const, null)
-const recapAtom = atom({ plugin: 'glanceflow', key: 'isRecapShown' } as const, false)
-const othersAtom = atom({ plugin: 'glanceflow', key: 'otherChats' } as const, [])
-const showsOthersAtom = atom({ plugin: 'glanceflow', key: 'showsOthers' } as const, true)
+const usageAtom = atom({ plugin: 'leitstand', key: 'usage' } as const, NO_USAGE)
+const soundAtom = atom({ plugin: 'leitstand', key: 'soundMode' } as const, 'off')
+const calmAtom = atom({ plugin: 'leitstand', key: 'isCalm' } as const, false)
+const guardAtom = atom({ plugin: 'leitstand', key: 'isGuarded' } as const, true)
+const maskAtom = atom({ plugin: 'leitstand', key: 'masksPrivate' } as const, true)
+const approveAtom = atom({ plugin: 'leitstand', key: 'approvePlan' } as const, false)
+const workModeAtom = atom({ plugin: 'leitstand', key: 'workMode' } as const, 'auto' as WorkMode)
+const shipOnGithubAtom = atom({ plugin: 'leitstand', key: 'shipsOnGithub' } as const, false)
+const hasGithubAtom = atom({ plugin: 'leitstand', key: 'hasGithub' } as const, false)
+const armedAtom = atom({ plugin: 'leitstand', key: 'armedButton' } as const, null)
+const noticeAtom = atom({ plugin: 'leitstand', key: 'isNoticing' } as const, false)
+const tourAtom = atom({ plugin: 'leitstand', key: 'tourStep' } as const, null)
+const checkpointAtom = atom({ plugin: 'leitstand', key: 'checkpointAt' } as const, null)
+const recapAtom = atom({ plugin: 'leitstand', key: 'isRecapShown' } as const, false)
+const othersAtom = atom({ plugin: 'leitstand', key: 'otherChats' } as const, [])
+const showsOthersAtom = atom({ plugin: 'leitstand', key: 'showsOthers' } as const, true)
 // shortcut: each read of the store parses its whole file, one per other chat; fine for 20 chats every 20 s, a single
 // shared key would read once but brings back the race of two chats saving at once.
 const OTHERS_EVERY_MS = 20_000
-const historyAtom = atom({ plugin: 'glanceflow', key: 'historyView' } as const, null)
-const HISTORY_PANE = 'glanceflow-history'
-const PLAN_PANE = 'glanceflow-plan'
-const RECAP_PANE = 'glanceflow-recap'
-const SETTINGS_PANE = 'glanceflow-settings'
-const handoffAtom = atom({ plugin: 'glanceflow', key: 'handoffState' } as const, 'idle')
+const historyAtom = atom({ plugin: 'leitstand', key: 'historyView' } as const, null)
+const HISTORY_PANE = 'leitstand-history'
+const PLAN_PANE = 'leitstand-plan'
+const RECAP_PANE = 'leitstand-recap'
+const SETTINGS_PANE = 'leitstand-settings'
+const handoffAtom = atom({ plugin: 'leitstand', key: 'handoffState' } as const, 'idle')
 // The main chat is being compacted: a message sent now waits in the queue until it is through.
-const compactingAtom = atom({ plugin: 'glanceflow', key: 'isCompacting' } as const, false)
+const compactingAtom = atom({ plugin: 'leitstand', key: 'isCompacting' } as const, false)
 // Remote Control's state per source: the app's own switch (ccd_session_mgmt) and /remote-control's description;
 // `missing` while the session lacks that source.
 type RemoteSide = 'on' | 'off' | 'missing'
 type RemoteSides = { app: RemoteSide; command: RemoteSide }
-const remoteAtom = atom({ plugin: 'glanceflow', key: 'remoteControl' } as const, { app: 'missing', command: 'missing' } as RemoteSides)
+const remoteAtom = atom({ plugin: 'leitstand', key: 'remoteControl' } as const, { app: 'missing', command: 'missing' } as RemoteSides)
 // Whether the i-have-adhd skill's mode is on: it stays on until the person says "stop adhd mode" or "normal mode".
-const adhdAtom = atom({ plugin: 'glanceflow', key: 'adhdMode' } as const, false)
+const adhdAtom = atom({ plugin: 'leitstand', key: 'adhdMode' } as const, false)
 const HANDOFF_CONFIRM_MS = 8000
 // What the Continue button sends, as the person's own words; turn.start knows it and keeps the job going.
 const CONTINUE_TEXT = 'Mach bitte da weiter, wo du aufgehört hast.'
@@ -300,7 +302,7 @@ ohne dass etwas Wichtiges verloren geht. Nenne kurz: das Ziel; was schon erledig
 getroffene Entscheidungen und warum; was die Person verlangt oder ausgeschlossen hat; die Dateien, Befehle oder Links, auf die
 es ankommt; offene Fragen; und den allernächsten Schritt. Auf Deutsch, unter 300 Wörtern, ohne Einleitung. Beginne genau mit: "Sicherungspunkt:"`
 
-const PROMPT_SECTION = `# GlanceFlow (Fortschritts-Checkliste)
+const PROMPT_SECTION = `# Leitstand (Fortschritts-Checkliste)
 Die Person verfolgt deine Arbeit auf einer Checkliste über dem Eingabefeld, in einfachem Deutsch.
 - Eine Frage, die du sofort und ohne Tools beantworten kannst, braucht keinen Plan: Antworte einfach.
 - Bevor du irgendein anderes Tool nutzt, ruf plan_steps (Tool ${PLAN_TOOL}) mit 2 bis 8 Schritten in Reihenfolge auf. Ist es deferred, lade es zuerst mit ToolSearch. Hat diese Sitzung TodoWrite oder TaskCreate, darfst du stattdessen diese To-do-Liste als Plan nutzen.
@@ -491,7 +493,7 @@ const runFirst = async ($: $, commands: readonly (readonly string[])[]) => {
   throw new Error('No sound player on this computer')
 }
 
-/** Plays one of GlanceFlow's sounds: Claude Code's own player on a Mac, the computer's own player on Windows and Linux. */
+/** Plays one of Leitstand's sounds: Claude Code's own player on a Mac, the computer's own player on Windows and Linux. */
 const playSound = async ($: $, asset: string) => {
   if (platform === 'windows') {
     const file = `${$.plugin.root}\\${asset.replaceAll('/', '\\')}`.replaceAll("'", "''")
@@ -523,8 +525,8 @@ const WINDOWS_TOAST = [
   '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
   '$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)',
   "$text = $xml.GetElementsByTagName('text')",
-  '$text.Item(0).AppendChild($xml.CreateTextNode($env:GLANCEFLOW_TITLE)) | Out-Null',
-  '$text.Item(1).AppendChild($xml.CreateTextNode($env:GLANCEFLOW_BODY)) | Out-Null',
+  '$text.Item(0).AppendChild($xml.CreateTextNode($env:LEITSTAND_TITLE)) | Out-Null',
+  '$text.Item(1).AppendChild($xml.CreateTextNode($env:LEITSTAND_BODY)) | Out-Null',
   "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($xml))",
 ].join('; ')
 
@@ -532,7 +534,7 @@ const WINDOWS_TOAST = [
 const showNotice = async ($: $, title: string, body: string) => {
   if (platform === 'windows') {
     await $.process
-      .run(['powershell', '-NoProfile', '-Command', WINDOWS_TOAST], { env: { GLANCEFLOW_TITLE: title, GLANCEFLOW_BODY: body } })
+      .run(['powershell', '-NoProfile', '-Command', WINDOWS_TOAST], { env: { LEITSTAND_TITLE: title, LEITSTAND_BODY: body } })
       .catch(() => undefined)
     return
   }
@@ -918,12 +920,12 @@ const startFreshChat = async ($: $) => {
       return
     }
     const note = reply.text.trim()
-    // Kept in case anything below fails: /glanceflow handoff note puts it back in the prompt box.
+    // Kept in case anything below fails: /leitstand handoff note puts it back in the prompt box.
     await $.store.set(HANDOFF_KEY, { at: await now($), note })
     try {
       await $.command.run({ command: 'clear', args: '' })
     } catch {
-      $.ui.toast("Der Chat ließ sich nicht leeren. Schreib /glanceflow handoff note, um die Übergabenotiz zu holen.")
+      $.ui.toast("Der Chat ließ sich nicht leeren. Schreib /leitstand handoff note, um die Übergabenotiz zu holen.")
       return
     }
     const isSent = await sendAsUser($, note, async () => {
@@ -1083,7 +1085,7 @@ const tidyUp = async ($: $, extra?: { secrets: readonly Secret[] }): Promise<'co
     else if (note !== null) await update($, recapAtom, () => true)
     return done.skip === undefined ? 'compacted' : 'failed'
   } catch (refused) {
-    $.ui.log(`glanceflow: compaction refused: ${refused instanceof Error ? refused.message : String(refused)}`, { to: 'debug' })
+    $.ui.log(`leitstand: compaction refused: ${refused instanceof Error ? refused.message : String(refused)}`, { to: 'debug' })
   }
   try {
     await $.command.run({ command: 'compact', args: instructions })
@@ -1249,7 +1251,7 @@ const measureUsage = async ($: $, usage: GlanceUsage) => {
 const setEnabled = async ($: $, isEnabled: boolean) => {
   await update($, enabledAtom, () => isEnabled)
   await $.store.set(STORE_KEY, isEnabled)
-  $.ui.toast(isEnabled ? 'GlanceFlow ist an: Tool-Details sind ausgeblendet' : 'GlanceFlow ist aus: Alles wird angezeigt')
+  $.ui.toast(isEnabled ? 'Der Leitstand ist an: Tool-Details sind ausgeblendet' : 'Der Leitstand ist aus: Alles wird angezeigt')
 }
 
 /** Sounds: off, a chime, or a chime and a few words. A chime plays at once so the person hears what they picked. */
@@ -1277,7 +1279,7 @@ const stepTour = async ($: $, step: number | null) => {
 const setNotice = async ($: $, isOn: boolean) => {
   await update($, noticeAtom, () => isOn)
   await $.store.set(NOTICE_KEY, isOn)
-  if (isOn) void showNotice($, 'Claude braucht dich', 'So sagt dir GlanceFlow Bescheid.')
+  if (isOn) void showNotice($, 'Claude braucht dich', 'So sagt dir der Leitstand Bescheid.')
 }
 
 /** The line naming the other chats that need the person: off before sharing the screen, say. */
@@ -1311,7 +1313,7 @@ const toggleMasking = async ($: $) => {
   $.ui.toast(isOn ? MASKING_WORDS.on : MASKING_WORDS.off)
 }
 
-/** Whether the screen masks right now: masking on, while GlanceFlow is on. */
+/** Whether the screen masks right now: masking on, while Leitstand is on. */
 const isMasking = async ($: $) => (await read($, enabledAtom)) && (await read($, maskAtom))
 
 /** Finish on GitHub: a finished job in a GitHub project offers Ship it. */
@@ -1343,7 +1345,7 @@ const setWorkMode = async ($: $, mode: WorkMode) => {
   await $.store.set(WORK_MODE_KEY, mode)
 }
 
-/** Ob gerade die Arbeitsweise Dynamisch gilt: nur mit GlanceFlow an. */
+/** Ob gerade die Arbeitsweise Dynamisch gilt: nur mit dem Leitstand an. */
 const isDynamic = async ($: $): Promise<boolean> => (await read($, enabledAtom)) && (await read($, workModeAtom)) === 'dynamisch'
 
 /** Legt die Arbeiter der Arbeitsweise Dynamisch an; in Auto bietet agent.offer sie nicht an. */
@@ -1422,9 +1424,12 @@ const runCommand = async ($: $, label: string, names: string[], args?: string): 
 /** Night shift: the Nachtschicht mod's command, which turns it on or off. */
 const toggleNightShift = ($: $) => runCommand($, 'nachtschicht', ['nachtschicht'])
 
+/** Filetree: the filetree plugin's command, which opens its side pane. Only Filetree closes it, so this opens, never toggles. */
+const openFiletree = ($: $) => runCommand($, 'Filetree', ['filetree'])
+
 // The Nachtschicht keeps its shift in its own state: the shift while there is one, null once it is ended. Any plugin
-// reads any value, so GlanceFlow reads it straight from there and writes nothing of its own. Not a `dependencies`
-// entry in plugin.json: GlanceFlow would then not load where the Nachtschicht is not installed. There the value was
+// reads any value, so Leitstand reads it straight from there and writes nothing of its own. Not a `dependencies`
+// entry in plugin.json: Leitstand would then not load where the Nachtschicht is not installed. There the value was
 // never written and reads as off.
 const NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
 
@@ -1435,7 +1440,7 @@ const NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
  */
 const isNightShiftOn = async ($: $): Promise<boolean> => {
   try {
-    // The value is the Nachtschicht's, declared in its contract and not in GlanceFlow's, so it is typed here.
+    // The value is the Nachtschicht's, declared in its contract and not in Leitstand's, so it is typed here.
     const { value } = (await $.state.get(NIGHT_SHIFT_STATE as never)) as { value?: unknown }
     return value !== undefined && value !== null
   } catch {
@@ -1684,7 +1689,7 @@ const planApproval = (list: GlanceChecklist | null, steps: string[]): GlanceChec
   return isSame(list.tasks.filter(one => one.id.startsWith('plan#'))) || isSame(list.tasks) ? 'approved' : 'none'
 }
 
-/** A helper's kind as the person reads it: GlanceFlow's workers by their tier ("sorgfältig"), any other as named. */
+/** A helper's kind as the person reads it: Leitstand's workers by their tier ("sorgfältig"), any other as named. */
 const helperType = (type: string): string => (isTierAgent(type) ? (TIERS.find(tier => tierAgent(tier) === type)?.label ?? type) : type)
 
 /**
@@ -1716,7 +1721,7 @@ const startPlan = async ($: $) => {
 }
 
 /**
- * The night shift's count to Start: it runs while GlanceFlow is on, a plan waits for Start and the night shift is on,
+ * The night shift's count to Start: it runs while Leitstand is on, a plan waits for Start and the night shift is on,
  * from the moment all three hold. A new plan starts it over; anything else ends it. Returns the plan counted for.
  */
 const armNightStart = async ($: $): Promise<string | null> => {
@@ -1789,7 +1794,7 @@ const alertSample = async ($: $, mode: 'off' | 'chime' | 'voice') => {
   if (mode === 'voice') await sayWords($, 'Claude braucht dich').catch(() => undefined)
 }
 
-/** Back to how GlanceFlow starts: Simple, no sounds or notices, calm off, password guard on, no plan approval. */
+/** Back to how Leitstand starts: Simple, no sounds or notices, calm off, password guard on, no plan approval. */
 const resetSettings = async ($: $) => {
   await setView($, 'simple')
   await setSound($, 'off')
@@ -1804,18 +1809,18 @@ const resetSettings = async ($: $) => {
   $.ui.toast('Die Einstellungen sind wieder auf Standard.')
 }
 
-const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'GlanceFlow-Einstellungen', closeOnEscape: true })
+const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'Leitstand-Einstellungen', closeOnEscape: true })
 
-/** The one button: Simple → Details → Minimal → Simple; from Off back to Simple. Off is in Settings and /glanceflow off. */
+/** The one button: Simple → Details → Minimal → Simple; from Off back to Simple. Off is in Settings and /leitstand off. */
 const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed' | 'minimal') => {
   const next = !isEnabled ? 'simple' : detail === 'simple' ? 'detailed' : detail === 'detailed' ? 'minimal' : 'simple'
   await setView($, next)
   $.ui.toast(
     next === 'detailed'
-      ? 'GlanceFlow Details: Modelle, Zeit, Tokens, Cache und Plan-Nutzung'
+      ? 'Leitstand Details: Modelle, Zeit, Tokens, Cache und Plan-Nutzung'
       : next === 'minimal'
-        ? 'GlanceFlow minimal: eine Zeile mit Stand, Fortschritt, Restzeit und Tokens'
-        : 'GlanceFlow einfach: nur die Schritte und der Fortschritt',
+        ? 'Leitstand minimal: eine Zeile mit Stand, Fortschritt, Restzeit und Tokens'
+        : 'Leitstand einfach: nur die Schritte und der Fortschritt',
   )
 }
 
@@ -1827,7 +1832,8 @@ const setDetail = async ($: $, isDetailed: boolean) => {
   )
 }
 
-// GlanceFlow was called Glance until 0.9: once, bring over Glance's settings and history from its own store file.
+// Leitstand grew out of GlanceFlow, which was called Glance until 0.9: once, bring over Glance's settings and history
+// from its own store file.
 const ADOPTED_KEY = 'adoptedGlance'
 const adoptGlanceStore = async ($: $) => {
   if (await $.store.get(ADOPTED_KEY)) {
@@ -1952,7 +1958,7 @@ export function registerGlance(on: On): void {
     // chat's own checklist, so the restore below still finds it.
     await tidySavedChecklists($).catch(() => undefined)
     othersTimer?.cancel()
-    // The same timer reads Remote Control's state, while GlanceFlow is on.
+    // The same timer reads Remote Control's state, while Leitstand is on.
     othersTimer = $.clock.every(OTHERS_EVERY_MS, () => {
       void refreshOthers($).catch(() => undefined)
       void read($, enabledAtom)
@@ -2009,9 +2015,9 @@ export function registerGlance(on: On): void {
       },
     })
     await $.command.register({
-      name: 'glanceflow',
+      name: 'leitstand',
       description:
-        'GlanceFlow steuern: /glanceflow on|off, details on|off, sound on|voice|off, notify on|off, others on|off, calm on|off, guard on|off, privacy on|off, approve on|off, arbeitsweise auto|dynamisch, ship on|off, week, tour, pause, continue, plan, checkpoint, settings, tidy [at N|off], history [gestern|JJJJ-MM-TT], handoff',
+        'Den Leitstand steuern: /leitstand on|off, details on|off, sound on|voice|off, notify on|off, others on|off, calm on|off, guard on|off, privacy on|off, approve on|off, arbeitsweise auto|dynamisch, ship on|off, week, tour, pause, continue, plan, checkpoint, settings, tidy [at N|off], history [gestern|JJJJ-MM-TT], handoff',
     })
     // A reload drops the module's timers; pick the animation back up.
     syncTicker($, await read($, checklistAtom))
@@ -2023,7 +2029,7 @@ export function registerGlance(on: On): void {
     return started
   })
 
-  on('command.run', { command: ['glanceflow'] }, async ($, e) => {
+  on('command.run', { command: ['leitstand'] }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
     if (arg.startsWith('arbeitsweise') || arg.startsWith('modus')) {
       const choice = arg.replace(/^(arbeitsweise|modus)/, '').trim()
@@ -2134,7 +2140,7 @@ export function registerGlance(on: On): void {
     if (arg.startsWith('history')) {
       const day = dayFromArgument(arg.slice('history'.length), await now($))
       if (day === null) {
-        return { text: 'Versuch /glanceflow history, /glanceflow history gestern oder /glanceflow history 2026-10-06.' }
+        return { text: 'Versuch /leitstand history, /leitstand history gestern oder /leitstand history 2026-10-06.' }
       }
       const opened = await showHistory($, day, true)
       const entries = (await read($, historyAtom))?.entries ?? []
@@ -2157,7 +2163,7 @@ export function registerGlance(on: On): void {
         return { text: 'Speichere einen Sicherungspunkt und räume dann den Chat auf.' }
       }
       return {
-        text: 'Wie voll der Chat ist, zeigt jetzt der Statistik-Mod, und sein Schwamm räumt auf. /glanceflow tidy räumt sofort auf, mit Sicherungspunkt.',
+        text: 'Wie voll der Chat ist, zeigt jetzt der Statistik-Mod, und sein Schwamm räumt auf. /leitstand tidy räumt sofort auf, mit Sicherungspunkt.',
       }
     }
     if (arg === 'settings') {
@@ -2192,12 +2198,12 @@ export function registerGlance(on: On): void {
       const isDetailed = toggled(choice, (await read($, detailAtom)) === 'detailed')
       await setDetail($, isDetailed)
 
-      return { text: isDetailed ? 'GlanceFlow-Details sind an.' : 'GlanceFlow-Details sind aus.' }
+      return { text: isDetailed ? 'Leitstand-Details sind an.' : 'Leitstand-Details sind aus.' }
     }
     const isEnabled = toggled(arg, await read($, enabledAtom))
     await setEnabled($, isEnabled)
 
-    return { text: isEnabled ? 'GlanceFlow ist an.' : 'GlanceFlow ist aus.' }
+    return { text: isEnabled ? 'Der Leitstand ist an.' : 'Der Leitstand ist aus.' }
   })
 
   on('prompt.compose', async ($, e, next) => {
@@ -2246,7 +2252,7 @@ export function registerGlance(on: On): void {
     }
     await holdSecretMessage($, e.text, kinds)
 
-    return { drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel, deshalb hat GlanceFlow sie zurückgehalten.' }
+    return { drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel, deshalb hat der Leitstand sie zurückgehalten.' }
   })
 
   // While the shield tidies up, what the main chat's compaction leaves has the moved secrets as placeholders only: the
@@ -2326,7 +2332,7 @@ export function registerGlance(on: On): void {
   })
 
   // Subagents: what they work on and which model, under the step that started them.
-  // Arbeitsweise: die Arbeiter nur in Dynamisch. Dort bietet GlanceFlow außer ihnen nur Explore und die kleinen
+  // Arbeitsweise: die Arbeiter nur in Dynamisch. Dort bietet der Leitstand außer ihnen nur Explore und die kleinen
   // Helfer der Engine an, damit jede Aufgabe eine Stufe bekommt.
   on('agent.offer', async ($, e, next) => {
     const offered = await next(e)
@@ -2955,7 +2961,7 @@ export function registerGlance(on: On): void {
           </Text>
         ) : (
           <Box flexDirection="column">
-            <Text bold>⚙ GlanceFlow-Einstellungen</Text>
+            <Text bold>⚙ Leitstand-Einstellungen</Text>
             <Text dimColor wrap="wrap">
               Änderungen gelten sofort und bleiben für deine nächsten Chats.
             </Text>
@@ -3489,7 +3495,7 @@ export function registerGlance(on: On): void {
     if (view === null) {
       return (
         <Box flexDirection="column">
-          <Text dimColor>Schreib /glanceflow history, um die Aufgaben von heute zu sehen.</Text>
+          <Text dimColor>Schreib /leitstand history, um die Aufgaben von heute zu sehen.</Text>
           {close}
         </Box>
       )
@@ -3748,7 +3754,7 @@ export function registerGlance(on: On): void {
     // Minimal: one line, with what is happening, how far, the time left and the tokens; the view menu on its right,
     // and under it the row of places and actions, as in the other views.
     const isMinimal = isEnabled && detail === 'minimal'
-    // Another mod's buttons (Replay, say) sit with GlanceFlow's own actions at the bottom right, in every state of the
+    // Another mod's buttons (Replay, say) sit with Leitstand's own actions at the bottom right, in every state of the
     // band; anything else it draws stays under it.
     const lifted = vector && isEnabled ? liftButtons(beneath) : { buttons: [], rest: beneath }
     const kept = lifted.rest as RenderElement | null
@@ -3967,7 +3973,7 @@ export function registerGlance(on: On): void {
     }
 
     // The view: on the terminal one button steps through Simple → Details → Off. Elsewhere a menu shows the view and
-    // the others, so no press turns GlanceFlow off by surprise; a surface without one (the phone) keeps the button.
+    // the others, so no press turns Leitstand off by surprise; a surface without one (the phone) keeps the button.
     const view = !isEnabled ? 'off' : isMinimal ? 'minimal' : isDetailed ? 'detailed' : 'simple'
     const viewWords = { detailed: 'Ausführlich', simple: 'Einfach', minimal: 'Minimal', off: 'Aus' }
     const button =
@@ -3979,7 +3985,7 @@ export function registerGlance(on: On): void {
             { value: 'detailed', label: viewWords.detailed },
             { value: 'simple', label: viewWords.simple },
             { value: 'minimal', label: viewWords.minimal },
-            // Off is in Settings and /glanceflow off; while it is on, the menu says so.
+            // Off is in Settings and /leitstand off; while it is on, the menu says so.
             ...(view === 'off' ? [{ value: 'off', label: viewWords.off }] : []),
           ]}
           onSelect={value => void setView($, value as typeof view)}
@@ -3990,15 +3996,15 @@ export function registerGlance(on: On): void {
         label={
           vector
             ? viewWords[view]
-            : `${isEnabled ? '●' : '○'} ${columns < NARROW ? '' : 'GlanceFlow: '}${view === 'detailed' ? 'Details' : viewWords[view]}`
+            : `${isEnabled ? '●' : '○'} ${columns < NARROW ? '' : 'Leitstand: '}${view === 'detailed' ? 'Details' : viewWords[view]}`
         }
         variant={isEnabled && !vector ? 'primary' : 'secondary'}
         onPress={() => cycleMode($, isEnabled, detail)}
       />
       )
-    // The work mode, while GlanceFlow is on (off, no work mode applies), leads the places at the bottom left
+    // The work mode, while Leitstand is on (off, no work mode applies), leads the places at the bottom left
     // elsewhere than the terminal: a menu where the surface has one, else a button that flips the two modes.
-    // The terminal keeps it in Settings and /glanceflow modus.
+    // The terminal keeps it in Settings and /leitstand modus.
     const workModeItem = !isEnabled || !vector ? null : 'Select' in table && table.Select ? (
       <table.Select
         key="workmode"
@@ -4018,9 +4024,9 @@ export function registerGlance(on: On): void {
     )
     // Grill mich right after it, as the steam sign.
     const grillItem = !isEnabled || !vector ? null : <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
-    // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past the bar Remote Control
-    // (only while the session has it), the night shift, masking on screen and the shield that moves the chat's secrets
-    // into the .env.
+    // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
+    // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it), the night shift,
+    // masking on screen and the shield that moves the chat's secrets into the .env.
     const skillItems =
       !isEnabled || !vector
         ? null
@@ -4029,6 +4035,8 @@ export function registerGlance(on: On): void {
               <Button key="humanize" variant="secondary" label={HUMANIZE} onPress={() => humanizeLast($)} />,
               <Button key="adhd" variant={adhd ? 'primary' : 'secondary'} label={ADHD} onPress={() => toggleAdhd($)} />,
             ],
+            // An opener, not a switch: Filetree keeps its pane to itself, so the button never shows it as on.
+            files: [<Button key="filetree" variant="secondary" label={FILETREE} onPress={() => openFiletree($)} />],
             past: [
               remote === 'missing' ? null : (
                 <Button key="remote" variant={remote === 'on' ? 'primary' : 'secondary'} label={REMOTE} onPress={() => toggleRemote($)} />
@@ -4043,10 +4051,12 @@ export function registerGlance(on: On): void {
               />,
             ],
           }
-    // Elsewhere than the terminal a dim bar parts the groups at the bottom left: after ADHD mode, and before the plan
-    // and the history. One stands only between two groups that show a button, so never at an end or two side by side.
+    // Elsewhere than the terminal a dim bar parts the groups at the bottom left: after ADHD mode, after Filetree, and
+    // before the plan and the history. One stands only between two groups that show a button, so never at an end or
+    // two side by side.
     const leftGroups = [
       { bar: '', items: [workModeItem, grillItem, ...(skillItems?.beside ?? [])] },
+      { bar: 'sep-files', items: skillItems?.files ?? [] },
       { bar: 'sep-skills', items: skillItems?.past ?? [] },
       { bar: 'sep-places', items: places },
     ]
@@ -4131,7 +4141,7 @@ export function registerGlance(on: On): void {
               <Box flexDirection="row" alignItems="center" gap={1}>
                 {kit.icon('spark', 'active', STATUS)}
                 <Text bold wrap="truncate-end">
-                  {leadOf(['Willkommen bei GlanceFlow', 'Willkommen'])}
+                  {leadOf(['Willkommen im Leitstand', 'Willkommen'])}
                 </Text>
               </Box>,
             )}
@@ -4155,7 +4165,7 @@ export function registerGlance(on: On): void {
       }
       return withBeneath(
         <Box flexDirection="column" width={columns}>
-          <Text bold wrap="truncate-end">{`Willkommen bei GlanceFlow · ${tourStep + 1} von ${TOUR.length}`}</Text>
+          <Text bold wrap="truncate-end">{`Willkommen im Leitstand · ${tourStep + 1} von ${TOUR.length}`}</Text>
           <Text wrap="wrap">{TOUR[tourStep]}</Text>
           <Box key="tour" flexDirection="row" gap={2} marginBottom={1}>
             <Button key="tour-next" plain label={isLast ? '✓ Verstanden' : 'Weiter ▶'} onPress={() => stepTour($, tourStep + 1)} />
@@ -4258,7 +4268,7 @@ export function registerGlance(on: On): void {
             ) : !isEnabled ? (
               vector ? (
                 <Text dimColor wrap="truncate-end">
-                  GlanceFlow ist aus: Claude Code zeigt alles wie gewohnt
+                  Der Leitstand ist aus: Claude Code zeigt alles wie gewohnt
                 </Text>
               ) : (
                 <Text> </Text>

@@ -65,11 +65,11 @@ export function kitOf(table: ElementTable, surface: RenderSurface) {
      * row of dashes. */
     rule: (columns: number) =>
       Svg ? (
-        <Box key="glanceflow-trennlinie">
+        <Box key="leitstand-trennlinie">
           <Svg source={RULE_SVG} alt="Trennlinie" height={7} />
         </Box>
       ) : (
-        <Text key="glanceflow-trennlinie" dimColor wrap="truncate-end">
+        <Text key="leitstand-trennlinie" dimColor wrap="truncate-end">
           {'─'.repeat(Math.max(0, columns))}
         </Text>
       ),

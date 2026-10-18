@@ -578,7 +578,7 @@ test('der Schwamm steht rechts neben der Chatlänge, der Pfeil 🔽 am Kontext; 
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('ohne GlanceFlow verdichtet der Schwamm schlicht und zeigt selbst die Sanduhr', async ($, on) => {
+test('ohne Leitstand und GlanceFlow verdichtet der Schwamm schlicht und zeigt selbst die Sanduhr', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
@@ -594,7 +594,7 @@ test('ohne GlanceFlow verdichtet der Schwamm schlicht und zeigt selbst die Sandu
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glanceflow tidy; der Pfeil bleibt schlicht', async ($, on) => {
+test('nur mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glanceflow tidy; der Pfeil bleibt schlicht', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
@@ -610,6 +610,27 @@ test('mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glancefl
     await ui.press({ key: 'compact' })
     expect(b.befehle).toEqual(['glanceflow tidy', 'compact'])
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('⏳')
+})
+
+test('mit Leitstand räumt der Schwamm über /leitstand tidy auf, auch wenn GlanceFlow noch da ist', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const befehl = (name: string) => ({ name, description: '', source: 'plugin' })
+    // GlanceFlow steht vorn in der Liste; der Leitstand geht trotzdem vor.
+    let liste = [befehl('glanceflow'), befehl('leitstand')]
+    on('command.list', () => ({ value: liste }) as never)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await ui.press({ key: 'wischen' })
+    expect(b.befehle).toEqual(['leitstand tidy'])
+    // Als Kopie eines Plugins zaehlt er auch.
+    liste = [befehl('glanceflow'), befehl('bjoern-mods:leitstand')]
+    await ui.press({ key: 'wischen' })
+    expect(b.befehle).toEqual(['leitstand tidy', 'bjoern-mods:leitstand tidy'])
+    // Der Leitstand raeumt selbst auf; die Statistik reiht nichts ein.
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
 })
 
 /** Ein Verlauf: drei Nachrichten mit Text und ein reines Werkzeug-Ergebnis, zusammen 1248000 Zeichen. */

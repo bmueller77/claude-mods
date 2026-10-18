@@ -28,7 +28,7 @@ export function clockTime(at: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-/** The day a /glanceflow history argument names: today or heute, yesterday or gestern, or YYYY-MM-DD. Null when it names none. */
+/** The day a /leitstand history argument names: today or heute, yesterday or gestern, or YYYY-MM-DD. Null when it names none. */
 export function dayFromArgument(argument: string, now: number): string | null {
   const word = argument.trim().toLowerCase()
   if (word === '' || word === 'today' || word === 'heute') return dayKey(now)
