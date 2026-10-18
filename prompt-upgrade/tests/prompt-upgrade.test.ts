@@ -16,7 +16,24 @@ import {
     leseBefehl,
     verlaufText,
 } from '../hooks/register'
-import { entscheide, grosseZahl, istKurzeAntwort, kuerze, leseFragen, leseUmschrift, packe, platzhalter, spur, umbrechen, woerter, zellen } from '../hooks/logik'
+import {
+    SYSTEM_FRAGEN,
+    SYSTEM_UMSCHREIBEN,
+    abdeckungZeile,
+    entscheide,
+    grosseZahl,
+    istKurzeAntwort,
+    kuerze,
+    leseAbdeckung,
+    leseFragen,
+    leseUmschrift,
+    packe,
+    platzhalter,
+    spur,
+    umbrechen,
+    woerter,
+    zellen,
+} from '../hooks/logik'
 
 const FLAECHEN = ['terminal', 'desktop'] as const
 type Flaeche = (typeof FLAECHEN)[number]
@@ -36,7 +53,15 @@ const UPGRADE =
     'Mach die Login-Seite für Team intern schneller: Ziel ist eine Ladezeit unter [Zielzeit]. ' +
     'Liefere den geänderten Code mit einem kurzen Vorher-Nachher-Vergleich. Fertig ist es, wenn die Seite messbar schneller lädt und alle Tests grün sind.'
 
-const UMSCHRIFT = `<upgrade>\n${UPGRADE}\n</upgrade>\n<ergaenzt>\n- Ziel: messbare Ladezeit\n- Zielgruppe aus der Antwort\n- Format: Code mit Vergleich\n- Wann es fertig ist\n</ergaenzt>`
+const ABDECKUNG = '<abdeckung>auftrag=ja warum=nein leitplanken=nein fertig=ja</abdeckung>'
+
+const UMSCHRIFT = `<upgrade>\n${UPGRADE}\n</upgrade>\n<ergaenzt>\n- Ziel: messbare Ladezeit\n- Zielgruppe aus der Antwort\n- Format: Code mit Vergleich\n- Wann es fertig ist\n</ergaenzt>\n${ABDECKUNG}`
+
+/** Wie das Modell vor 0.2.0 antwortete: ohne Abdeckung. */
+const UMSCHRIFT_OHNE = `<upgrade>\n${UPGRADE}\n</upgrade>\n<ergaenzt>\n- Ziel: messbare Ladezeit\n</ergaenzt>`
+
+/** Die Abdeckungszeile, egal in welcher Breite: ein Kernteil mit Haekchen oder Strich davor. */
+const ABDECKUNGS_ZEILE = /[✓–] (Auftrag|Warum|Leitplanken|Grenzen|Fertig)|Kernteile/
 
 type Antwort = string | { grund: 'api-error' | 'empty-reply' } | { spaeter: number; text: string }
 
@@ -378,14 +403,116 @@ test('Umschrift lesen: Marken, JSON, roher Text', () => {
     expect(leseUmschrift(UMSCHRIFT)).toEqual({
         upgrade: UPGRADE,
         ergaenzt: ['Ziel: messbare Ladezeit', 'Zielgruppe aus der Antwort', 'Format: Code mit Vergleich', 'Wann es fertig ist'],
+        abdeckung: { auftrag: true, warum: false, leitplanken: false, fertig: true },
     })
-    expect(leseUmschrift('<upgrade>\n"Bitte tu X."\n</upgrade>')).toEqual({ upgrade: 'Bitte tu X.', ergaenzt: [] })
-    expect(leseUmschrift('<upgrade>Ohne Ende')).toEqual({ upgrade: 'Ohne Ende', ergaenzt: [] })
-    expect(leseUmschrift('{"upgrade":"Tu Y.","ergaenzt":["Ziel"]}')).toEqual({ upgrade: 'Tu Y.', ergaenzt: ['Ziel'] })
-    expect(leseUmschrift('```\nUpgrade: Tu Z.\n\n\n\nGenau so.\n```')).toEqual({ upgrade: 'Tu Z.\n\nGenau so.', ergaenzt: [] })
+    expect(leseUmschrift('<upgrade>\n"Bitte tu X."\n</upgrade>')).toEqual({ upgrade: 'Bitte tu X.', ergaenzt: [], abdeckung: null })
+    expect(leseUmschrift('<upgrade>Ohne Ende')).toEqual({ upgrade: 'Ohne Ende', ergaenzt: [], abdeckung: null })
+    expect(leseUmschrift('{"upgrade":"Tu Y.","ergaenzt":["Ziel"]}')).toEqual({ upgrade: 'Tu Y.', ergaenzt: ['Ziel'], abdeckung: null })
+    expect(leseUmschrift('```\nUpgrade: Tu Z.\n\n\n\nGenau so.\n```')).toEqual({ upgrade: 'Tu Z.\n\nGenau so.', ergaenzt: [], abdeckung: null })
     expect(leseUmschrift('<upgrade>\n   \n</upgrade>')).toBeNull()
     expect(leseUmschrift('')).toBeNull()
     expect(platzhalter(UPGRADE)).toEqual(['[Zielzeit]'])
+})
+
+test('Prompt-Texte folgen dem Guide: Warum, Fertig, Gruende statt Verbote, keine Einzelschritte, keine Extra-Pruefung', () => {
+    const f = SYSTEM_FRAGEN.toLowerCase()
+    // Rueckfragen zielen auf blinde Flecken, in der Rangfolge Warum, Fertig, Leitplanken, erst dann Format.
+    expect(f).toMatch(/blinde[nm]? fleck/)
+    expect(f).toMatch(/selbstverstaendlich/)
+    const rang = ['warum', 'fertig', 'leitplanken', 'format'].map(w => f.indexOf(w))
+    expect(rang.every(i => i >= 0)).toBe(true)
+    expect(rang).toEqual([...rang].sort((x, y) => x - y))
+    expect(f).toMatch(/nicht nach dem wie in einzelschritten/)
+    // Unveraendert: hoechstens drei Fragen, zwei bis vier Optionen, Sprache des Prompts, JSON-Form.
+    expect(f).toMatch(/hoechstens drei/)
+    expect(f).toMatch(/zwei bis vier/)
+    expect(f).toMatch(/sprache des prompts/)
+    expect(SYSTEM_FRAGEN).toContain('{"fragen":[{"frage":"...?","optionen":["...","..."]}]}')
+
+    const u = SYSTEM_UMSCHREIBEN.toLowerCase()
+    expect(u).toMatch(/ganzen auftrag als ergebnis, nicht als schrittfolge/)
+    expect(u).toMatch(/keine einzelschritte/)
+    // Das Warum nach Muster, mit Platzhaltern.
+    expect(u).toMatch(/warum[^.]*ich arbeite an \[[^\]]+\] fuer \[[^\]]+\]/)
+    // Fertig: pruefbare Bedingung, Abbruchkriterium, erst arbeiten, dann fragen.
+    expect(u).toMatch(/fertig ist es, wenn/)
+    expect(u).toMatch(/pruefbar/)
+    expect(u).toMatch(/abbruchkriterium/)
+    expect(u).toMatch(/erledige zuerst die arbeit, bevor du rueckfragen stellst/)
+    // Leitplanken als Gruende statt Verbote.
+    expect(u).toMatch(/leitplanken[^.]*grund statt[^.]*verbot/)
+    // Kein offengelegter Gedankengang, keine Extra-Pruefschleife, keine Rollen-Tricks; Ausnahme nur bei hohem Risiko.
+    expect(u).toMatch(/lass weg[^.]*ueberlegungen offenzulegen/)
+    expect(u).toMatch(/lass weg[^.]*schritt fuer schritt zu denken/)
+    expect(u).toMatch(/lass weg[^.]*(selbstpruefung|zweiten pruefer)/)
+    expect(u).toMatch(/lass weg[^.]*du bist ein experte/)
+    expect(u).toMatch(/teuer[^.]*(kunden|vertraege)/)
+    // Form: hoechstens vier Absaetze in der Reihenfolge des Guides, Ausgabe mit Abdeckung.
+    expect(u).toMatch(/hoechstens vier kurze absaetze in der reihenfolge auftrag, warum, leitplanken, fertig/)
+    expect(u).toMatch(/aufzaehlungen nur fuer wirklich parallele/)
+    expect(SYSTEM_UMSCHREIBEN).toContain('<abdeckung>auftrag=ja|nein warum=ja|nein leitplanken=ja|nein fertig=ja|nein</abdeckung>')
+    expect(SYSTEM_UMSCHREIBEN).toContain('<upgrade>')
+    expect(SYSTEM_UMSCHREIBEN).toContain('<ergaenzt>')
+})
+
+test('Abdeckung lesen: Schreibweisen und Reihenfolge egal, fehlt oder kaputt heisst null', () => {
+    const alle = { auftrag: true, warum: true, leitplanken: true, fertig: true }
+    expect(leseAbdeckung('<abdeckung>auftrag=ja warum=ja leitplanken=ja fertig=ja</abdeckung>')).toEqual(alle)
+    expect(leseAbdeckung('Vorweg.\n<Abdeckung>\n  Fertig = YES, Warum: no;\n LEITPLANKEN=false   auftrag = True\n</ABDECKUNG>')).toEqual({
+        auftrag: true,
+        warum: false,
+        leitplanken: false,
+        fertig: true,
+    })
+    expect(leseAbdeckung('<abdeckung>Hinweis: warum="nein" fertig wenn=ja task=yes grenzen=n</abdeckung>')).toEqual({
+        auftrag: true,
+        warum: false,
+        leitplanken: false,
+        fertig: true,
+    })
+    // Ohne schliessende Marke am Ende der Antwort.
+    expect(leseAbdeckung('<abdeckung>auftrag=nein warum=nein leitplanken=nein fertig=nein')).toEqual({
+        auftrag: false,
+        warum: false,
+        leitplanken: false,
+        fertig: false,
+    })
+    // Fehlt, unvollstaendig, unlesbar, nur die Vorlage abgeschrieben: keine Abdeckung.
+    expect(leseAbdeckung(UMSCHRIFT_OHNE)).toBeNull()
+    expect(leseAbdeckung('')).toBeNull()
+    expect(leseAbdeckung('<abdeckung></abdeckung>')).toBeNull()
+    expect(leseAbdeckung('<abdeckung>auftrag=ja warum=ja fertig=ja</abdeckung>')).toBeNull()
+    expect(leseAbdeckung('<abdeckung>auftrag=ja warum=ja leitplanken=vielleicht fertig=ja</abdeckung>')).toBeNull()
+    expect(leseAbdeckung('<abdeckung>auftrag=ja|nein warum=ja|nein leitplanken=ja|nein fertig=ja|nein</abdeckung>')).toBeNull()
+
+    // Im Ganzen gelesen: die Abdeckung landet nie im Upgrade, auch bei offenen Marken.
+    expect(leseUmschrift('<upgrade>\nTu X.\n<ergaenzt>\n- Ziel\n<abdeckung>auftrag=ja warum=nein leitplanken=nein fertig=nein')).toEqual({
+        upgrade: 'Tu X.',
+        ergaenzt: ['Ziel'],
+        abdeckung: { auftrag: true, warum: false, leitplanken: false, fertig: false },
+    })
+    expect(leseUmschrift('Tu Z.\n<abdeckung>auftrag=ja warum=ja leitplanken=ja fertig=ja</abdeckung>')).toEqual({
+        upgrade: 'Tu Z.',
+        ergaenzt: [],
+        abdeckung: alle,
+    })
+    expect(
+        leseUmschrift('{"upgrade":"Tu Y.","ergaenzt":["Ziel"],"abdeckung":{"auftrag":true,"warum":true,"leitplanken":false,"fertig":true}}'),
+    ).toEqual({ upgrade: 'Tu Y.', ergaenzt: ['Ziel'], abdeckung: { auftrag: true, warum: true, leitplanken: false, fertig: true } })
+    expect(leseUmschrift(`${UMSCHRIFT_OHNE}\n<abdeckung>kaputt</abdeckung>`)?.abdeckung).toBeNull()
+
+    // Die Zeile: so lang wie sie passt, dann kuerzere Namen, zuletzt nur die Zaehlung.
+    const ab = { auftrag: true, warum: false, leitplanken: true, fertig: true }
+    const zeile = (b: number) => abdeckungZeile(ab, b).map(t => t.text).join('')
+    expect(zeile(120)).toBe('✓ Auftrag  – Warum  ✓ Leitplanken  ✓ Fertig wenn')
+    expect(zeile(48)).toBe('✓ Auftrag  – Warum  ✓ Leitplanken  ✓ Fertig wenn')
+    expect(zeile(40)).toBe('✓ Auftrag  – Warum  ✓ Grenzen  ✓ Fertig')
+    expect(zeile(36)).toBe('✓ Auftrag – Warum ✓ Grenzen ✓ Fertig')
+    expect(zeile(30)).toBe('3/4 Kernteile')
+    expect(abdeckungZeile(ab, 120).filter(t => t.art !== 'luecke').map(t => t.art)).toEqual(['ja', 'nein', 'ja', 'ja'])
+    for (const b of [120, 48, 47, 40, 39, 36, 35, 30, 20, 13]) {
+        expect(zellen(zeile(b))).toBeLessThanOrEqual(b)
+    }
 })
 
 test('Woerter, Zellen, Umbruch, Packen, Schrittleiste und grosse Ziffern', () => {
@@ -470,9 +597,18 @@ test('der ganze Weg: /better, Fragen, Umschreiben, Pruefen, Ausfuehren', async (
         // Die Knoepfe stehen vor den Karten.
         expect(text.indexOf('[ausfuehren]')).toBeLessThan(text.indexOf('DEIN PROMPT'))
         expect(text.indexOf('DEIN PROMPT')).toBeLessThan(text.indexOf('|UPGRADE|'))
+        // Die Abdeckung: enthaltene Kernteile mit Haekchen, fehlende mit Strich, vor den Knoepfen.
+        expect(text).toContain('✓ Auftrag')
+        expect(text).toContain('– Warum')
+        expect(text).toContain('– Leitplanken')
+        expect(text).toContain('✓ Fertig wenn')
+        expect(text.indexOf('✓ Auftrag')).toBeLessThan(text.indexOf('[ausfuehren]'))
+        expect((await ui.find({ type: 'Text', text: /^✓ Auftrag$/ }))?.props.color).toBe('#3DD68C')
+        expect((await ui.find({ type: 'Text', text: /^– Warum$/ }))?.props.color).toBe('#7D8590')
         if (surface === 'terminal') {
-            // Woerter vorher und nachher als grosse Ziffern in Kacheln.
+            // Woerter vorher und nachher als grosse Ziffern in Kacheln, die Abdeckung darunter.
             expect(text).toContain('WÖRTER VORHER')
+            expect(text.indexOf('WÖRTER VORHER')).toBeLessThan(text.indexOf('✓ Auftrag'))
             expect(text).toContain(grosseZahl(woerter(ORIGINAL))[0])
         } else {
             // In der App ist Text nicht gleich breit: Kacheln und Linien als Grafik.
@@ -701,6 +837,31 @@ test('Keine Frage noetig: gleich umschreiben', async ($, on) => {
     expect(text).toContain('✓ Fragen')
 })
 
+test('Ohne Abdeckung (fehlt oder kaputt) entfaellt die Zeile, der Rest der Pruefung bleibt', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const KAPUTT = `${UMSCHRIFT_OHNE}\n<abdeckung>auftrag=vielleicht warum=ja</abdeckung>`
+    // Terminal bekommt eine Antwort ohne Abdeckung, die App eine mit kaputter.
+    const b = boden(on, clock, { antworten: ['{"fragen":[]}', UMSCHRIFT_OHNE, '{"fragen":[]}', KAPUTT] })
+    await start($)
+
+    for (const surface of FLAECHEN) {
+        b.eingang.length = 0
+        await befehl($, ORIGINAL)
+        await clock.settle()
+        const ui = await zeige($, surface)
+        const text = await inhalt(ui)
+        expect(text).toContain('[ausfuehren]')
+        expect(text).toContain('WAS ICH ERGÄNZT HABE')
+        expect(text).not.toMatch(ABDECKUNGS_ZEILE)
+        expect(await ui.find({ type: 'Text', text: /Kernteile|Auftrag/ })).toBeUndefined()
+        await ui.press({ key: 'ausfuehren' })
+        expect(b.eingang).toEqual([{ text: UPGRADE, origin: 'plugin:prompt-upgrade', asUser: true }])
+        await ui.unmount()
+    }
+    expect(b.modell.map(m => m.system.includes('<abdeckung>'))).toEqual([false, true, false, true])
+})
+
 test('Fehlerkarte: Prompt ist sicher, Erneut versuchen, Original senden', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
@@ -814,7 +975,14 @@ test('/better ohne Text oeffnet ein Feld zum Eintippen', async ($, on) => {
 
 test('Verlauf: die letzten 20, ein Klick oeffnet die Pruefung wieder', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
-    const alt = Array.from({ length: 25 }, (_, i) => ({ at: i, original: `Alter Prompt ${i}`, upgrade: `Altes Upgrade ${i} mit Text`, ergaenzt: ['Ziel'] }))
+    // Eintraege von vor 0.2.0 haben keine Abdeckung; einer hat eine kaputte und bleibt trotzdem.
+    const alt: Record<string, unknown>[] = Array.from({ length: 25 }, (_, i) => ({
+        at: i,
+        original: `Alter Prompt ${i}`,
+        upgrade: `Altes Upgrade ${i} mit Text`,
+        ergaenzt: ['Ziel'],
+    }))
+    alt[1] = { ...alt[1], abdeckung: { auftrag: 'ja' } }
     mock.store(on, { [SPEICHER_VERLAUF]: alt })
     const b = boden(on, clock)
     await start($)
@@ -845,7 +1013,27 @@ test('Verlauf: die letzten 20, ein Klick oeffnet die Pruefung wieder', async ($,
         expect(inh).toContain('Altes Upgrade 0 mit Text')
         expect(inh).toContain('[ausfuehren]')
         expect(inh).toContain('4 Prüfen')
+        // Ohne Abdeckung: die Pruefung oeffnet, nur die Zeile fehlt.
+        expect(inh).not.toMatch(ABDECKUNGS_ZEILE)
         // Abbrechen legt hier nichts ins Eingabefeld: der Eintrag ist schon gesendet worden.
+        await ui.press({ key: 'abbrechen' })
+        expect(b.gefuellt).toEqual([])
+
+        // Mit kaputter Abdeckung genauso.
+        await befehl($, 'verlauf')
+        await ui.press({ key: 'v2' })
+        inh = await inhalt(ui)
+        expect(inh).toContain('Altes Upgrade 1 mit Text')
+        expect(inh).not.toMatch(ABDECKUNGS_ZEILE)
+        await ui.press({ key: 'abbrechen' })
+
+        // Das neue Upgrade hat seine Abdeckung mit in den Verlauf genommen.
+        await befehl($, 'verlauf')
+        await ui.press({ key: 'v0' })
+        inh = await inhalt(ui)
+        expect(inh).toContain('✓ Auftrag')
+        expect(inh).toContain('– Warum')
+        expect(inh).toContain('✓ Fertig wenn')
         await ui.press({ key: 'abbrechen' })
         expect(b.gefuellt).toEqual([])
         await befehl($, 'verlauf')
@@ -932,7 +1120,7 @@ test('Breiten: bei 40 und 120 Spalten ist keine Zeile breiter als das Fenster', 
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const LANG = `${UPGRADE}\n\nZweiter Absatz: ${'sehr '.repeat(30)}lang, mit einemsehrsehrsehrsehrsehrlangenwortdasnirgendwohinpasst und [Platzhalter eins].`
-    const LANG_UMSCHRIFT = `<upgrade>\n${LANG}\n</upgrade>\n<ergaenzt>\n- ${'Ein sehr langer Punkt, der umbrechen muss '.repeat(3)}\n- Kurz\n</ergaenzt>`
+    const LANG_UMSCHRIFT = `<upgrade>\n${LANG}\n</upgrade>\n<ergaenzt>\n- ${'Ein sehr langer Punkt, der umbrechen muss '.repeat(3)}\n- Kurz\n</ergaenzt>\n<abdeckung>auftrag=ja warum=ja leitplanken=nein fertig=ja</abdeckung>`
     const LANGE_FRAGEN = JSON.stringify({
         fragen: [
             { frage: `Eine sehr lange Frage, ${'die weitergeht '.repeat(8)}?`, optionen: ['Eine lange Antwortmöglichkeit hier', 'Kurz', 'Mittel lang', 'Vier'] },
@@ -949,11 +1137,18 @@ test('Breiten: bei 40 und 120 Spalten ist keine Zeile breiter als das Fenster', 
     })
     await start($)
 
-    const pruefeAlle = async (schritt: string) => {
+    /** Jede Flaeche in beiden Breiten; `mitAbdeckung`: die Abdeckungszeile muss dabei sein, in der Fassung fuer die Breite. */
+    const pruefeAlle = async (schritt: string, mitAbdeckung = false) => {
         for (const surface of FLAECHEN) {
             for (const breite of [40, 120]) {
                 const ui = await zeige($, surface, breite)
                 await breiteOk(ui, breite, surface, schritt)
+                if (mitAbdeckung) {
+                    const text = await inhalt(ui)
+                    expect(text).toContain('✓ Auftrag')
+                    expect(text).toContain(breite === 40 ? '– Grenzen' : '– Leitplanken')
+                    expect(text).toContain(breite === 40 ? '✓ Fertig' : '✓ Fertig wenn')
+                }
                 await ui.unmount()
             }
         }
@@ -982,12 +1177,12 @@ test('Breiten: bei 40 und 120 Spalten ist keine Zeile breiter als das Fenster', 
     await clock.settle()
     await pruefeAlle('umschreiben')
     await clock.advance(1000)
-    await pruefeAlle('pruefen')
+    await pruefeAlle('pruefen', true)
 
     ui = await zeige($, 'terminal', 120)
     await ui.press({ key: 'bearbeiten' })
     await ui.unmount()
-    await pruefeAlle('bearbeiten')
+    await pruefeAlle('bearbeiten', true)
 
     ui = await zeige($, 'terminal', 120)
     await ui.press({ key: 'ausfuehren' })

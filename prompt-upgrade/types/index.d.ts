@@ -20,6 +20,12 @@ export type PromptUpgradeFrage = { frage: string; optionen: string[] }
 /** Was zu einer Frage gesagt wurde: eine der Antworten, eigener Text, oder uebersprungen. */
 export type PromptUpgradeAntwort = { art: 'wahl'; text: string } | { art: 'anders'; text: string } | { art: 'uebersprungen' }
 
+/**
+ * Welche Kernteile das Upgrade enthaelt, wie das Modell sie meldet: der ganze
+ * Auftrag, das Warum, Leitplanken (als Gruende) und woran man erkennt, dass es fertig ist.
+ */
+export type PromptUpgradeAbdeckung = { auftrag: boolean; warum: boolean; leitplanken: boolean; fertig: boolean }
+
 /** Welcher Modellaufruf scheiterte und warum, in einem Satz. */
 export type PromptUpgradeFehler = { phase: 'lesen' | 'umschreiben'; grund: string }
 
@@ -41,6 +47,8 @@ export type PromptUpgradeAblauf = {
     upgrade: string
     /** Was das Modell ergaenzt hat, kurze Punkte. */
     ergaenzt: string[]
+    /** Welche Kernteile das Upgrade enthaelt; null, wenn das Modell es nicht (lesbar) gemeldet hat. */
+    abdeckung: PromptUpgradeAbdeckung | null
     /** Ob das Feld zum Bearbeiten offen ist. */
     bearbeiten: boolean
     /** Der Text, der beim Ausfuehren gesendet wird: das Upgrade oder seine bearbeitete Fassung. */
@@ -56,8 +64,8 @@ export type PromptUpgradeAblauf = {
     ausVerlauf: boolean
 }
 
-/** Ein Upgrade im Verlauf. */
-export type PromptUpgradeEintrag = { at: number; original: string; upgrade: string; ergaenzt: string[] }
+/** Ein Upgrade im Verlauf. Eintraege von vor 0.2.0 haben keine Abdeckung. */
+export type PromptUpgradeEintrag = { at: number; original: string; upgrade: string; ergaenzt: string[]; abdeckung?: PromptUpgradeAbdeckung }
 
 declare module 'claude-code' {
     interface PluginState {

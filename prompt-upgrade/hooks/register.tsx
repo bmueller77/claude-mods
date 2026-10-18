@@ -22,6 +22,7 @@ import {
     SYSTEM_UMSCHREIBEN,
     einzeilig,
     entscheide,
+    istAbdeckung,
     kuerze,
     leseFragen,
     leseUmschrift,
@@ -107,6 +108,7 @@ function neuerAblauf(id: string, schritt: PromptUpgradeAblauf['schritt'], origin
         andersOffen: null,
         upgrade: '',
         ergaenzt: [],
+        abdeckung: null,
         bearbeiten: false,
         entwurf: '',
         kopiert: null,
@@ -146,14 +148,16 @@ function istEintrag(v: unknown): v is PromptUpgradeEintrag {
     return typeof x.at === 'number' && typeof x.original === 'string' && typeof x.upgrade === 'string' && Array.isArray(x.ergaenzt)
 }
 
+/** Ein Eintrag aus dem Speicher, gesaeubert: eine kaputte oder fehlende Abdeckung faellt weg, der Eintrag bleibt. */
+function saeubereEintrag(x: PromptUpgradeEintrag): PromptUpgradeEintrag {
+    const { abdeckung, ...rest } = x
+    const sauber = { ...rest, ergaenzt: x.ergaenzt.filter(p => typeof p === 'string') }
+    return istAbdeckung(abdeckung) ? { ...sauber, abdeckung } : sauber
+}
+
 async function ladeVerlauf($: EngineInterface): Promise<PromptUpgradeEintrag[]> {
     const v = await $.store.get(SPEICHER_VERLAUF)
-    return Array.isArray(v)
-        ? v
-              .filter(istEintrag)
-              .map(x => ({ ...x, ergaenzt: x.ergaenzt.filter(p => typeof p === 'string') }))
-              .slice(0, VERLAUF_MAX)
-        : []
+    return Array.isArray(v) ? v.filter(istEintrag).map(saeubereEintrag).slice(0, VERLAUF_MAX) : []
 }
 
 async function merkeVerlauf($: EngineInterface, eintrag: PromptUpgradeEintrag): Promise<void> {
@@ -372,7 +376,17 @@ async function schreibeUm($: EngineInterface, id: string): Promise<void> {
         }
         await aendere($, a =>
             gehoert(a, id, lauf)
-                ? { ...a, schritt: 'pruefen', upgrade: u.upgrade, entwurf: u.upgrade, ergaenzt: u.ergaenzt, lauf: null, bearbeiten: false, kopiert: null }
+                ? {
+                      ...a,
+                      schritt: 'pruefen',
+                      upgrade: u.upgrade,
+                      entwurf: u.upgrade,
+                      ergaenzt: u.ergaenzt,
+                      abdeckung: u.abdeckung,
+                      lauf: null,
+                      bearbeiten: false,
+                      kopiert: null,
+                  }
                 : a,
         )
     } catch (err) {
@@ -486,7 +500,8 @@ async function fuehreAus($: EngineInterface, text?: string): Promise<void> {
         await aendere($, () => a)
         return
     }
-    await merkeVerlauf($, { at: await $.clock.now(), original: a.original, upgrade: endgueltig, ergaenzt: a.ergaenzt })
+    const eintrag: PromptUpgradeEintrag = { at: await $.clock.now(), original: a.original, upgrade: endgueltig, ergaenzt: a.ergaenzt }
+    await merkeVerlauf($, istAbdeckung(a.abdeckung) ? { ...eintrag, abdeckung: a.abdeckung } : eintrag)
     await beende($)
     await sende($, endgueltig)
 }
@@ -569,6 +584,7 @@ async function oeffneAusVerlauf($: EngineInterface, i: number): Promise<void> {
         upgrade: v.upgrade,
         entwurf: v.upgrade,
         ergaenzt: v.ergaenzt,
+        abdeckung: v.abdeckung ?? null,
         ausVerlauf: true,
     }
     await aendere($, () => neu)

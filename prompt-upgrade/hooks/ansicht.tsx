@@ -7,8 +7,8 @@
 
 import type { BoxProps, ButtonProps, ElementConstructor, InputProps, RenderElement, SvgProps, TextProps, UiPressArgument } from 'claude-code'
 
-import type { PromptUpgradeAblauf, PromptUpgradeEintrag, PromptUpgradeFrage, PromptUpgradeAntwort } from '../types'
-import { einzeilig, grosseZahl, kuerze, packe, platzhalter, spur, umbrechen, woerter, zellen } from './logik'
+import type { PromptUpgradeAbdeckung, PromptUpgradeAblauf, PromptUpgradeEintrag, PromptUpgradeFrage, PromptUpgradeAntwort } from '../types'
+import { abdeckungZeile, einzeilig, grosseZahl, istAbdeckung, kuerze, packe, platzhalter, spur, umbrechen, woerter, zellen } from './logik'
 
 /** Die Farben der Vorgabe. */
 export const FARBE = {
@@ -391,6 +391,25 @@ function zahlen(k: Kit, vorher: number, nachher: number, ergaenzt: number, breit
     )
 }
 
+/**
+ * Eine Zeile mit den Kernteilen des Upgrades: enthaltene gruen mit Haekchen,
+ * fehlende gedaempft mit Strich. Ohne Abdeckung keine Zeile.
+ */
+function abdeckungsZeile(k: Kit, ab: PromptUpgradeAbdeckung | null, breite: number): RenderElement | null {
+    const { Text } = k
+    if (ab === null) {
+        return null
+    }
+    const farbe = { ja: FARBE.gruen, nein: FARBE.leise, luecke: FARBE.leise, leise: FARBE.leise } as const
+    return (
+        <Text wrap="truncate-end">
+            {abdeckungZeile(ab, breite).map(t => (
+                <Text color={farbe[t.art]}>{t.text}</Text>
+            ))}
+        </Text>
+    )
+}
+
 // --- Die Schritte ---
 
 function eingabe(k: Kit, breite: number, a: Aktionen): RenderElement {
@@ -540,9 +559,19 @@ function pruefen(k: Kit, x: PromptUpgradeAblauf, breite: number, a: Aktionen): R
         titelFarbe: FARBE.gold,
         platzhalter: true,
     })
+    // Ein Durchlauf von vor 0.2.0 (nach einem Neuladen noch im Zustand) hat das Feld nicht.
+    const abdeckung = abdeckungsZeile(k, istAbdeckung(x.abdeckung) ? x.abdeckung : null, breite)
+    const kennzahlen = zahlen(k, woerter(x.original), woerter(text), x.ergaenzt.length, breite)
     return (
         <Box flexDirection="column" gap={1}>
-            {zahlen(k, woerter(x.original), woerter(text), x.ergaenzt.length, breite)}
+            {abdeckung ? (
+                <Box flexDirection="column">
+                    {kennzahlen}
+                    {abdeckung}
+                </Box>
+            ) : (
+                kennzahlen
+            )}
             {knopfReihen(k, knoepfe, breite)}
             {x.bearbeiten ? (
                 Input ? (
