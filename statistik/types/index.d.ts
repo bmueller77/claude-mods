@@ -94,6 +94,14 @@ export type Chatlaenge = {
     istGekappt: boolean
 }
 
+/** Ein laufender Countdown vor Aufraeumen oder Verdichten. */
+export type Countdown = {
+    /** Welcher Knopf ihn gestartet hat: der Schwamm (aufraeumen) oder der Pfeil (verdichten). */
+    was: 'wischen' | 'compact'
+    /** Wann er ablaeuft und die Aktion startet, in ms nach der Uhr der Engine. */
+    bis: number
+}
+
 declare module 'claude-code' {
     interface PluginState {
         statistik: {
@@ -107,6 +115,8 @@ declare module 'claude-code' {
             eingereiht: 'compact' | 'wischen' | null
             /** Die Chatlaenge, nach jeder Runde, jedem Compact und beim Sitzungsstart neu; null, wenn der Verlauf nicht lesbar war. */
             chatlaenge: Chatlaenge | null
+            /** Der Countdown vor Aufraeumen oder Verdichten; null, wenn keiner laeuft. Nach einem Neuladen gilt er als abgebrochen. */
+            countdown: Countdown | null
         }
     }
 }

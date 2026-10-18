@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderNode, RenderSurface, SessionMessage } from 'claude-code'
 
-import type { CacheSample, Chatlaenge, ContextSample, Fenster, Lage, Nutzung } from '../types'
+import type { CacheSample, Chatlaenge, ContextSample, Countdown, Fenster, Lage, Nutzung } from '../types'
 
 // Statistik: cache-meter und cache-tax in einer Zeile.
 //
@@ -111,6 +111,17 @@ const SYMBOL_DETAILS = '📊'
 const SYMBOL_AUS = '\u2716\uFE0F'
 
 /**
+ * So lange zaehlt ein Druck auf Schwamm oder Pfeil herunter, bevor etwas passiert.
+ * Bis dahin laesst er sich abbrechen; ein versehentlicher Druck bleibt so folgenlos.
+ */
+const COUNTDOWN_MS = 10_000
+
+/** Die verbleibenden Sekunden als Emoji, damit der Knopf so breit bleibt wie die anderen: 🔟, 9️⃣ bis 1️⃣. */
+export function countdownZeichen(sekunden: number): string {
+    return sekunden >= 10 ? '\u{1F51F}' : `${Math.max(1, sekunden)}\uFE0F\u20E3`
+}
+
+/**
  * Die Trennlinie ueber der Statistik: 7 Pixel hoch, die Linie 1 Pixel in der
  * Mitte. Breiter als jede Leiste; ohne eigene Breite im Element nimmt die App
  * sie nur bis zum Rand der Leiste, und `preserveAspectRatio="none"` haelt
@@ -148,6 +159,7 @@ const nutzung = atom({ plugin: 'statistik', key: 'nutzung' } as const, {
 const tick = atom({ plugin: 'statistik', key: 'tick' } as const, 0)
 const eingereiht = atom({ plugin: 'statistik', key: 'eingereiht' } as const, null as 'compact' | 'wischen' | null)
 const chatlaenge = atom({ plugin: 'statistik', key: 'chatlaenge' } as const, null as Chatlaenge | null)
+const countdown = atom({ plugin: 'statistik', key: 'countdown' } as const, null as Countdown | null)
 
 // --- Was nur dieses Laden des Moduls braucht ---
 // Ein Neuladen beginnt hier von vorn. Was die Leiste zeigt, steht zusaetzlich
@@ -198,6 +210,22 @@ const z = {
 
 /** Ob der eigene Hook die letzte Verdichtung schon in den Verlauf geschrieben hat. */
 let hookHatProtokolliert = false
+
+/**
+ * Was die Leiste je Flaeche zuletzt gezeichnet hat: ob Claude gerade arbeitet.
+ *
+ * Das weiss nur der Render-Hook (`e.props.isWorking`). Der Countdown handelt erst
+ * zehn Sekunden nach dem Druck und nimmt dann den Stand von hier.
+ */
+const zuletztBeschaeftigt = new Map<RenderSurface, boolean>()
+
+/**
+ * Der Countdown dieses Ladens: sein Takt und die Flaeche, auf der gedrueckt wurde.
+ *
+ * Ein Neuladen beginnt ohne; die Engine bricht den alten Takt dabei selbst ab.
+ * Steht dann noch ein Countdown in `$.state`, gilt er als abgebrochen.
+ */
+let lauf: { takt: { cancel: () => void }; flaeche: RenderSurface } | null = null
 
 // --- Kleine Helfer ---
 
@@ -1130,6 +1158,103 @@ async function wische($: EngineInterface, istBeschaeftigt: boolean, flaeche: Ren
     await verdichte($, istBeschaeftigt, flaeche, schonEingereiht, 'wischen')
 }
 
+// --- Countdown vor Schwamm und Pfeil ---
+// Ein Druck handelt nicht sofort: Erst laufen zehn Sekunden herunter, die sich
+// abbrechen lassen. Danach laeuft die Aktion mit dem Stand von dann.
+
+/** Den Takt anhalten, ohne die Anzeige zu aendern. */
+function stoppeLauf(): void {
+    lauf?.takt.cancel()
+    lauf = null
+}
+
+/** Den Countdown abbrechen, wenn einer laeuft. */
+async function brichCountdownAb($: EngineInterface): Promise<void> {
+    if (!lauf) {
+        return
+    }
+    stoppeLauf()
+    await update($, countdown, () => null)
+    $.ui.toast('Abgebrochen.')
+}
+
+/**
+ * Ein Druck auf Schwamm oder Pfeil.
+ *
+ * Laeuft schon ein Countdown, bricht derselbe Knopf ihn ab; der andere tut nichts
+ * und sagt das. Ist schon etwas eingereiht, geht es weiter wie ohne Countdown.
+ */
+async function drueckeMitCountdown(
+    $: EngineInterface,
+    was: Countdown['was'],
+    istBeschaeftigt: boolean,
+    flaeche: RenderSurface,
+    schonEingereiht: boolean,
+): Promise<void> {
+    const laufend = lauf ? await read($, countdown) : null
+    if (laufend) {
+        if (laufend.was === was) {
+            await brichCountdownAb($)
+        } else {
+            $.ui.toast('Erst abbrechen oder abwarten.')
+        }
+        return
+    }
+    if (schonEingereiht) {
+        await (was === 'wischen'
+            ? wische($, istBeschaeftigt, flaeche, true)
+            : verdichte($, istBeschaeftigt, flaeche, true, 'compact'))
+        return
+    }
+    stoppeLauf()
+    const jetzt = await $.clock.now()
+    await update($, countdown, () => ({ was, bis: jetzt + COUNTDOWN_MS }))
+    const takt = $.clock.every(1000, () => void ticke($, takt).catch(() => {}))
+    lauf = { takt, flaeche }
+    $.ui.toast(
+        was === 'wischen'
+            ? 'Der Chat wird in 10 Sekunden aufgeräumt. Abbrechen stoppt das.'
+            : 'Der Kontext wird in 10 Sekunden verdichtet. Abbrechen stoppt das.',
+    )
+}
+
+/**
+ * Ein Schlag des Countdowns: neu zeichnen, und am Ende die Aktion ausfuehren.
+ *
+ * Flaeche und Arbeit kommen aus dem letzten Render, ob etwas eingereiht ist,
+ * frisch aus `$.state`: der Stand zum Ablauf, nicht der beim Druck.
+ */
+async function ticke($: EngineInterface, takt: { cancel: () => void }): Promise<void> {
+    if (lauf?.takt !== takt) {
+        takt.cancel()
+        return
+    }
+    const c = await read($, countdown)
+    const jetzt = await $.clock.now()
+    // Waehrend des Lesens abgebrochen oder ersetzt: dann nichts mehr tun.
+    if (lauf?.takt !== takt) {
+        return
+    }
+    if (!c) {
+        stoppeLauf()
+        return
+    }
+    if (jetzt < c.bis) {
+        await update($, tick, n => n + 1)
+        return
+    }
+    const flaeche = lauf.flaeche
+    stoppeLauf()
+    await update($, countdown, () => null)
+    const istBeschaeftigt = zuletztBeschaeftigt.get(flaeche) ?? false
+    const schonEingereiht = (await read($, eingereiht)) !== null
+    if (c.was === 'wischen') {
+        await wische($, istBeschaeftigt, flaeche, schonEingereiht)
+    } else {
+        await verdichte($, istBeschaeftigt, flaeche, schonEingereiht, 'compact')
+    }
+}
+
 // --- /statistik ---
 
 const QUELLE_KURZ: Record<CacheSample['ttlSource'], string> = {
@@ -1230,6 +1355,11 @@ export const register: Register = (on, options) => {
         }
         const { minuten } = await laufzeitBeimStart($)
         z.laufzeitMs = minuten * 60_000
+
+        // Ein Countdown aus der Zeit vor einem Neuladen gilt als abgebrochen: sein
+        // Takt ist mit dem alten Modul weg, und ausgefuehrt wird nichts mehr.
+        stoppeLauf()
+        await update($, countdown, () => null)
 
         // Ein Neuladen des Mods (/reload-plugins, ein Update) beginnt das Modul von
         // vorn, die Sitzung laeuft aber weiter. Was `lage` in `$.state` noch weiss,
@@ -1529,7 +1659,11 @@ export const register: Register = (on, options) => {
         const l = await read($, lage)
         const wartet = await read($, eingereiht)
         const chat = await read($, chatlaenge)
+        // Ein Countdown ohne eigenen Takt stammt aus einem frueheren Laden: abgebrochen.
+        const cdGelesen = await read($, countdown)
+        const cd = lauf ? cdGelesen : null
         void (await read($, tick))
+        zuletztBeschaeftigt.set(e.surface, e.props.isWorking)
 
         const elemente = $.ui.resolve(e)
         const { Box, Button, Text } = elemente
@@ -1602,24 +1736,46 @@ export const register: Register = (on, options) => {
         // Aufraeumen mit Sicherungspunkt steht rechts neben der Chatlaenge; wird der
         // Kontext eng (rot), ist es hervorgehoben. Das schlichte Verdichten steht am
         // Kontext. Wer eingereiht hat, zeigt die Sanduhr; der andere tut so lange nichts.
+        // Ein Druck startet erst einen Countdown: Der Knopf zeigt die Sekunden, dahinter
+        // steht "Abbrechen".
         const eng = stufe === 'eng'
         const istEingereiht = wartet !== null
+        const sekunden = cd ? Math.ceil(Math.max(0, cd.bis - jetzt) / 1000) : 0
         const wischen = (
             <Button
                 key="wischen"
-                label={wartet === 'wischen' ? SYMBOL_EINGEREIHT : SYMBOL_WISCHEN}
+                label={
+                    cd?.was === 'wischen'
+                        ? countdownZeichen(sekunden)
+                        : wartet === 'wischen'
+                          ? SYMBOL_EINGEREIHT
+                          : SYMBOL_WISCHEN
+                }
                 variant={eng ? 'primary' : 'secondary'}
-                onPress={() => void wische($, e.props.isWorking, e.surface, istEingereiht)}
+                onPress={() => void drueckeMitCountdown($, 'wischen', e.props.isWorking, e.surface, istEingereiht)}
             />
         )
         const compact = (
             <Button
                 key="compact"
-                label={wartet === 'compact' ? SYMBOL_EINGEREIHT : SYMBOL_COMPACT}
+                label={
+                    cd?.was === 'compact'
+                        ? countdownZeichen(sekunden)
+                        : wartet === 'compact'
+                          ? SYMBOL_EINGEREIHT
+                          : SYMBOL_COMPACT
+                }
                 variant="secondary"
-                onPress={() => void verdichte($, e.props.isWorking, e.surface, istEingereiht, 'compact')}
+                onPress={() => void drueckeMitCountdown($, 'compact', e.props.isWorking, e.surface, istEingereiht)}
             />
         )
+        const abbrechenKnopf = cd ? (
+            <Button key="countdown-abbrechen" label="Abbrechen" variant="secondary" onPress={() => void brichCountdownAb($)} />
+        ) : null
+        const abbrechenNach = (was: Countdown['was']) =>
+            cd?.was === was
+                ? [<Text key="st-abbrechen-luecke"> </Text>, abbrechenKnopf]
+                : []
 
         // --- Chatlaenge: Nachrichten und geschaetzte Tokens seit Beginn ---
         // Ist die Liste an der Grenze, kann sie gekappt sein: dann "mindestens".
@@ -1660,10 +1816,12 @@ export const register: Register = (on, options) => {
                 <Text>{SYMBOL_CHAT}</Text>
                 <Text dimColor>{chatText}</Text>
                 {wischen}
+                {abbrechenNach('wischen')}
                 <Text dimColor> | </Text>
                 {kontextBild}
                 <Text color={kontextFarbe}> {kontextText} </Text>
                 {compact}
+                {abbrechenNach('compact')}
                 <Text> </Text>
                 {detailsKnopf}
                 <Text dimColor> | </Text>

@@ -6,6 +6,8 @@ import { dauer, fableAus, leseDauer, restUhr, tokenMenge, uhrZeichen, warmRest, 
 const FLAECHEN = ['terminal', 'desktop'] as const
 const BAND = { plugin: 'statistik', component: 'AbovePrompt' } as const
 const MIN = 60_000
+/** So lange laeuft der Countdown vor Schwamm und Pfeil. */
+const COUNTDOWN = 10_000
 
 function props(x?: { isWorking?: boolean; hasSurvey?: boolean }) {
     return {
@@ -555,7 +557,7 @@ test('findet ein Ping den Cache kalt vor, hoert das Warmhalten mit Grund auf', a
 })
 
 test('der Schwamm steht rechts neben der Chatlänge, der Pfeil 🔽 am Kontext; bei Rot ist der Schwamm hervorgehoben', async ($, on) => {
-    mock.clock(on, { now: 1_000_000 })
+    const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const stand: Stand = { tokens: 40_000, fenster: 200_000, schwelle: 166_000 }
     const b = boden(on, stand)
@@ -586,8 +588,9 @@ test('der Schwamm steht rechts neben der Chatlänge, der Pfeil 🔽 am Kontext; 
     expect((await terminal.find({ type: 'Button', key: 'wischen' }))?.props.variant).toBe('primary')
     expect((await terminal.find({ type: 'Button', key: 'compact' }))?.props.variant).toBe('secondary')
 
-    // Das Dreieck verdichtet schlicht und zeigt die Sanduhr, solange es wartet.
+    // Das Dreieck verdichtet schlicht, nach dem Countdown, und zeigt die Sanduhr, solange es wartet.
     await terminal.press({ key: 'compact' })
+    await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['compact'])
     expect((await terminal.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('⏳')
     expect((await terminal.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
@@ -598,13 +601,14 @@ test('der Schwamm steht rechts neben der Chatlänge, der Pfeil 🔽 am Kontext; 
 })
 
 test('ohne Leitstand und GlanceFlow verdichtet der Schwamm schlicht und zeigt selbst die Sanduhr', async ($, on) => {
-    mock.clock(on, { now: 1_000_000 })
+    const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     await ui.press({ key: 'wischen' })
+    await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['compact'])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
@@ -614,7 +618,7 @@ test('ohne Leitstand und GlanceFlow verdichtet der Schwamm schlicht und zeigt se
 })
 
 test('nur mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glanceflow tidy; der Pfeil bleibt schlicht', async ($, on) => {
-    mock.clock(on, { now: 1_000_000 })
+    const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
     on('command.list', () => ({ value: [{ name: 'glanceflow', description: '', source: 'plugin' }] }) as never)
@@ -622,17 +626,19 @@ test('nur mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glan
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     await ui.press({ key: 'wischen' })
+    await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['glanceflow tidy'])
     // GlanceFlow raeumt selbst auf; die Statistik reiht nichts ein.
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
     await ui.press({ key: 'compact' })
+    await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['glanceflow tidy', 'compact'])
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('⏳')
 })
 
 test('mit Leitstand räumt der Schwamm über /leitstand tidy auf, auch wenn GlanceFlow noch da ist', async ($, on) => {
-    mock.clock(on, { now: 1_000_000 })
+    const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
     const befehl = (name: string) => ({ name, description: '', source: 'plugin' })
@@ -643,13 +649,155 @@ test('mit Leitstand räumt der Schwamm über /leitstand tidy auf, auch wenn Glan
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     await ui.press({ key: 'wischen' })
+    await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['leitstand tidy'])
     // Als Kopie eines Plugins zaehlt er auch.
     liste = [befehl('glanceflow'), befehl('bjoern-mods:leitstand')]
     await ui.press({ key: 'wischen' })
+    await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['leitstand tidy', 'bjoern-mods:leitstand tidy'])
     // Der Leitstand raeumt selbst auf; die Statistik reiht nichts ein.
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+})
+
+/** Was die Statistik als Toast zeigt. */
+function toastZaehler(on: On) {
+    const toasts: string[] = []
+    on('ui.toast', (_$, e, _next) => {
+        toasts.push(String(e.text))
+        return { value: undefined } as never
+    })
+    return toasts
+}
+
+test('ein Druck auf 🧽 räumt nicht sofort auf, sondern nach zehn Sekunden, genau einmal', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await ui.press({ key: 'wischen' })
+    expect(b.befehle).toEqual([])
+    expect(toasts).toEqual(['Der Chat wird in 10 Sekunden aufgeräumt. Abbrechen stoppt das.'])
+    await clock.advance(COUNTDOWN - 1)
+    expect(b.befehle).toEqual([])
+    await clock.advance(1)
+    expect(b.befehle).toEqual(['compact'])
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
+    expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
+    await clock.advance(2 * COUNTDOWN)
+    expect(b.befehle).toEqual(['compact'])
+})
+
+test('ein Druck auf 🔽 verdichtet nicht sofort, sondern nach zehn Sekunden, genau einmal', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await ui.press({ key: 'compact' })
+    expect(b.befehle).toEqual([])
+    expect(toasts).toEqual(['Der Kontext wird in 10 Sekunden verdichtet. Abbrechen stoppt das.'])
+    await clock.advance(COUNTDOWN - 1)
+    expect(b.befehle).toEqual([])
+    await clock.advance(1)
+    expect(b.befehle).toEqual(['compact'])
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('⏳')
+    await clock.advance(2 * COUNTDOWN)
+    expect(b.befehle).toEqual(['compact'])
+})
+
+test('ein zweiter Druck auf denselben Knopf bricht den Countdown ab', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    for (const knopf of ['wischen', 'compact'] as const) {
+        await ui.press({ key: knopf })
+        await clock.advance(4_000)
+        await ui.press({ key: knopf })
+        expect(toasts.at(-1)).toBe('Abgebrochen.')
+        await clock.advance(2 * COUNTDOWN)
+        expect(b.befehle).toEqual([])
+    }
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
+})
+
+test('der Countdown zeigt die Sekunden im Knopf, dahinter Abbrechen, das ihn stoppt; in App und Terminal', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        await ui.press({ key: 'wischen' })
+        expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🔟')
+        const abbrechen = await ui.find({ type: 'Button', key: 'countdown-abbrechen' })
+        expect(abbrechen?.props.label).toBe('Abbrechen')
+        expect(abbrechen?.props.variant).toBe('secondary')
+        // Abbrechen steht direkt hinter dem gedrueckten Knopf.
+        expect((await ui.findAll({ type: 'Button' })).map(k => k.props.key)).toEqual([
+            'wischen',
+            'countdown-abbrechen',
+            'compact',
+            'details',
+            'warmhalten',
+        ])
+        await clock.advance(3_000)
+        expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('7\uFE0F\u20E3')
+        await ui.press({ key: 'countdown-abbrechen' })
+        expect(toasts.at(-1)).toBe('Abgebrochen.')
+        expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+        expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
+        await clock.advance(2 * COUNTDOWN)
+        expect(b.befehle).toEqual([])
+
+        // Beim Pfeil steht Abbrechen hinter dem Pfeil.
+        await ui.press({ key: 'compact' })
+        expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔟')
+        expect((await ui.findAll({ type: 'Button' })).map(k => k.props.key)).toEqual([
+            'wischen',
+            'compact',
+            'countdown-abbrechen',
+            'details',
+            'warmhalten',
+        ])
+        await ui.press({ key: 'countdown-abbrechen' })
+        await clock.advance(2 * COUNTDOWN)
+        expect(b.befehle).toEqual([])
+    }
+})
+
+test('während des Countdowns von 🧽 ist 🔽 wirkungslos und sagt das', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await ui.press({ key: 'wischen' })
+    await clock.advance(2_000)
+    await ui.press({ key: 'compact' })
+    expect(toasts.at(-1)).toBe('Erst abbrechen oder abwarten.')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('8\uFE0F\u20E3')
+    // Der Countdown des Schwamms laeuft weiter und handelt einmal, der Pfeil gar nicht.
+    await clock.advance(COUNTDOWN)
+    expect(b.befehle).toEqual(['compact'])
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
 })
 
 /** Ein Verlauf: drei Nachrichten mit Text und ein reines Werkzeug-Ergebnis, zusammen 1248000 Zeichen. */
