@@ -101,7 +101,7 @@ const PREISE: Array<[string, number, number, number]> = [
 const SYMBOL_WARM = '🔥'
 const SYMBOL_KALT = '❄️'
 const SYMBOL_WISCHEN = '🧽'
-const SYMBOL_COMPACT = '🔽'
+const SYMBOL_COMPACT = '🔻'
 const SYMBOL_EINGEREIHT = '⏳'
 /** Die Chatlaenge: eine Sprechblase, als Text. */
 const SYMBOL_CHAT = '💬'

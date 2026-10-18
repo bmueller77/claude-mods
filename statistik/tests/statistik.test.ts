@@ -556,7 +556,7 @@ test('findet ein Ping den Cache kalt vor, hoert das Warmhalten mit Grund auf', a
     expect(b.logs).toEqual([])
 })
 
-test('der Schwamm steht rechts neben der Chatlänge, der Pfeil 🔽 am Kontext; bei Rot ist der Schwamm hervorgehoben', async ($, on) => {
+test('der Schwamm steht rechts neben der Chatlänge, das Dreieck 🔻 am Kontext; bei Rot ist der Schwamm hervorgehoben', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const stand: Stand = { tokens: 40_000, fenster: 200_000, schwelle: 166_000 }
@@ -568,7 +568,7 @@ test('der Schwamm steht rechts neben der Chatlänge, der Pfeil 🔽 am Kontext; 
     expect(schwamm?.props.label).toBe('🧽')
     expect(schwamm?.props.variant).toBe('secondary')
     const dreieck = await ui.find({ type: 'Button', key: 'compact' })
-    expect(dreieck?.props.label).toBe('🔽')
+    expect(dreieck?.props.label).toBe('🔻')
     expect(dreieck?.props.variant).toBe('secondary')
     const knoepfe = (await ui.findAll({ type: 'Button' })).map(k => k.props.key)
     expect(knoepfe).toEqual(['wischen', 'compact', 'details', 'warmhalten'])
@@ -611,7 +611,7 @@ test('ohne Leitstand und GlanceFlow verdichtet der Schwamm schlicht und zeigt se
     await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['compact'])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     // Das Dreieck tut nichts, solange der Schwamm eingereiht hat.
     await ui.press({ key: 'compact' })
     expect(b.befehle).toEqual(['compact'])
@@ -630,7 +630,7 @@ test('nur mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glan
     expect(b.befehle).toEqual(['glanceflow tidy'])
     // GlanceFlow raeumt selbst auf; die Statistik reiht nichts ein.
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     await ui.press({ key: 'compact' })
     await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['glanceflow tidy', 'compact'])
@@ -691,7 +691,7 @@ test('ein Druck auf 🧽 räumt nicht sofort auf, sondern nach zehn Sekunden, ge
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('ein Druck auf 🔽 verdichtet nicht sofort, sondern nach zehn Sekunden, genau einmal', async ($, on) => {
+test('ein Druck auf 🔻 verdichtet nicht sofort, sondern nach zehn Sekunden, genau einmal', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
@@ -728,7 +728,7 @@ test('ein zweiter Druck auf denselben Knopf bricht den Countdown ab', async ($, 
         expect(b.befehle).toEqual([])
     }
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
 })
 
@@ -779,7 +779,7 @@ test('der Countdown zeigt die Sekunden im Knopf, dahinter Abbrechen, das ihn sto
     }
 })
 
-test('während des Countdowns von 🧽 ist 🔽 wirkungslos und sagt das', async ($, on) => {
+test('während des Countdowns von 🧽 ist 🔻 wirkungslos und sagt das', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
@@ -791,13 +791,13 @@ test('während des Countdowns von 🧽 ist 🔽 wirkungslos und sagt das', async
     await clock.advance(2_000)
     await ui.press({ key: 'compact' })
     expect(toasts.at(-1)).toBe('Erst abbrechen oder abwarten.')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('8\uFE0F\u20E3')
     // Der Countdown des Schwamms laeuft weiter und handelt einmal, der Pfeil gar nicht.
     await clock.advance(COUNTDOWN)
     expect(b.befehle).toEqual(['compact'])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
 })
 
 /** Ein Verlauf: drei Nachrichten mit Text und ein reines Werkzeug-Ergebnis, zusammen 1248000 Zeichen. */
@@ -1408,7 +1408,7 @@ test('ein Countdown, der beim Neuladen laeuft, fuehrt nie aus; danach geht ein n
         expect(b.befehle).toEqual([])
     }
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔽')
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
     // Danach startet ein neuer Druck wieder normal und fuehrt nach 10 s aus.
     await ui.press({ key: 'compact' })
