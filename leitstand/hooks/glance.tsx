@@ -4051,7 +4051,9 @@ export function registerGlance(on: On): void {
         onPress={() => void setWorkMode($, workMode === 'dynamisch' ? 'auto' : 'dynamisch')}
       />
     )
-    // Grill mich right after it, as the steam sign.
+    // Autopilot right after it, as the A sign: lit while it runs, a press flips it.
+    const nightShiftItem = !isEnabled || !vector ? null : <Button key="nightshift" variant={nightShift ? 'primary' : 'secondary'} label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />
+    // Grill mich behind it, as the steam sign.
     const grillItem = !isEnabled || !vector ? null : <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
     // The broom right behind it: the clean-code skill. The press does not wait for the command, which runs once the
     // session is idle; waiting would run the press past its budget while Claude works.
@@ -4060,7 +4062,7 @@ export function registerGlance(on: On): void {
         <Button key="cleancode" variant="secondary" label={CLEAN_CODE} onPress={() => void runCleanCode($).catch(() => undefined)} />
       )
     // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
-    // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it), Autopilot,
+    // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it),
     // masking on screen and the shield that moves the chat's secrets into the .env.
     const skillItems =
       !isEnabled || !vector
@@ -4076,7 +4078,6 @@ export function registerGlance(on: On): void {
               remote === 'missing' ? null : (
                 <Button key="remote" variant={remote === 'on' ? 'primary' : 'secondary'} label={REMOTE} onPress={() => toggleRemote($)} />
               ),
-              <Button key="nightshift" variant={nightShift ? 'primary' : 'secondary'} label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />,
               <Button key="privacy" variant={masks ? 'primary' : 'secondary'} label={masks ? MASK_ON : MASK_OFF} onPress={() => toggleMasking($)} />,
               <Button
                 key="vault"
@@ -4090,7 +4091,7 @@ export function registerGlance(on: On): void {
     // before the plan and the history. One stands only between two groups that show a button, so never at an end or
     // two side by side.
     const leftGroups = [
-      { bar: '', items: [workModeItem, grillItem, cleanItem, ...(skillItems?.beside ?? [])] },
+      { bar: '', items: [workModeItem, nightShiftItem, grillItem, cleanItem, ...(skillItems?.beside ?? [])] },
       { bar: 'sep-files', items: skillItems?.files ?? [] },
       { bar: 'sep-skills', items: skillItems?.past ?? [] },
       { bar: 'sep-places', items: places },

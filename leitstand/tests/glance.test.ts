@@ -5330,7 +5330,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
-    const order = ['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
+    const order = ['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
@@ -5358,7 +5358,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('in der App trennen Striche die Gruppen unten links: hinter ADHS, hinter Filetree und vor Plan, im Terminal keine', async ($, on) => {
     await skillWorld($, on)
-    expect(await leftRow($)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'plan', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
 
     for (const bodyColumns of [50, 80, 140]) {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
@@ -5370,7 +5370,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
   })
 
   test('ADHS (🧠) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
@@ -5945,7 +5945,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 10)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote', 'nightshift'])
+    expect(row.slice(0, 10)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote'])
     expect(row.filter(one => one === 'dim|')).toHaveLength(3)
   })
 
@@ -5967,7 +5967,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 9)).toEqual(['workmode', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'nightshift'])
+    expect(row.slice(0, 10)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)
