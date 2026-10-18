@@ -1,7 +1,7 @@
 {
   "name": "bjoern-mods",
   "owner": { "name": "Björn Müller" },
-  "metadata": { "description": "Björns eigene Claude-Code-Mods (Leitstand, Statistik, Nächste Schritte, Zusammenfassung, Autopilot, Visible Compact deutsch, Filetree deutsch) plus i-have-adhd. Die älteren Mods aus dem Video (savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; die eigenen Mods ersetzen sie." },
+  "metadata": { "description": "Björns eigene Claude-Code-Mods (Leitstand, Statistik, Nächste Schritte, Zusammenfassung, Autopilot, Visible Compact deutsch, Filetree deutsch, Reflect, Prompt Upgrade) plus i-have-adhd. Die älteren Mods aus dem Video (savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; die eigenen Mods ersetzen sie." },
   "plugins": [
     { "name": "leitstand", "source": "./leitstand", "description": "Der Leitstand über der Eingabe: Checkliste mit Plan, Fortschritt, Helfern, Verlauf und Teambericht; Arbeitsweisen Auto-Mode und Gruppenarbeit; Schalter für ADHS-Modus, Remote Control, Autopilot und Verdecken, Öffner für Filetree. Hervorgegangen aus GlanceFlow (MIT, Antreas-Strb)" },
     { "name": "statistik", "source": "./statistik", "description": "Eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr, dazu Warmhalten, Compact und Kontext-Details über /context (Eigenbau)" },
@@ -10,6 +10,8 @@
     { "name": "visible-compact", "source": "./visible-compact", "description": "Deutsche Fassung von visible-compact (MIT, Sravan): Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf Wunsch ins Deutsche übersetzt" },
     { "name": "autopilot", "source": "./autopilot", "description": "Der Autopilot: Claude arbeitet ohne Rückfragen weiter, während du weg bist, und schreibt am Ende eine Übergabe; /autopilot schaltet ihn ein und aus (Eigenbau, früher nachtschicht)" },
     { "name": "filetree", "source": "./filetree", "description": "Deutsche Fassung von filetree (MIT, Kurt Buhler, data-goblin/claude-code-filetree): Dateibaum als Seitenfenster mit Git-Status und Markierung der Dateien, die Claude liest und schreibt" },
+    { "name": "reflect", "source": "./reflect", "description": "Reflect: lernt aus deinen Korrekturen und fragt, ob eine Regel für alle Projekte, dieses Projekt oder nur diesen Chat gilt; /reflect kritisiert die bisherige Arbeit. Teil 1 nach reflect-mod von BayramAnnakov/claude-reflect (MIT)" },
+    { "name": "prompt-upgrade", "source": "./prompt-upgrade", "description": "Prompt Upgrade: /better macht aus einem groben Prompt einen guten, mit bis zu drei Rückfragen und Vergleich nebeneinander; gesendet wird erst auf Ausführen. Automatik je Chat, Standard aus" },
     { "name": "i-have-adhd", "source": { "source": "github", "repo": "ayghri/i-have-adhd" }, "description": "ADHS-Modus als Skill: zuerst die nächste Handlung, nummerierte Schritte, keine Abschweifungen (fremd, MIT; Knopf 🧠 in GlanceFlow)" }
   ]
 }

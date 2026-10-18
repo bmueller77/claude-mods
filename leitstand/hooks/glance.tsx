@@ -34,7 +34,7 @@ import {
   sharedDayKeys,
   upsertEntry,
 } from './history'
-import { extractSecrets, findSecrets, gitignoreWithEnv, mapStrings, maskDeep, maskPrivate, mergeEnv, replaceSecrets } from './privacy'
+import { REMOVED, extractSecrets, findSecrets, gitignoreWithEnv, mapStrings, maskDeep, maskPrivate, mergeEnv, removeSecrets, replaceSecrets } from './privacy'
 import type { Secret } from './privacy'
 import {
   CHECKPOINT_PREFIX,
@@ -163,6 +163,8 @@ const NIGHTSHIFT = '\u{1F170}\uFE0F'
 const FILETREE = '\u{1F333}'
 /** The clean-code skill, right behind Grill mich: a broom. */
 const CLEAN_CODE = '\u{1F9F9}'
+/** The reflect mod's command, right behind the broom: a mirror. */
+const REFLECT = '\u{1FA9E}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
 const MASK_ON = '\u{1F512}'
 const MASK_OFF = '\u{1F513}'
@@ -192,6 +194,11 @@ const NIGHT_SHIFT_START_MS = 30_000
 const LONG_JOB_MS = 60_000
 const COLLAPSE_MS = 5000
 const RESEND_WINDOW_MS = 2 * 60 * 1000
+// Beside a message from the phone (Remote Control) whose secrets the guard took out: Claude says so first, since the
+// phone shows no toast and no prompt box.
+const SECRET_REMOVED_NOTE =
+  `Hinweis des Leitstands: Diese Nachricht kam per Remote Control. Der Passwortschutz hat darin, was wie ein Passwort oder Schlüssel aussah, durch „${REMOVED}“ ersetzt. ` +
+  'Beginne deine Antwort mit genau diesem einen Satz: „Der Passwortschutz hat ein Passwort aus deiner Nachricht entfernt; ich habe es nicht gesehen.“'
 const LIMIT_WARN = 80
 const LIMIT_ALERT = 95
 // Up to 0.24 every chat's checklist sat under this one key; now each has its own (RESUME_PREFIX).
@@ -1594,6 +1601,9 @@ const openFiletree = ($: $) => runCommand($, 'Filetree', ['filetree'])
 /** Clean code: the clean-code skill (functions, names, nesting, error handling), run as if typed. */
 const runCleanCode = ($: $) => runCommand($, 'clean-code', ['clean-code'])
 
+/** Reflect: the reflect mod's command, run as if typed. */
+const runReflect = ($: $) => runCommand($, 'Reflect', ['reflect'])
+
 // Autopilot keeps its run in its own state, under the key from its days as the Nachtschicht (names here still say
 // night shift): the run while there is one, null once it is ended. Any plugin reads any value, so Leitstand reads it
 // straight from there and writes nothing of its own. Not a `dependencies` entry in plugin.json: Leitstand would then
@@ -2355,12 +2365,17 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     if (arg === 'handoff note') {
       const saved = (await $.store.get(HANDOFF_KEY)) as { note?: string } | undefined
       if (!saved?.note) return { text: 'Noch keine Übergabenotiz gespeichert.' }
+      // The phone (Remote Control) shows no prompt box: there the note is the command's answer.
+      if (e.origin.kind === 'bridge') return { text: saved.note }
       await $.prompt.fill({ text: saved.note })
       return { text: 'Die letzte Übergabenotiz steht im Eingabefeld.' }
     }
     if (arg === 'handoff') {
       void startFreshChat($)
-      return { text: 'Starte einen neuen Chat mit Übergabenotiz…' }
+      // On the phone neither the toasts nor the prompt box show where the note went should sending it fail.
+      return {
+        text: `Starte einen neuen Chat mit Übergabenotiz…${e.origin.kind === 'bridge' ? ' Kommt danach nichts, schreib /leitstand handoff note.' : ''}`,
+      }
     }
     if (arg.startsWith('details')) {
       const choice = arg.slice('details'.length).trim()
@@ -2397,13 +2412,14 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     }
   })
 
-  // Passwords and keys pasted into a message stay on this computer unless sent twice.
+  // Passwords and keys pasted into a message stay on this computer unless sent twice. From the phone (Remote Control),
+  // where no toast and no prompt box shows a held message, the message goes on without them and Claude says so.
   // ADHD mode follows what is sent, the button's own words included: the skill's call turns it on, "stop adhd mode" or
   // "normal mode" off. A message held back changes nothing.
   on('prompt.submit', async ($, e, next) => {
     const says = e.command ? (isAdhdCommand(e.command.name) ? true : null) : e.isMeta ? null : adhdSays(e.text)
-    const send = async () => {
-      const result = await next(e)
+    const send = async (sent: typeof e = e) => {
+      const result = await next(sent)
       if (says !== null && !('drop' in result)) await update($, adhdAtom, () => says)
       return result
     }
@@ -2413,6 +2429,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const kinds = findSecrets(e.text)
     if (kinds.length === 0) {
       return send()
+    }
+    // A slash command keeps its text whatever a hook rewrites, so one from the phone is held back as before.
+    if (e.origin.kind === 'bridge' && !e.command) {
+      return send({ ...e, text: removeSecrets(e.text), context: [...(e.context ?? []), SECRET_REMOVED_NOTE] })
     }
     const held = heldMessage
     if (held !== null && held.text === e.text && (await now($)) - held.at < RESEND_WINDOW_MS) {
@@ -2701,7 +2721,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         return {
           result:
             `${steps.length} Schritte geplant. Die Person gibt Pläne frei, bevor die Arbeit beginnt: Hör jetzt auf und warte auf ihre Antwort. ` +
-            'Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an.' +
+            'Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ' +
+            // On the phone (Remote Control) the band with the plan and Start does not show: the answer carries both.
+            `Nenne in deiner Antwort die Schritte nummeriert (${steps.map((one, at) => `${at + 1}. ${one}`).join('; ')}) und schließ mit dem Satz: ` +
+            'Ich warte auf deine Freigabe: Schreib „los“ oder sag, was sich ändern soll.' +
             (await nightStartNote($)),
         }
       }
@@ -2764,7 +2787,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     }
 
     if (isEnabled && list?.approval === 'waiting' && !ALWAYS_ALLOWED.has(tool)) {
-      return { deny: 'Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort.' + (await nightStartNote($)) }
+      return {
+        deny:
+          'Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort. ' +
+          'Sag in deiner Antwort, dass der Plan wartet und „los“ ihn freigibt.' +
+          (await nightStartNote($)),
+      }
     }
 
     if (isEnabled && (await read($, workModeAtom)) === 'dynamisch') {
@@ -3004,10 +3032,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     return next(e)
   })
 
-  // Simple hides the tool rows; Details keeps them, for people who want the code next to the checklist.
+  // Simple hides the tool rows; Details keeps them, for people who want the code next to the checklist. The phone
+  // (Remote Control) keeps them too: it has no band to stand in for them.
   // Where they show, masking covers the strings in a call's input and result; their shape stays as the tool's.
   on('ui.render', { component: ['ToolUse', 'ToolResult', 'ToolGroup'] }, async ($, e, next) => {
-    if (!(await read($, enabledAtom)) || (await read($, detailAtom)) === 'detailed') {
+    if (e.surface === 'mobile' || !(await read($, enabledAtom)) || (await read($, detailAtom)) === 'detailed') {
       if (e.component === 'ToolGroup' || !(await isMasking($))) return next(e)
       if (e.component === 'ToolUse') {
         const input = maskDeep(e.props.input)
@@ -4219,6 +4248,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       !isEnabled || !vector ? null : (
         <Button key="cleancode" variant="secondary" label={CLEAN_CODE} onPress={() => void runCleanCode($).catch(() => undefined)} />
       )
+    // The mirror right behind the broom: the reflect mod's command, likewise not waited for.
+    const reflectItem =
+      !isEnabled || !vector ? null : (
+        <Button key="reflect" variant="secondary" label={REFLECT} onPress={() => void runReflect($).catch(() => undefined)} />
+      )
     // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
     // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it),
     // masking on screen and the shield that moves the chat's secrets into the .env.
@@ -4249,7 +4283,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // before the plan and the history. One stands only between two groups that show a button, so never at an end or
     // two side by side.
     const leftGroups = [
-      { bar: '', items: [workModeItem, nightShiftItem, grillItem, cleanItem, ...(skillItems?.beside ?? [])] },
+      { bar: '', items: [workModeItem, nightShiftItem, grillItem, cleanItem, reflectItem, ...(skillItems?.beside ?? [])] },
       { bar: 'sep-files', items: skillItems?.files ?? [] },
       { bar: 'sep-skills', items: skillItems?.past ?? [] },
       { bar: 'sep-places', items: places },

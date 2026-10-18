@@ -4,7 +4,7 @@ import type { On } from 'claude-code'
 import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
-import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, replaceSecrets } from '../hooks/privacy'
+import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
 import { FACTORY_SETTINGS, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 
@@ -332,6 +332,33 @@ describe('privacy', () => {
       expect(maskPrivate(text)).toBe(text)
     }
   })
+
+  test('removeSecrets puts [Passwort entfernt] where the guard finds a secret; what is left holds none, and the rest stays', () => {
+    expect(removeSecrets('Mein Passwort ist geheim123 und so')).toBe('Mein Passwort ist [Passwort entfernt] und so')
+    expect(removeSecrets(`log in with password: ${SAMPLE_PASSWORD}`)).toBe('log in with password: [Passwort entfernt]')
+    expect(removeSecrets(`nimm ${fakeKey(32)} bitte`)).toBe('nimm [Passwort entfernt] bitte')
+    expect(removeSecrets(`Karte ${SAMPLE_CARD} bitte`)).toBe('Karte [Passwort entfernt] bitte')
+    for (const text of [
+      'Mein Passwort ist geheim123, bitte damit einloggen',
+      'Passwort: geheim123',
+      'Mein WLAN-Passwort lautet sonne2024',
+      'Meine PIN ist 4821',
+      `my password is ${SAMPLE_PASSWORD}`,
+      SAMPLE_ASSIGNMENT,
+      `use ${fakeKey(32)}`,
+      `card ${SAMPLE_CARD} please`,
+      'IBAN: DE89 3704 0044 0532 0130 00',
+      'ο κωδικός μου είναι gata1234',
+    ]) {
+      const left = removeSecrets(text)
+      expect(left).toContain('[Passwort entfernt]')
+      expect(findSecrets(left)).toEqual([])
+      expect(extractSecrets(left)).toEqual([])
+      expect(maskPrivate(left)).toBe(left)
+    }
+    // Without a secret the text is the same; email addresses and phone numbers are no secret to the guard.
+    for (const text of ['Build my landing page', 'Schreib an anna@example.com', 'Das Passwortfeld ist leer']) expect(removeSecrets(text)).toBe(text)
+  })
 })
 
 test('a message with a German password is held back once, then sent when sent again', async ($, on) => {
@@ -391,6 +418,79 @@ test('with the password guard off, a message with a password is sent straight aw
   const held = await $.prompt.submit(prompt)
   expect((held as { drop?: string }).drop).toContain('ein Passwort')
   expect(entered).toBe(1)
+})
+
+test('vom Handy (Remote Control) geht eine Nachricht mit Passwort gleich durch, ohne das Passwort; Claude soll es als Erstes sagen', async ($, on) => {
+  // As world(), with the toasts kept.
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.store(on)
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'Build my landing page', usage: {} } as never }))
+  on('tool.call', () => ({ result: {} }) as never)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('classic.Notification', () => ({}) as never)
+  const toasts: string[] = []
+  const filled: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(String((e as unknown as { text: string }).text))
+    return { value: undefined } as never
+  })
+  on('prompt.fill', (_, e) => {
+    filled.push(String((e as unknown as { text: string }).text))
+    return { isFilled: true } as never
+  })
+  const entered: { text: string; context: readonly string[] }[] = []
+  on('prompt.submit', (_, e) => {
+    entered.push({ text: e.text, context: e.context ?? [] })
+    return { text: e.text }
+  })
+  const sent = await $.prompt.submit({ text: 'Mein Passwort ist geheim123, bitte damit einloggen', wait: false, origin: { kind: 'bridge' } } as never)
+  expect((sent as { drop?: string }).drop).toBeUndefined()
+  expect(entered).toHaveLength(1)
+  expect(entered[0]!.text).toBe('Mein Passwort ist [Passwort entfernt] bitte damit einloggen')
+  expect(entered[0]!.text).not.toContain('geheim123')
+  const note = entered[0]!.context.join('\n')
+  expect(note).toContain('Remote Control')
+  expect(note).toContain('Beginne deine Antwort mit genau diesem einen Satz: „Der Passwortschutz hat ein Passwort aus deiner Nachricht entfernt; ich habe es nicht gesehen.“')
+  expect(note).not.toContain('geheim123')
+  // Nothing waits on the computer: no toast, nothing in the prompt box.
+  await clock.advance(100)
+  expect(toasts).toEqual([])
+  expect(filled).toEqual([])
+
+  // Typed at the computer it is held back as before, with its toast and back in the prompt box, and goes through
+  // unchanged when sent again.
+  const typed = { text: 'Mein Passwort ist anders456, bitte damit einloggen', wait: false, origin: { kind: 'composer' } } as never
+  const first = await $.prompt.submit(typed)
+  expect((first as { drop?: string }).drop).toContain('zurückgehalten')
+  expect(entered).toHaveLength(1)
+  await clock.advance(100)
+  expect(toasts).toHaveLength(1)
+  expect(filled).toEqual(['Mein Passwort ist anders456, bitte damit einloggen'])
+  await $.prompt.submit(typed)
+  expect(entered).toHaveLength(2)
+  expect(entered[1]).toEqual({ text: 'Mein Passwort ist anders456, bitte damit einloggen', context: [] })
+
+  // A message without a secret from the phone goes on as it is, with no note.
+  await $.prompt.submit({ text: 'Baue die Preisseite', wait: false, origin: { kind: 'bridge' } } as never)
+  expect(entered[2]).toEqual({ text: 'Baue die Preisseite', context: [] })
+})
+
+test('nur vom Handy geht eine Nachricht mit Passwort ohne Zurückhalten durch; vom SDK hält der Passwortschutz sie wie bisher zurück', async ($, on) => {
+  world(on)
+  const entered: string[] = []
+  on('prompt.submit', (_, e) => {
+    entered.push(e.text)
+    return { text: e.text }
+  })
+  const text = `log in with password: ${SAMPLE_PASSWORD}`
+  // The SDK host is held back as typed at the computer.
+  const sdk = await $.prompt.submit({ text, wait: false, origin: { kind: 'sdk' } } as never)
+  expect((sdk as { drop?: string }).drop).toContain('zurückgehalten')
+  expect(entered).toEqual([])
+  const phone = await $.prompt.submit({ text, wait: false, origin: { kind: 'bridge' } } as never)
+  expect((phone as { drop?: string }).drop).toBeUndefined()
+  expect(entered).toEqual(['log in with password: [Passwort entfernt]'])
 })
 
 test('overall progress, time left and a grown plan show in the header and footer', async ($, on) => {
@@ -1266,6 +1366,38 @@ test('Details keeps the tool rows in view; Simple hides them', async ($, on) => 
   expect(await hint()).toContain('ctrl+b')
 })
 
+test('auf dem Handy (mobile, ohne Band) bleiben die Werkzeugzeilen auch in der einfachen Ansicht, verdeckt; am Desktop nicht', async ($, on) => {
+  world(on)
+  // What the engine beneath the plugins was asked to draw.
+  const engineDrew: unknown[] = []
+  on('ui.render', (_, e) => {
+    engineDrew.push((e as { props: unknown }).props)
+    return { type: 'Box', props: {}, children: [] } as never
+  })
+  const secret = 'mail jane@example.com'
+  const rows = [
+    {
+      component: 'ToolUse',
+      props: { tool_use_id: 'u1', tool: 'Bash', input: { command: `echo ${secret}` }, isRunning: false, isErrored: true, isInterrupted: false, output: 'Die Person hat den Plan noch nicht freigegeben.' },
+    },
+    { component: 'ToolResult', props: { tool_use_id: 'u1', tool: 'Bash', output: { stdout: secret, stderr: '', interrupted: false }, isErrored: false } },
+  ]
+  for (const { component, props } of rows) {
+    const desk = await $.ui.mount({ plugin: 'leitstand', surface: 'desktop', component, props } as never)
+    await desk.unmount()
+    expect(engineDrew).toHaveLength(0)
+  }
+  for (const [at, { component, props }] of rows.entries()) {
+    const phone = await $.ui.mount({ plugin: 'leitstand', surface: 'mobile', component, props } as never)
+    await phone.unmount()
+    expect(engineDrew).toHaveLength(at + 1)
+    const row = JSON.stringify(engineDrew.at(-1))
+    expect(row).not.toContain('jane@example.com')
+    expect(row).toContain('•••@•••')
+  }
+  expect(JSON.stringify(engineDrew[0])).toContain('Die Person hat den Plan noch nicht freigegeben.')
+})
+
 test('a long plan says how many steps are out of view', async ($, on) => {
   world(on)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
@@ -2002,6 +2134,41 @@ test('Fresh chat asks for a second press, then clears the chat and sends a hando
   expect(cleared).toBe(true)
   expect(sent).toContain('Fortsetzung aus einem früheren Chat')
   expect((await texts($, 'terminal')).join('\n')).toContain('↻ Neuer Chat')
+})
+
+test('Neuer Chat vom Handy: die Antwort nennt /leitstand handoff note, und das gibt die Notiz als Antwort aus, nicht ins Eingabefeld', async ($, on) => {
+  const NOTE = 'Fortsetzung aus einem früheren Chat. So ist der Stand: Das Menü ist repariert.'
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.store(on)
+  on('ui.toast', () => ({ value: undefined }) as never)
+  const filled: string[] = []
+  on('prompt.fill', (_, e) => {
+    filled.push(String((e as unknown as { text: string }).text))
+    return { isFilled: true } as never
+  })
+  on('model.fork', () => ({ value: { isAnswered: true, text: NOTE, usage: {} } }) as never)
+  on('command.run', () => ({ text: '' }))
+  // The note does not get through after /clear: on the phone nothing comes.
+  on('prompt.submit', () => ({ drop: 'abgelehnt' }) as never)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('model.complete', () => ({ value: { isAnswered: false, reason: 'empty-reply', usage: {} } as never }))
+  await $.turn.start({ text: 'Fix the menu', turnId: 't1' })
+
+  const started = await $.command.run({ command: 'leitstand', args: 'handoff', origin: { kind: 'bridge' } } as never)
+  expect(started.text).toBe('Starte einen neuen Chat mit Übergabenotiz… Kommt danach nichts, schreib /leitstand handoff note.')
+  await clock.advance(5000)
+  const before = filled.length
+  const note = await $.command.run({ command: 'leitstand', args: 'handoff note', origin: { kind: 'bridge' } } as never)
+  expect(note.text).toBe(NOTE)
+  expect(filled).toHaveLength(before)
+
+  // At the computer the note goes in the prompt box as before, and the answer to /leitstand handoff stays short.
+  const typed = await $.command.run({ command: 'leitstand', args: 'handoff note', origin: { kind: 'composer' } } as never)
+  expect(typed.text).toBe('Die letzte Übergabenotiz steht im Eingabefeld.')
+  expect(filled.at(-1)).toBe(NOTE)
+  const atDesk = await $.command.run({ command: 'leitstand', args: 'handoff', origin: { kind: 'composer' } } as never)
+  expect(atDesk.text).toBe('Starte einen neuen Chat mit Übergabenotiz…')
+  await clock.advance(5000)
 })
 
 /** A finished job in a folder whose origin is `remote`, with what Ship it sends kept in `sent`. */
@@ -4247,6 +4414,26 @@ test('with Approve the plan first on, Claude waits for Start before it works', a
   expect(shown).toContain('Write the page')
 })
 
+test('ein wartender Plan: Claude nennt die Schritte nummeriert und sagt, dass „los“ freigibt, auch nach einem abgelehnten Tool', async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+  await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+  const planned = await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+  expect(String(planned.result)).toContain(
+    'Nenne in deiner Antwort die Schritte nummeriert (1. Lies die Notizen; 2. Baue die Tabelle) und schließ mit dem Satz: ' +
+      'Ich warte auf deine Freigabe: Schreib „los“ oder sag, was sich ändern soll.',
+  )
+  // Without Autopilot nothing follows the closing sentence.
+  expect(String(planned.result).endsWith('was sich ändern soll.')).toBe(true)
+  const denied = await callTool($, { tool: 'Bash', command: 'ls' })
+  expect(denied.deny).toBe(
+    'Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort. Sag in deiner Antwort, dass der Plan wartet und „los“ ihn freigibt.',
+  )
+  // „los“, as the answer says, starts it.
+  await $.turn.start({ text: 'los', turnId: 't2' })
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+})
+
 test('with Approve the plan first on, a plan Claude makes with its own task list also waits for Start', async ($, on) => {
   world(on)
   await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
@@ -5384,10 +5571,10 @@ describe('Arbeitsweise und Grill mich', () => {
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
-    const order = ['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
+    const order = ['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const label of ['\u{1F9CD}', '\u{1F9E0}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
+    for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F9E0}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
     // Review and Usage are gone.
     for (const key of ['review', 'usage']) expect(row).not.toContain(`"key":"${key}"`)
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
@@ -5396,7 +5583,7 @@ describe('Arbeitsweise und Grill mich', () => {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
       const keys = (await ui.findAll({ type: 'Button' })).map(one => one.props.key)
       await ui.unmount()
-      for (const key of ['review', 'usage', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).not.toContain(key)
+      for (const key of ['review', 'usage', 'cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).not.toContain(key)
     }
   })
 
@@ -5412,7 +5599,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('in der App trennen Striche die Gruppen unten links: hinter ADHS, hinter Filetree und vor Plan, im Terminal keine', async ($, on) => {
     await skillWorld($, on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
 
     for (const bodyColumns of [50, 80, 140]) {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
@@ -5424,7 +5611,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
   })
 
   test('ADHS (🧠) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
@@ -5456,6 +5643,34 @@ describe('Arbeitsweise und Grill mich', () => {
     await press('cleancode')
     expect(state.runs).toEqual([])
     expect(state.toasts).toContain('clean-code ist in dieser Sitzung nicht verfügbar.')
+  })
+
+  test('ein Druck auf 🪞 direkt hinter 🧹 startet den Befehl reflect; fehlt der Mod, sagt der Leitstand das', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'reflect')
+    await ui.unmount()
+    expect(button?.props.label).toBe('\u{1FA9E}')
+    expect(button?.props.variant).toBe('secondary')
+    const row = await leftRow($)
+    expect(row.indexOf('reflect')).toBe(row.indexOf('cleancode') + 1)
+
+    state.commands = [skill('reflect')]
+    await press('reflect')
+    expect(state.runs).toEqual([{ command: 'reflect', args: undefined }])
+    state.runs.length = 0
+    state.commands = []
+    await press('reflect')
+    expect(state.runs).toEqual([])
+    expect(state.toasts).toContain('Reflect ist in dieser Sitzung nicht verfügbar.')
+  })
+
+  test('der Druck auf 🪞 wartet nicht, bis reflect gelaufen ist', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('reflect')]
+    state.runHangs = true
+    expect(await pressBack(press, 'reflect')).toBe('back')
+    expect(state.runs).toEqual([{ command: 'reflect', args: undefined }])
   })
 
   test('ein Druck auf 🌳 startet den Befehl filetree; fehlt er, sagt der Leitstand das', async ($, on) => {
@@ -5862,8 +6077,15 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('Autopilot an: ein wartender Plan startet nach 30 s von selbst, genau einmal, und Claude weiß es', WITH_AUTOPILOT, async ($, on) => {
     const { clock, sent, planned } = await nightPlan($, on, true)
-    expect(String(planned.result)).toContain(`warte auf ihre Antwort. Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ${NIGHT_NOTE}`)
-    expect((await bash($)).deny).toBe(`Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort. ${NIGHT_NOTE}`)
+    expect(String(planned.result)).toContain(
+      'warte auf ihre Antwort. Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ' +
+        'Nenne in deiner Antwort die Schritte nummeriert (1. Lies die Markennotizen; 2. Baue die Preistabelle) und schließ mit dem Satz: ' +
+        `Ich warte auf deine Freigabe: Schreib „los“ oder sag, was sich ändern soll. ${NIGHT_NOTE}`,
+    )
+    expect(String(planned.result).endsWith(NIGHT_NOTE)).toBe(true)
+    expect((await bash($)).deny).toBe(
+      `Die Person hat den Plan noch nicht freigegeben. Hör auf und warte auf ihre Antwort. Sag in deiner Antwort, dass der Plan wartet und „los“ ihn freigibt. ${NIGHT_NOTE}`,
+    )
     await clock.advance(29_000)
     expect(sent).toEqual([])
     await clock.advance(1000)
@@ -5999,7 +6221,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 10)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote'])
+    expect(row.slice(0, 11)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote'])
     expect(row.filter(one => one === 'dim|')).toHaveLength(3)
   })
 
@@ -6021,7 +6243,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 10)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy'])
+    expect(row.slice(0, 11)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)

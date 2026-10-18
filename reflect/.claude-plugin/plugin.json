@@ -1,0 +1,30 @@
+{
+  "name": "reflect",
+  "version": "0.1.0",
+  "description": "Lernt aus Korrekturen und prüft die eigene Arbeit: Kurze Nachrichten werden auf wiederverwendbare Regeln geprüft, die ein Band über dem Eingabefeld (oder /reflect regeln) in CLAUDE.md oder nur für den Chat übernimmt. /reflect lässt Claude die bisherige Arbeit kritisch durchsehen.",
+  "author": {
+    "name": "Björn Müller"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "pruefung": {
+      "type": "boolean",
+      "title": "Korrekturen prüfen",
+      "description": "Prüft kurze Nachrichten darauf, ob eine wiederverwendbare Regel drinsteckt: ein kleiner Haiku-Aufruf je kurzer Nachricht. Standard für neue Chats, /reflect pruefung an|aus gilt nur im Chat.",
+      "default": true
+    },
+    "selbstkritikAuto": {
+      "type": "boolean",
+      "title": "Selbstkritik nach Dateiänderungen",
+      "description": "Startet nach jeder Runde, in der Dateien geändert wurden, eine Reflexion im Hintergrund. Kostet einen Modellaufruf über den ganzen Chat je Runde. Standard für neue Chats, /reflect auto an|aus gilt nur im Chat.",
+      "default": false
+    },
+    "modell": {
+      "type": "string",
+      "title": "Modell für die Prüfung",
+      "description": "Welches Modell kurze Nachrichten auf Regeln prüft. haiku ist günstig und reicht dafür. Die Selbstkritik nutzt immer das Modell des Chats.",
+      "default": "haiku"
+    }
+  }
+}

@@ -12,7 +12,7 @@ Neue Instanz einrichten:
 
 Vorhandene Instanz umstellen (alte Mods raus, aktuelle rein): Prompt in [UMSTIEG.md](UMSTIEG.md).
 
-In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/statistik`, `/warmhalten`, `/zusammenfassung`, `/replay`). Nach `~/.claude/commands/` kopiert, kennt die App diese Befehle schon in der ersten Nachricht einer Sitzung.
+In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/statistik`, `/warmhalten`, `/zusammenfassung`, `/replay`, `/reflect`, `/better`). Nach `~/.claude/commands/` kopiert, kennt die App diese Befehle schon in der ersten Nachricht einer Sitzung.
 
 ## Installiert install.sh
 
@@ -25,6 +25,8 @@ In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/stati
 | visible-compact | hier (deutsche Fassung von nvsravank/visible-compact, MIT) | Chat vor und nach `/compact` nebeneinander, Knopf Übersetzen; `/show-last-compact` | nur beim Übersetzen (Haiku) |
 | autopilot | hier (Eigenbau, früher nachtschicht) | Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe; `/autopilot` | ja: jede angeschobene Runde kostet wie eine Nachricht |
 | filetree | hier (deutsche Fassung von data-goblin/claude-code-filetree, MIT) | Dateibaum als Seitenfenster mit Git-Status, im Terminal mit `/tui fullscreen` | nein |
+| reflect | hier (Teil 1 nach reflect-mod von BayramAnnakov/claude-reflect, MIT; Teil 2 Eigenbau) | lernt aus Korrekturen: eine Regel wird nach Knopfdruck für alle Projekte (`~/.claude/CLAUDE.md`), dieses Projekt (`./CLAUDE.md`) oder nur diesen Chat gemerkt; `/reflect` kritisiert die bisherige Arbeit im Seitenfenster; Knopf 🪞 im Leitstand | ja: ein Haiku-Aufruf je kurzer Nachricht (abschaltbar je Chat), `/reflect` ein Fork über den Chat |
+| prompt-upgrade | hier (Eigenbau) | `/better <Prompt>`: bis zu drei Rückfragen, dann ein verbesserter Prompt neben dem Original, gesendet erst auf Ausführen; `/better an|aus` fängt am Rechner getippte Prompts ab (je Chat, Standard aus) | ja: zwei Haiku-Aufrufe je Upgrade |
 | i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; Knopf 🧠 im Leitstand | nur der Skilltext im Kontext, solange der Modus an ist |
 | you-should-know | in Claude Code eingebaut | wird von install.sh eingeschaltet | ja |
 

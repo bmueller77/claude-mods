@@ -4,6 +4,9 @@
 
 const DOTS = '••••••••'
 
+/** What stands in a message from afar (Remote Control) where the guard took a secret out; never itself a secret. */
+export const REMOVED = '[Passwort entfernt]'
+
 const SECRET_PATTERNS = [
   /sk-ant-[A-Za-z0-9_-]{16,}/g,
   /\bsk-(?:proj-|live-|test-|svcacct-)?[A-Za-z0-9_-]{20,}/g,
@@ -21,14 +24,15 @@ const SECRET_PATTERNS = [
 // NAME=value or "name": "value" where the name looks like a credential.
 // The keyword ends the name or meets a separator, so "author:" and "tokens:" are not credentials.
 // German names too: DB_PASSWORT=…, Kennwort: …, Zugangsdaten: …, API_SCHLUESSEL=….
+// Here and in PHRASE the value is never REMOVED: "Passwort: [Passwort entfernt]" holds no secret.
 const ASSIGNMENT =
-  /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|CLIENT[_-]?SECRET|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PASSWORT|KENNWORT|ZUGANGSDATEN|SCHLÜSSEL|SCHLUESSEL|AUTH)(?:[_.-][A-Za-z0-9_.-]*)?)(["']?\s*[=:]\s*["']?)([^\s"'`,;}{]{6,})/gi
+  /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|AUTH[_-]?TOKEN|ACCESS[_-]?TOKEN|CLIENT[_-]?SECRET|PRIVATE[_-]?KEY|ACCESS[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PASSWORT|KENNWORT|ZUGANGSDATEN|SCHLÜSSEL|SCHLUESSEL|AUTH)(?:[_.-][A-Za-z0-9_.-]*)?)(["']?\s*[=:]\s*["']?)(?!\[Passwort entfernt\])([^\s"'`,;}{]{6,})/gi
 
 // "my password is X", "mein Passwort ist X", "das WLAN-Kennwort lautet X" (also "lautet: X"), "meine PIN ist 4821",
 // "ο κωδικός μου είναι X".
 // A German word may stand at the end of a compound (Datenbankpasswort, Lizenzschlüssel).
 const PHRASE =
-  /(?<!\p{L})((?:password|passcode|passphrase|pin|\p{L}*passw(?:ort|örter)|\p{L}*kennw(?:ort|örter)|\p{L}*zugangsdaten|\p{L}*schl(?:ü|ue)ssel|κωδικ[όο]ς(?: πρόσβασης)?|συνθηματικ[όο])(?:\s+(?:μου|is|my))?\s*(?:(?:ist|lautet|heißt|heisst|is|είναι|ειναι)(?:\s*[=:])?|=|:)\s*["']?)([^\s"']{4,})/giu
+  /(?<!\p{L})((?:password|passcode|passphrase|pin|\p{L}*passw(?:ort|örter)|\p{L}*kennw(?:ort|örter)|\p{L}*zugangsdaten|\p{L}*schl(?:ü|ue)ssel|κωδικ[όο]ς(?: πρόσβασης)?|συνθηματικ[όο])(?:\s+(?:μου|is|my))?\s*(?:(?:ist|lautet|heißt|heisst|is|είναι|ειναι)(?:\s*[=:])?|=|:)\s*["']?)(?!\[Passwort entfernt\])([^\s"']{4,})/giu
 
 // "IBAN: DE89 3704 0044 0532 0130 00", in any case and with its spaces, so no group of it stays in view.
 const IBAN_PHRASE = /(?<!\p{L})(iban(?:\s*(?:ist|lautet|is|=|:))?\s*["']?)([a-z]{2}\d{2}(?: ?[a-z0-9]{4}){2,7}(?: ?[a-z0-9]{1,3})?)(?![\p{L}\d])/giu
@@ -89,17 +93,27 @@ export function findSecrets(text: string): string[] {
   return [...kinds]
 }
 
+/** The text with each secret findSecrets names covered: a key or password by `cover.secret`, the words before it kept. */
+function coverSecrets(text: string, cover: { secret: string; card: string; iban: string }): string {
+  let out = text
+  for (const re of SECRET_PATTERNS) out = out.replace(re, cover.secret)
+  out = out.replace(ASSIGNMENT, (match, name: string, sep: string, value: string) =>
+    isCredential(name, value) ? name + sep + cover.secret : match,
+  )
+  out = out.replace(PHRASE, (match, head: string, value: string) => (isPhraseSecret(head, value) ? head + cover.secret : match))
+  out = out.replace(IBAN_PHRASE, (_match, head: string) => head + cover.iban)
+  out = out.replace(CARD, match => (isCard(match) ? cover.card : match))
+  out = out.replace(IBAN, cover.iban)
+
+  return out
+}
+
+/** A message from afar (Remote Control) with each secret the guard finds as REMOVED: Claude reads the rest, not the secret. */
+export const removeSecrets = (text: string): string => coverSecrets(text, { secret: REMOVED, card: REMOVED, iban: REMOVED })
+
 /** Masks secrets and personal details for the screen; what Claude reads is unchanged. */
 export function maskPrivate(text: string): string {
-  let out = text
-  for (const re of SECRET_PATTERNS) out = out.replace(re, DOTS)
-  out = out.replace(ASSIGNMENT, (match, name: string, sep: string, value: string) =>
-    isCredential(name, value) ? name + sep + DOTS : match,
-  )
-  out = out.replace(PHRASE, (match, head: string, value: string) => (isPhraseSecret(head, value) ? head + DOTS : match))
-  out = out.replace(IBAN_PHRASE, (_match, head: string) => `${head}•••`)
-  out = out.replace(CARD, match => (isCard(match) ? '•••• •••• •••• ••••' : match))
-  out = out.replace(IBAN, '•••')
+  let out = coverSecrets(text, { secret: DOTS, card: '•••• •••• •••• ••••', iban: '•••' })
   out = out.replace(EMAIL, '•••@•••')
   out = out.replace(PHONE, '•••-•••-••••')
   out = out.replace(PHONE_INTL, '+•• •••')
