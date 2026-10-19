@@ -56,7 +56,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Den Vorsatz der App vor Befehlsantworten („leitstand: …") streicht ein `session.append`-Hook;
   dafür steht „(gemeldet vom Mod …)" am Ende.
 - Herkunft einer Nachricht (`origin.kind`): Desktop-App `sdk`, Handy über Remote Control `bridge`,
-  Terminal `composer`. Was eine Cloud-Sitzung in der App liefert, ist noch nicht geprüft.
+  Terminal `composer`. In einer Cloud-Sitzung (claude.ai/code, in der App angesehen) kommt Björns
+  Nachricht als `composer` an, und `$.session.surfaces()` ist leer: Hooks, Tools und Befehle
+  laufen, aber kein Band, kein Fenster und keine Statuszeile ist zu sehen (geprüft 2026-10-19).
 - Android-Regel: Kein Mod hält etwas an, das auf dem Handy nicht zu sehen und per Text zu lösen ist.
 - Modell- und Aufwandswechsel verwerfen den Cache. Deshalb wählt Modellwahl nur einmal je Aufgabe
   und fragt mitten im Chat bei Opus oder Fable nach.
