@@ -1,18 +1,18 @@
-# Umstieg auf bjoern-mods (Stand 2026-10-18)
+# Umstieg auf bjoern-mods (Stand 2026-10-19)
 
 Für jede Claude-Code-Instanz, auf den Servern wie in der Desktop-App auf dem Laptop. Den Prompt
 unten in einer Sitzung der Instanz abschicken. Er entfernt die alten Mods und richtet die aktuellen
 für alle Chats ein (Scope user).
 
 Quelle ist dieses Repo (`bmueller77/claude-mods`, Katalog "bjoern-mods"). Wer keinen Zugang zum
-Repo hat, bekommt das Zip `bjoern-mods-2026-10-18.zip`; es enthält dasselbe.
+Repo hat, bekommt das Zip `bjoern-mods-2026-10-19.zip`; es enthält dasselbe.
 
 ## Prompt
 
 ```text
 Richte die Claude-Code-Mods auf diesem Rechner neu ein, für alle Chats (Scope user). Quelle ist der
 Katalog "bjoern-mods" aus dem privaten Repo bmueller77/claude-mods. Liegt dir statt Repo-Zugang das
-Zip bjoern-mods-2026-10-18.zip vor, entpacke es in ~/.claude/ (es enthält den Ordner bjoern-mods)
+Zip bjoern-mods-2026-10-19.zip vor, entpacke es in ~/.claude/ (es enthält den Ordner bjoern-mods)
 und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nichts an, was nicht hier steht.
 
 1. Bestand: `claude --version` (mindestens 2.1.296), `claude plugin list`,
