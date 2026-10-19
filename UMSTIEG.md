@@ -28,13 +28,18 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    Entferne danach diese Kataloge (`claude plugin marketplace remove <katalog>`, also auch
    claude-code-filetree und claude-reflect-marketplace), aber nicht bjoern-mods. Plugins aus anderen
    Katalogen (Skills, MCP-Server und Ähnliches für deine Arbeit) bleiben; nenne sie im Bericht.
-3. Katalog:
+3. Katalog. Nicht `claude plugin marketplace remove bjoern-mods` nehmen: Das deinstalliert alle
+   Mods daraus und löscht ihre Einstellungen und Daten.
    - Mit Repo-Zugang: Zeigt bjoern-mods schon auf bmueller77/claude-mods, dann
-     `claude plugin marketplace update bjoern-mods`, sonst
-     `claude plugin marketplace add bmueller77/claude-mods`.
-   - Mit Zip: Zeigt bjoern-mods auf etwas anderes, erst
-     `claude plugin marketplace remove bjoern-mods`, dann
-     `claude plugin marketplace add ~/.claude/bjoern-mods`.
+     `claude plugin marketplace update bjoern-mods`. Zeigt es auf etwas anderes (etwa einen
+     lokalen Ordner), in ~/.claude/settings.json unter
+     `extraKnownMarketplaces.bjoern-mods.source` den Wert
+     `{ "source": "github", "repo": "bmueller77/claude-mods" }` eintragen, sonst nichts ändern,
+     dann `claude plugin marketplace add bmueller77/claude-mods`. Gibt es bjoern-mods noch nicht,
+     nur das `add`.
+   - Mit Zip: genauso, aber mit `{ "source": "directory", "path": "<voller Pfad von ~/.claude/bjoern-mods>" }`
+     und `claude plugin marketplace add ~/.claude/bjoern-mods`.
+   Installierte Mods bleiben dabei installiert und holen Updates ab jetzt aus der neuen Quelle.
 4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
    leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, autopilot,
    filetree, reflect, prompt-upgrade, modellwahl, i-have-adhd. Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.

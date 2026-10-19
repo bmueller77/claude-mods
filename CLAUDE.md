@@ -62,6 +62,17 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   und fragt mitten im Chat bei Opus oder Fable nach.
 - Nach `claude plugin update` fehlen in der laufenden Sitzung die `leitstand:*`-Arbeitertypen bis
   zum Neustart; bis dahin `general-purpose` nehmen.
+- Einen Katalog nie mit `claude plugin marketplace remove` umstellen: Das deinstalliert seine Mods
+  und löscht ihre Einstellungen und Daten. Stattdessen in `settings.json` die Quelle unter
+  `extraKnownMarketplaces.bjoern-mods.source` ändern, dann `claude plugin marketplace add <neue Quelle>`
+  (in einer eigenen `CLAUDE_CONFIG_DIR` geprüft, 2.1.303). Solange der Eintrag nicht passt, lehnt
+  `add` die neue Quelle ab.
+- Tests laufen auch in der Cloud (Linux, UTC). Zeiten in Tests deshalb in Ortszeit anlegen
+  (`new Date(j, m, t, h, min)`), nicht mit `Date.UTC`. Windows-Pfade wie `C:\…` sind unter Linux
+  relativ; die Engine setzt den Mod-Ordner davor, Test-Attrappen müssen das abschneiden.
+- `TZ` setzt die Zeitzone im Test-Sandkasten nicht. Wer Uhrzeiten anzeigt, zeigt in der Cloud UTC.
+- Oberflächen: Das Band über der Eingabe (`AbovePrompt`) zeichnen laut API nur Terminal und
+  Desktop-App, ein Fenster (`Pane`) jede Oberfläche.
 
 ## Offen (Stand 2026-10-19)
 
@@ -74,7 +85,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 4. Instanzen mit `UMSTIEG.md` und Zip umstellen (Björn).
 5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
    und filetree (3).
-6. Unter Claude Code 2.1.303 in der Cloud (Linux) schlagen Tests fehl: leitstand 3 von 399,
-   statistik 5 von 75, reflect 1 von 48. Am PC waren sie grün. Ursache noch nicht untersucht.
+6. Statistik zeigt Uhrzeiten in der Zeitzone des Rechners, auf UTC-Servern und in der Cloud also
+   zwei Stunden daneben (Sommerzeit). Frage an Björn: immer Berlin-Zeit zeigen?
 7. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.
