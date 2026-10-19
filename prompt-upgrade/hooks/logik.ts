@@ -25,15 +25,18 @@ export type Entscheid = { art: 'durch' } | { art: 'ohneZeichen'; text: string } 
 
 const DURCH: Entscheid = { art: 'durch' }
 
+/** Am Rechner Getipptes: im Terminal (`composer`) oder in der Desktop-App (`sdk`). */
+export const AM_RECHNER_GETIPPT: ReadonlySet<string> = new Set(['composer', 'sdk'])
+
 /**
  * Ob ein abgeschickter Prompt ins Fenster geht. Nur am Rechner Getipptes
- * (`composer`) bei eingeschalteter Automatik; alles vom Handy (`bridge`), von
+ * (`composer`, `sdk`) bei eingeschalteter Automatik; alles vom Handy (`bridge`), von
  * anderen Plugins, Sitzungen oder Zeitplaenen geht unveraendert durch, ebenso
  * Befehle, Prompts mit Anhang oder @-Datei, alles waehrend Claude arbeitet und
  * kurze Antworten wie "ja" oder "mach weiter".
  */
 export function entscheide(e: Eingang, lage: { automatik: boolean; arbeitet: boolean }): Entscheid {
-    if (!lage.automatik || e.origin?.kind !== 'composer') {
+    if (!lage.automatik || !AM_RECHNER_GETIPPT.has(e.origin?.kind ?? '')) {
         return DURCH
     }
     if (e.command !== undefined || e.isMeta === true) {

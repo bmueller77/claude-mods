@@ -51,6 +51,13 @@ const AGENT_ARBEITET: ReadonlySet<string> = new Set(['pending', 'running', 'wait
 const HINTERGRUND_HAELT: ReadonlySet<string> = new Set(['subagent', 'workflow'])
 
 /**
+ * Herkunft einer Nachricht der Person: im Terminal getippt (composer), in der
+ * Desktop-App (sdk) oder per Remote Control vom Handy (bridge). Einreichungen
+ * von Mods (plugin) zaehlen nie, auch nicht mit asUser.
+ */
+const PERSON: ReadonlySet<string> = new Set(['composer', 'sdk', 'bridge'])
+
+/**
  * Wo der Leitstand den Wunsch ablegt, die Schicht zu beenden: die Zeit des
  * Drucks auf 🅰️. Sein /autopilot aus wartet, bis die Sitzung still ist, und das
  * wird sie nicht, solange die Schicht Runde um Runde anschiebt. Darum liest die
@@ -587,7 +594,7 @@ export const register: Register = (on, options) => {
 
     on('prompt.submit', async ($, e, next) => {
         const s = await read($, schicht)
-        if (!s || e.command || (e.origin.kind !== 'composer' && e.origin.kind !== 'bridge')) {
+        if (!s || e.command || !PERSON.has(e.origin.kind)) {
             return next(e)
         }
         // Die Person hat selbst geschrieben: ein neuer Auftrag, die Zaehler beginnen von vorn.

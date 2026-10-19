@@ -20,6 +20,7 @@ import { anmeldung, hilfeText, istHilfe, uebersicht } from './knopfbefehle'
 import type { Knopfbefehl } from './knopfbefehle'
 import type { Aktionen, Kit } from './ansicht'
 import {
+    AM_RECHNER_GETIPPT,
     SYSTEM_FRAGEN,
     SYSTEM_UMSCHREIBEN,
     einzeilig,
@@ -984,7 +985,7 @@ export const register: Register = (on, options) => {
 
     on('prompt.submit', async ($, e, next) => {
         // Billige Pruefungen zuerst: Handy, Plugins, Befehle gehen ohne Speicherzugriff durch.
-        if (e.origin?.kind !== 'composer' || e.command !== undefined || e.isMeta === true) {
+        if (!AM_RECHNER_GETIPPT.has(e.origin?.kind ?? '') || e.command !== undefined || e.isMeta === true) {
             return next(e)
         }
         const d = entscheide(e, { automatik: await automatikAn($), arbeitet })

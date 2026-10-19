@@ -328,12 +328,15 @@ test('Abfangen: was ins Fenster geht und was unveraendert durchgeht', () => {
     const art = (e: Parameters<typeof entscheide>[0], lage = an) => entscheide(e, lage).art
 
     expect(art(getippt(ORIGINAL))).toBe('abfangen')
+    // In der Desktop-App Getipptes (sdk) wie im Terminal.
+    expect(art({ text: ORIGINAL, origin: { kind: 'sdk' } })).toBe('abfangen')
+    expect(entscheide({ text: '> Mach das direkt', origin: { kind: 'sdk' } }, an)).toEqual({ art: 'ohneZeichen', text: 'Mach das direkt' })
     expect(art(getippt('Tests reparieren'))).toBe('abfangen')
     expect(art(getippt('Fix the flaky login test'))).toBe('abfangen')
     // Automatik aus: nichts.
     expect(art(getippt(ORIGINAL), { automatik: false, arbeitet: false })).toBe('durch')
-    // Vom Handy, von Plugins, vom SDK, aus Zeitplaenen: durch.
-    for (const kind of ['bridge', 'plugin', 'sdk', 'scheduled-trigger', 'peer', 'task-notification', 'unclassified']) {
+    // Vom Handy, von Plugins, aus Zeitplaenen: durch.
+    for (const kind of ['bridge', 'plugin', 'scheduled-trigger', 'peer', 'task-notification', 'unclassified']) {
         expect(art({ text: ORIGINAL, origin: { kind } })).toBe('durch')
     }
     expect(art({ text: ORIGINAL })).toBe('durch')

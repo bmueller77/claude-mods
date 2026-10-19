@@ -39,8 +39,8 @@ const SAME = 0.6
 /** Die Marker des Originals, damit vorhandene Abschnitte weiter gefunden werden. */
 const START = '<!-- claude-reflect: learned rules (saved from the band; edit freely) -->'
 const END = '<!-- end claude-reflect -->'
-/** Die eigenen Nachrichten der Person: am Terminal getippt oder per Remote Control (Android-App). */
-const HUMAN = new Set(['composer', 'bridge'])
+/** Die eigenen Nachrichten der Person: im Terminal getippt (composer), in der Desktop-App (sdk) oder per Remote Control (bridge, Android-App). */
+const HUMAN = new Set(['composer', 'sdk', 'bridge'])
 /** Bestaetigungen und "weiter": nichts zu lernen, also kein Modellaufruf. */
 const TRIVIAL =
   /^(y|yes|yep|ok|okay|k|go|go on|go ahead|continue|proceed|next|done|thanks|thank you|ty|great|nice|cool|lgtm|ja|jo|jep|jup|nein|ne|nö|klar|gut|sehr gut|super|prima|toll|top|perfekt|passt|genau|stimmt|richtig|danke|danke schön|dankeschön|bitte|weiter|mach weiter|mach|los|leg los|fertig|erledigt|да|ок|окей|ага|го|давай|дальше|продолжай|спасибо|отлично|\d{1,3})[\s.!)]*$/i

@@ -369,6 +369,16 @@ test('eine Nachricht aus der Android-App (bridge) wird geprueft wie eine getippt
   expect(Object.keys(w.files)).toEqual([])
 })
 
+test('eine in der Desktop-App getippte Nachricht (sdk) wird geprueft, eine Einreichung eines Mods (plugin) nicht', async ($, on) => {
+  const w = welt(on, { verdicts: { 'nein, nimm pnpm': PNPM } })
+  await start($)
+  await say($, w, 'nein, nimm pnpm', 'plugin')
+  expect(w.asked).toEqual([])
+  await say($, w, 'nein, nimm pnpm', 'sdk')
+  expect(w.asked).toEqual(['nein, nimm pnpm'])
+  expect(await zeilen($)).toEqual(['💡 „Nutze pnpm statt npm in diesem Repo“'])
+})
+
 test('mehr als zwei wartende Regeln: zwei Zeilen und ein Hinweis auf /reflect regeln', async ($, on) => {
   const w = welt(on)
   await start($)

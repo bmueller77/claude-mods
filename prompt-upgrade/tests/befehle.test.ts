@@ -217,6 +217,20 @@ test('automatik-an und -aus: wie /better an|aus, nur in diesem Chat', async ($, 
     expect(await tippe('Bau den Export neu')).toBeUndefined()
 })
 
+test('Automatik: in der Desktop-App Getipptes (sdk) wird abgefangen, Handy und Mods gehen durch', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, clock)
+    await start($)
+    const sende = async (origin: Record<string, unknown>) =>
+        ((await $.prompt.submit({ text: ORIGINAL, wait: false, origin } as never)) as { drop?: string }).drop
+    expect(await run($, 'prompt-upgrade-automatik-an')).toBe(TEXT_AN)
+    expect(await sende({ kind: 'bridge' })).toBeUndefined()
+    expect(await sende({ kind: 'plugin', name: 'leitstand', asUser: true })).toBeUndefined()
+    expect(await sende({ kind: 'sdk' })).toBe(GRUND_ABGEFANGEN)
+    await clock.settle()
+})
+
 test('verlauf: wie „Verlauf“, Text sofort; vom Handy ohne Fenster', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})

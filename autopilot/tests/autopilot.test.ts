@@ -557,6 +557,23 @@ test('eine von einem Plugin als Person eingereichte Nachricht setzt den Rundenza
     expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}`)
 })
 
+test('eine in der Desktop-App getippte Nachricht (sdk) zaehlt als Nachricht der Person und setzt den Rundenzaehler zurueck', { options: { maxRunden: 2 } }, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await befehl($ as never)
+    await $.prompt.submit({ text: 'Bau das.', origin: { kind: 'sdk' }, wait: false } as never)
+    expect(eingang[0]?.context).toContain(KONTEXT)
+    await runde($ as never, 't1', 'Teil A steht.')
+    expect(angeschoben(eingang)).toHaveLength(1)
+    await $.prompt.submit({ text: 'Und noch der Knopf.', origin: { kind: 'sdk' }, wait: false } as never)
+    await runde($ as never, 't2', 'Teil B steht.', { text: WEITER })
+    expect(angeschoben(eingang)).toHaveLength(2)
+    // Ohne Zuruecksetzen waere hier mit maxRunden 2 Schluss.
+    await runde($ as never, 't3', 'Teil C steht.')
+    expect(angeschoben(eingang)).toHaveLength(3)
+})
+
 test('wartende Runden zaehlen nicht gegen die Rundengrenze', { options: { maxRunden: 1 } }, async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     const eingang = boden(on)

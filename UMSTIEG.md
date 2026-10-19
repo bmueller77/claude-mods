@@ -37,7 +37,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
      `claude plugin marketplace add ~/.claude/bjoern-mods`.
 4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
    leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, autopilot,
-   filetree, reflect, prompt-upgrade, i-have-adhd. Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
+   filetree, reflect, prompt-upgrade, modellwahl, i-have-adhd. Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
    (install.sh im Repo tut dasselbe.)
 5. Nur in der Claude-Desktop-App: In ~/.claude/settings.json unter permissions.allow den Eintrag
    "mcp__ccd_session_mgmt__set_remote_control" ergänzen, vorhandene Einträge behalten. Sonst
@@ -45,7 +45,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    Zip) nach ~/.claude/commands/ kopieren und eine alte ~/.claude/commands/nachtschicht.md
    entfernen; dann kennt die App alle Befehle der Mods (über 100, z. B. /leitstand-hilfe,
    /autopilot-an, /reflect-zeigen) schon in der ersten Nachricht.
-6. Prüfen: `claude plugin list` zeigt die zehn als enabled mit Scope user. Danach neu starten:
+6. Prüfen: `claude plugin list` zeigt die elf als enabled mit Scope user. Danach neu starten:
    die Desktop-App ganz beenden und öffnen; auf Servern laufende Sitzungen über ihren Dienst neu
    starten (z. B. die Remote-Control-Bridge per systemctl), nicht von Hand im tmux.
 7. Bericht: was entfernt wurde, was installiert ist (mit Versionen), was stehen blieb, Fehler.
@@ -63,6 +63,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 | autopilot | `/autopilot`: Claude arbeitet ohne Rückfragen weiter, mit Übergabe am Ende (früher Nachtschicht) |
 | filetree | Dateibaum als Seitenfenster mit Git-Status, deutsche Fassung |
 | reflect | lernt aus Korrekturen und fragt: Regel für alle Projekte, dieses Projekt oder nur diesen Chat; `/reflect` kritisiert die bisherige Arbeit; Knopf 🪞 im Leitstand |
+| modellwahl | wählt einmal je Aufgabe Modell und Aufwand, automatisch zu Beginn eines neuen Chats oder per `/modellwahl` |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
 | i-have-adhd | ADHS-Modus, Knopf 🧠 im Leitstand |
 
