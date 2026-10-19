@@ -35,9 +35,11 @@ Jeder Befehl versteht `hilfe` und `?`.
 ## Wie es wirkt
 
 Jede Anfrage der Hauptschleife geht mit dem gewählten Modell und Aufwand
-(`turn.step`). In der Desktop-App stellt der Mod nach der ersten Runde zusätzlich
-die Sitzung mit `/model` und `/effort` um, nur für diese Sitzung; im Terminal
-nicht, weil das dort die Einstellungen schreiben würde.
+(`turn.step`). Die Modellauswahl der App und `/model` zeigen dabei weiter das
+Modell der Sitzung; welches gerade antwortet, steht in der Statuszeile
+(„Modellwahl: …“) und bei `/modellwahl-zeigen`. Ein eigenes `/model` oder
+`/effort` schickt der Mod nicht: Die App stellt die Sitzung auf ihre Auswahl
+zurück, und das sah für den Mod aus wie eine Umstellung von Hand.
 
 Die Prozent-Schätzung lernt aus jeder Runde: Anstieg des 5-Stunden-Limits gegen
 die verbrauchten Tokens, umgerechnet auf Opus-Preise. Das Limit gilt für das

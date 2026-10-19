@@ -1,6 +1,6 @@
 {
   "name": "modellwahl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Wählt einmal je Aufgabe Modell und Aufwand für den Chat: automatisch bei der ersten Nachricht eines neuen Chats oder mit /modellwahl. Haiku schätzt die Aufgabe ein; mitten im Chat fragt der Mod vor einem Wechsel zu Opus oder Fable erst nach und nennt, was das neue Einlesen kostet.",
   "author": {
     "name": "Björn Müller"

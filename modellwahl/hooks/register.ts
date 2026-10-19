@@ -25,10 +25,12 @@ import {
 // Modellwahl: einmal je Aufgabe Modell und Aufwand fuer den Chat waehlen.
 //
 // Gewaehlt wird bei der ersten echten Nachricht eines neuen Chats oder mit
-// /modellwahl. Angewendet wird ueber turn.step, Schritt fuer Schritt der
-// Hauptschleife (Subagenten bleiben, wie sie sind); in der Desktop-App stellt
-// der Mod die Sitzung zusaetzlich einmal mit /model und /effort um. Stellt die
-// Person selbst um, zieht sich der Mod fuer diesen Chat zurueck.
+// /modellwahl. Angewendet wird nur ueber turn.step, Schritt fuer Schritt der
+// Hauptschleife (Subagenten bleiben, wie sie sind). Ein eigenes /model oder
+// /effort schickt der Mod nicht: Die Desktop-App behaelt ihre Auswahl und stellt
+// die Sitzung darauf zurueck, und das sah aus wie eine Umstellung der Person
+// (Live-Test 2026-10-19). Stellt die Person selbst um, zieht sich der Mod fuer
+// diesen Chat zurueck.
 
 /** Schluessel im Speicher. */
 const SPEICHER_WAHL = 'wahl:'
@@ -103,8 +105,6 @@ export const HILFE = [
 type Zustand = {
     /** Die Sitzung, zu der `wahl` und `auto` gehoeren; null heisst neu lesen. */
     sid: string | null
-    /** Ob ein Mensch am Terminal sitzt: dann nie /model oder /effort, die schreiben dort die Einstellungen. */
-    interaktiv: boolean
     /** Was `classic.SessionStart` gesagt hat: neuer Chat, fortgesetzter, oder noch nichts. */
     quelle: 'neu' | 'alt' | null
     /** Die erste echte Nachricht steht noch aus und soll waehlen. */
@@ -114,12 +114,8 @@ type Zustand = {
     wahl: Wahl | null
     /** Der Aufwand, den die Sitzung von sich aus schickt; `undefined` ohne Aufwand, null noch nicht gesehen. */
     basisAufwand: Aufwand | number | undefined | null
-    /** Der Zeitpunkt der Wahl, fuer die /model und /effort schon liefen. */
-    angewendet: number | null
-    /** Laeuft gerade unser eigenes /model: dessen Modellwechsel ist keiner der Person. */
-    eigenerWechsel: boolean
     vorschlag: { wahl: Einschaetzung; at: number } | null
-    /** Was die Hauptschleife zuletzt von sich aus geschickt haette. */
+    /** Was die Hauptschleife von sich aus schickt: zuletzt gesehen oder seit einem Modellwechsel. */
     letztesModell: string | null
     letzterAufwand: Aufwand | number | undefined | null
     /** Die Automatik dieses Chats; null heisst Standard aus den Einstellungen. */
@@ -133,14 +129,11 @@ type Zustand = {
 
 const z: Zustand = {
     sid: null,
-    interaktiv: false,
     quelle: null,
     neu: false,
     wartet: false,
     wahl: null,
     basisAufwand: null,
-    angewendet: null,
-    eigenerWechsel: false,
     vorschlag: null,
     letztesModell: null,
     letzterAufwand: null,
@@ -206,9 +199,8 @@ async function sitzung($: EngineInterface): Promise<void> {
     }
     z.sid = id
     const w = await $.store.get(SPEICHER_WAHL + id).catch(() => undefined)
+    // Eine gespeicherte Wahl gilt ueber turn.step weiter.
     z.wahl = istWahl(w) ? w : null
-    // Eine gespeicherte Wahl gilt ueber turn.step weiter; /model und /effort laufen dafuer nicht noch einmal.
-    z.angewendet = z.wahl ? z.wahl.at : null
     z.basisAufwand = null
     z.vorschlag = null
     const a = (await $.store.get(SPEICHER_AUTO + id).catch(() => undefined)) as AutoSchalter | undefined
@@ -253,7 +245,6 @@ async function raeumeAuf($: EngineInterface): Promise<void> {
 async function setzeWahl($: EngineInterface, w: Einschaetzung): Promise<void> {
     z.wahl = { modell: w.modell, aufwand: w.aufwand, grund: w.grund, at: await $.clock.now(), zurueckgezogen: false }
     z.basisAufwand = null
-    z.angewendet = null
     z.vorschlag = null
     await speichereWahl($)
     zeigeStatus($)
@@ -319,44 +310,6 @@ async function verlauf($: EngineInterface): Promise<SessionMessage[]> {
         return Array.isArray(v) ? (v as SessionMessage[]) : []
     } catch {
         return []
-    }
-}
-
-/**
- * In der Desktop-App die Sitzung selbst umstellen, einmal je Wahl: so zeigt
- * auch /model das Modell. Fehler und Verwerfen bleiben still, turn.step stellt
- * ohnehin jede Anfrage um.
- */
-async function stelleSitzungUm($: EngineInterface, w: Wahl): Promise<void> {
-    let modellOk = false
-    let aufwandOk = false
-    z.eigenerWechsel = true
-    try {
-        if (familieVon(z.letztesModell) !== w.modell) {
-            await $.command.run({ command: 'model', args: w.modell })
-            modellOk = true
-        }
-    } catch {
-        // Verworfen oder abgelehnt: turn.step bleibt.
-    } finally {
-        z.eigenerWechsel = false
-    }
-    try {
-        if (z.letzterAufwand !== w.aufwand) {
-            await $.command.run({ command: 'effort', args: w.aufwand })
-            aufwandOk = true
-        }
-    } catch {
-        // Wie oben.
-    }
-    if (z.wahl?.at !== w.at) {
-        return
-    }
-    if (aufwandOk) {
-        z.basisAufwand = w.aufwand
-    } else if (modellOk) {
-        // Das neue Modell kann einen anderen Standard-Aufwand haben: neu ansehen.
-        z.basisAufwand = null
     }
 }
 
@@ -527,7 +480,6 @@ export const register: Register = (on, options) => {
 
     on('session.start', async ($, e, next) => {
         const r = await next(e)
-        z.interaktiv = e.isInteractive
         await sitzung($).catch(() => {})
         if (z.quelle === null) {
             z.neu = (await $.session.turns().catch(() => 1)) === 0
@@ -612,7 +564,7 @@ export const register: Register = (on, options) => {
         return yield* next(raus)
     })
 
-    // Kalibrieren; in der Desktop-App einmal je Wahl auch die Sitzung umstellen.
+    // Kalibrieren.
     on('turn.complete', async ($, e, next) => {
         const r = await next(e)
         try {
@@ -632,20 +584,19 @@ export const register: Register = (on, options) => {
         } catch {
             // Ohne Zahlen keine Messung.
         }
-        const w = z.wahl
-        if (e.agentId === undefined && w && !w.zurueckgezogen && !z.interaktiv && z.angewendet !== w.at) {
-            z.angewendet = w.at
-            // Nicht warten: die Befehle laufen, sobald die Sitzung still ist.
-            void stelleSitzungUm($, w).catch(() => {})
-        }
         return r
     })
 
     // Modell von Hand gewechselt: in der App (sdk), im Auswahlfenster (picker) oder per /model.
     on('classic.PostModelSwitch', async ($, e, next) => {
         const r = await next(e)
+        // Ab jetzt schickt die Sitzung dieses Modell von sich aus; /modellwahl vergleicht damit.
+        if (e.to_model) {
+            z.letztesModell = e.to_model
+        }
         const w = z.wahl
-        if (!w || w.zurueckgezogen || z.eigenerWechsel) {
+        // Die App schickt ihre Auswahl auch ohne Wechsel noch einmal: dasselbe Modell ist keine Entscheidung.
+        if (!w || w.zurueckgezogen || e.from_model === e.to_model) {
             return r
         }
         // 'auto' (Rueckfall) und 'resume' (Wiederherstellen) sind keine Entscheidung der Person.
@@ -687,7 +638,6 @@ async function nachClear($: EngineInterface): Promise<void> {
     z.wahl = null
     z.vorschlag = null
     z.wartet = false
-    z.angewendet = null
     z.basisAufwand = null
     zeigeStatus($)
 }

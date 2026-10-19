@@ -182,22 +182,23 @@ test('neuer Chat: die erste Nachricht wird eingeschätzt, die Hauptschleife beko
     expect(b.anfragen).toHaveLength(1)
 })
 
-test('Desktop-App: einmal je Wahl /model und /effort nach der Runde; im Terminal nie', async ($, on) => {
+test('Desktop-App: kein /model und kein /effort; die Auswahl der App zieht die Wahl nicht zurück', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
-    const b = boden(on, { antworten: [wahlJson('opus', 'high')] })
+    const b = boden(on, { antworten: [wahlJson('haiku', 'low', 'einfache Faktenfrage')] })
     await start($, 'startup', false)
-    await sende($, 'Bau den Login um.')
-    await schritt($)
-    await rundeEnde($, { ...USAGE, model: 'claude-opus-5-5' })
+    await sende($, 'Wie viele Tage hat der Februar 2028?')
+    // Die App läuft auf Opus · Extra hoch; die Anfrage geht trotzdem mit Haiku · niedrig.
+    await schritt($, 'claude-opus-5-5', 'xhigh')
+    await rundeEnde($, { ...USAGE, model: 'claude-haiku-5-5' })
     await clock.settle()
-    expect(b.befehle).toEqual(['model opus', 'effort high'])
-    // Unser eigener Wechsel ist keiner der Person.
-    await schritt($, 'claude-opus-5-5', 'high')
-    await rundeEnde($)
-    await clock.settle()
-    expect(b.befehle).toHaveLength(2)
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+    expect(b.befehle).toEqual([])
+    // Die App schickt ihre Auswahl noch einmal, ohne Wechsel: keine Entscheidung der Person.
+    await $.classic.PostModelSwitch({ from_model: 'claude-opus-5-5', to_model: 'claude-opus-5-5', requested_model: 'opus', source: 'sdk' } as never)
+    expect(await befehl($, 'modellwahl-zeigen')).toContain('Zurückgezogen: nein.')
+    await schritt($, 'claude-opus-5-5', 'xhigh')
+    expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
+    expect(b.status.at(-1)).toBe('Modellwahl: Haiku · niedrig')
 })
 
 test('Terminal: nur turn.step, kein /model', async ($, on) => {
@@ -383,6 +384,19 @@ test('Modell von Hand gewechselt (App): zurückgezogen, nichts mehr überschrieb
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'medium' })
     expect(b.status.at(-1)).toBeUndefined()
     expect(await befehl($, 'modellwahl-zeigen')).toContain('Zurückgezogen: Du hast Modell oder Aufwand selbst umgestellt.')
+})
+
+test('nach einem Wechsel von Hand vergleicht /modellwahl mit dem neuen Modell der Sitzung', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, { antworten: [wahlJson('opus', 'xhigh')], nachrichten: MITTEN_IM_CHAT, kontext: 50_000 })
+    await start($, 'resume')
+    await schritt($, 'claude-opus-5-5', 'xhigh')
+    await $.classic.PostModelSwitch({ from_model: 'claude-opus-5-5', to_model: 'claude-haiku-5-5', requested_model: 'haiku', source: 'picker' } as never)
+    // Vorher verglich der Mod mit dem alten Opus und sagte "bleibt bei Opus · sehr hoch".
+    const text = await befehl($, 'modellwahl', 'Baue einen neuen Mod mit Tests')
+    expect(text).toContain('Modellwahl-Vorschlag: Opus · sehr hoch')
+    expect(text).toContain('Ausführen: /modellwahl ja')
 })
 
 test('Rückfall und Wiederherstellen sind kein Wechsel der Person', async ($, on) => {
