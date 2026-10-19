@@ -27,8 +27,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Prüfen vor jedem Commit, je geändertem Mod: `claude plugin validate ./<mod>` und
   `claude plugin test ./<mod>`. Nach Änderungen am Katalog zusätzlich `claude plugin validate .`.
 - Typprüfung: `tsc -p <mod>`, sobald die Engine die Typen nach `<mod>/.claude-plugin/types/`
-  gelegt hat (das tut sie beim Laden; der Ordner ist in `.gitignore`). Am PC liegen eigene
-  tsconfig-Dateien unter `d:\temp\claude\ns-tsc-7e39\`.
+  gelegt hat (das tut sie beim Laden; der Ordner ist in `.gitignore`). Die tsconfig-Dateien am PC
+  unter `d:\temp\claude\ns-tsc-7e39\` zeigen noch auf den alten Ordner `~/.claude/mods`. Für das
+  Repo eine eigene anlegen: `include` mit der Typdatei, die der Skill `plugin-authoring` nennt, und
+  `<mod>/hooks`, `<mod>/types`, `<mod>/tests`.
 - Zeilenenden je Datei erhalten. In leitstand, statistik, visible-compact und filetree haben viele
   Dateien CRLF (`git ls-files --eol` zeigt es). Nach dem Ändern prüfen, dass `git diff` nicht die
   ganze Datei als geändert zeigt. Am PC gilt `core.autocrlf=true`, dort
@@ -80,17 +82,40 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Engine setzt den Mod-Ordner davor, Test-Attrappen müssen das abschneiden.
 - Oberflächen: Das Band über der Eingabe (`AbovePrompt`) zeichnen laut API nur Terminal und
   Desktop-App, ein Fenster (`Pane`) jede Oberfläche.
+- Am PC kommt bjoern-mods seit 2026-10-19 von GitHub (Klon unter
+  `~/.claude/plugins/marketplaces/bjoern-mods`). Der alte Ordner `~/.claude/mods` bleibt liegen,
+  wird aber nicht mehr gelesen. Vorher stand der GitHub-Eintrag in `settings.json` eine Ebene zu tief,
+  und das `add` hatte nicht gegriffen. Nach jedem Umstellen `claude plugin marketplace list` ansehen.
+- Desktop-App: Solange sie am Rundenende das Feld "nächster Schritt" mit einer Frage und Knöpfen
+  zeigt, ist das ganze Band über der Eingabe ausgeblendet. Mit der nächsten Runde ist es wieder da.
+  Das ist kein Mod-Fehler (Live-Test 2026-10-19). Soll Björn das Band sehen, die Runde ohne Frage
+  abschließen.
+- Desktop-App: Ihre Modellauswahl folgt einem `/model` oder `/effort` eines Mods nicht ("for this
+  session only"), im Test blieb sie auf Opus · Extra hoch. Danach galt die Modellwahl als von Hand
+  zurückgezogen. Seit modellwahl 0.1.1 stellt der Mod deshalb nur noch je Anfrage über `turn.step` um;
+  was gerade antwortet, zeigen die Statuszeile und `/modellwahl-zeigen`.
 
-## Offen (Stand 2026-10-19)
+## Offen (Stand 2026-10-19, nach dem Live-Test am PC)
 
-1. Live-Test am PC nach Neustart: Knopf-Befehle, Modellwahl (automatische Wahl, Statuszeile,
-   `/modellwahl-zeigen`, Rückfrage mit `/modellwahl ja`, Rückzug bei manueller Umstellung),
-   Prompt-Upgrade-Automatik (`sdk`), Reflect-Band.
-2. Modellwahl: Die App-Auswahl zeigt die Wahl nicht. Unklar, ob die App nach unserem `/model`
-   selbst ein `set_model` schickt (dann zöge sich Modellwahl fälschlich zurück).
+1. Live-Test am PC (2026-10-19). Es klappen: Knopf-Befehle (`/leitstand-hilfe`, Verdecken an/aus,
+   `hilfe`, `ja`-Abfrage), automatische Modellwahl im neuen Chat samt Statuszeile,
+   Prompt-Upgrade-Automatik (App-Nachricht wird angehalten, Fenster mit Rückfragen, `>` geht direkt
+   raus), Reflect-Band nach einer Korrektur, Berliner Zeit in Statistik (WL "So 02:00") und Verlauf.
+   Gefunden und behoben: Modellwahl zog sich nach ihrem eigenen `/model` und `/effort` sofort
+   fälschlich zurück und verglich danach mit dem alten Modell, sodass `/modellwahl <große Aufgabe>`
+   "bleibt bei Opus" sagte statt nachzufragen (0.1.1). Der Leitstand machte aus einem Fortschritt
+   ohne Schrittnamen (Haiku ließ ihn weg) einen neuen Schritt "Arbeitet daran" (0.53.2).
+   Nach Update und Neustart nachprüfen: Modellwahl im neuen Chat (`/modellwahl-zeigen` nach der
+   ersten Runde "Zurückgezogen: nein"; Rückfrage mit `/modellwahl <große Aufgabe>`, dann
+   `/modellwahl ja`; Rückzug bei Umstellung von Hand in der App). Nicht ausdrücklich bestätigt:
+   Abbrechen in Prompt Upgrade legt den Text zurück ins Feld.
+2. Leitstand: Im Test-Chat (Haiku) stand das Band Minuten nach Rundenende noch auf "Arbeitet" mit
+   "Nutzt eine verbundene App". Im Nachbau zeigt es nach Rundenende richtig "Braucht dich". Ursache
+   offen (Helfer als laufend gezählt? `turn.complete` nicht angekommen?); beobachten.
 3. Schild 🛡️ (`/leitstand-geheimnisse-sichern`): Björns Test an einer anderen Instanz steht aus.
 4. Instanzen mit `UMSTIEG.md` und Zip umstellen (Björn).
 5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
-   und filetree (3).
+   und filetree (3). Die Zusammenfassung las das Argument von `/modellwahl <Aufgabe>` als Auftrag
+   und meldete, er sei "nicht bearbeitet" worden.
 6. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.
