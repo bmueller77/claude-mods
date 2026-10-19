@@ -508,7 +508,8 @@ test('die alte Einstellung für jede Sitzung startet nichts und wird gelöscht; 
     expect(geloescht).toEqual(['statistik.warmImmer'])
 })
 
-test('immer übersteht einen neuen Sitzungsstart im selben Chat und pingt über zwölf Stunden hinaus', async ($, on) => {
+// 16 Pings über 13 Stunden mit Sekundentakt: braucht auf langsameren Rechnern mehr als die üblichen 5 Sekunden.
+test('immer übersteht einen neuen Sitzungsstart im selben Chat und pingt über zwölf Stunden hinaus', { timeoutMs: 20_000 }, async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
@@ -1066,12 +1067,13 @@ test('die Leiste weicht einer Umfrage', async ($, on) => {
 
 // --- Nutzungszeile ---
 
-/** Samstag, 17. Oktober 2026, 12:00 Uhr in Berlin. */
-const JETZT = Date.UTC(2026, 9, 17, 10, 0, 0)
-/** Donnerstag, 22. Oktober 2026, 09:00 Uhr in Berlin. */
-const DONNERSTAG_9 = Date.UTC(2026, 9, 22, 7, 0, 0)
-/** Montag, 19. Oktober 2026, 07:00 Uhr in Berlin: 43 Stunden nach JETZT. */
-const MONTAG_7 = Date.UTC(2026, 9, 19, 5, 0, 0)
+// Die Zeiten gelten in der Zeitzone des Rechners, wie die Anzeige selbst: am PC Berlin, in der Cloud UTC.
+/** Samstag, 17. Oktober 2026, 12:00 Uhr. */
+const JETZT = new Date(2026, 9, 17, 12, 0, 0).getTime()
+/** Donnerstag, 22. Oktober 2026, 09:00 Uhr. */
+const DONNERSTAG_9 = new Date(2026, 9, 22, 9, 0, 0).getTime()
+/** Montag, 19. Oktober 2026, 07:00 Uhr: 43 Stunden nach JETZT. */
+const MONTAG_7 = new Date(2026, 9, 19, 7, 0, 0).getTime()
 
 const LIMITS: Limit[] = [
     { kind: 'five_hour', percentUsed: 23, resetsAt: new Date(JETZT + (2 * 60 + 41) * MIN).toISOString() },
@@ -1092,7 +1094,7 @@ test('Restzeit, Wochentag und das Lesen des Fable-Fensters', () => {
     expect(restUhr(-5)).toBe('00:00')
     expect(wochentagZeit(DONNERSTAG_9)).toBe('Do 09:00')
     expect(fableAus(ENDPUNKT_FABLE)).toEqual({ prozent: 48, bis: MONTAG_7 })
-    expect(fableAus({ limits: [{ scope: { model: { display_name: 'Fable' } }, limit: { utilization: 12.34, resets_at: '2026-10-19T05:00:00Z' } }] })).toEqual({
+    expect(fableAus({ limits: [{ scope: { model: { display_name: 'Fable' } }, limit: { utilization: 12.34, resets_at: new Date(MONTAG_7).toISOString() } }] })).toEqual({
         prozent: 12.3,
         bis: MONTAG_7,
     })

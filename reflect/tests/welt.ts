@@ -32,7 +32,8 @@ export const REFLEXION = [
 ].join('\n')
 
 /** Ein Pfad so, wie die Tests ihn vergleichen: Schraegstriche, ohne Laufwerk. */
-export const pfad = (p: string) => p.replace(/\\/g, '/').replace(/^[A-Za-z]:(?=\/)/, '')
+// Unter Linux ist C:\Users\… kein absoluter Pfad, die Engine setzt den Mod-Ordner davor: auch der faellt weg.
+export const pfad = (p: string) => p.replace(/\\/g, '/').replace(/^(?:.*\/)?[A-Za-z]:(?=\/)/, '')
 
 export type Opts = {
   verdicts?: Record<string, object | 'error' | 'throw'>

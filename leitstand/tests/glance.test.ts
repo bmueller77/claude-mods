@@ -6883,7 +6883,8 @@ describe('Verdecken und Tresor', () => {
       files: new Map(Object.entries(options.files ?? {}).map(([path, text]) => [path.replace(/\\/g, '/'), text])),
       store,
     }
-    const norm = (path: string) => path.replace(/\\/g, '/')
+    // Unter Linux ist C:\work\shop kein absoluter Pfad, die Engine setzt den Mod-Ordner davor: der faellt weg.
+    const norm = (path: string) => path.replace(/\\/g, '/').replace(/^.*\/(?=[A-Za-z]:\/)/, '')
     on('ui.toast', (_, e) => {
       state.toasts.push(String((e as { text: string }).text))
       return { value: undefined } as never
