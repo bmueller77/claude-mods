@@ -1,0 +1,4 @@
+# Nur für die Pflege, nicht für das Zip an andere Instanzen (git archive)
+CLAUDE.md export-ignore
+docs/ export-ignore
+.gitattributes export-ignore
