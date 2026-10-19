@@ -29,7 +29,7 @@ ihn schon in der ersten Nachricht eines Chats kennt.
 
 | Mod | Quelle | Was er tut | Kostet Tokens |
 |---|---|---|---|
-| leitstand | hier (hervorgegangen aus GlanceFlow von Antreas-Strb, MIT) | Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf, Teambericht; Arbeitsweisen Auto-Mode und Gruppenarbeit; Schalter für ADHS-Modus, Remote Control, Autopilot, Verdecken; Öffner für Filetree; `/leitstand` | ja: Haiku benennt jeden Auftrag, in der Gruppenarbeit laufen Arbeiter-Subagenten |
+| leitstand | hier (hervorgegangen aus GlanceFlow von Antreas-Strb, MIT) | Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf, Teambericht; Arbeitsweisen Auto-Modus und Gruppenarbeit; Schalter für ADHS-Modus, Remote Control, Autopilot, Verdecken; Öffner für Filetree; `/leitstand` | ja: Haiku benennt jeden Auftrag, in der Gruppenarbeit laufen Arbeiter-Subagenten |
 | statistik | hier (Eigenbau) | eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr; Warmhalten, Compact, Kontext-Details über `/context` | nur beim Warmhalten: jeder Ping liest den Kontext aus dem Cache |
 | naechste-schritte | hier (nach next-steps von Hamza Zafar) | nach jeder Antwort zwei oder drei Vorschläge, per Ziffer 1 bis 3 oder Knopf ins Feld | ja, ein Haiku-Aufruf je Antwort |
 | zusammenfassung | hier (Eigenbau) | nach jeder Arbeitsrunde: was getan wurde und was man leicht übersieht, mit Dateiliste und Replay | ja, ein Haiku-Aufruf je Arbeitsrunde |

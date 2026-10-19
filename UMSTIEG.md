@@ -83,10 +83,10 @@ deshalb gleiches Bild auf jeder Instanz.
   Befehl erklärt sich mit `hilfe` dahinter. Vom Handy (Remote Control) ist das der Weg zu allen Schaltern.
 - Einstellungen gelten je Chat: Ein Schalter, den man in einem Chat umlegt, ändert keinen anderen
   Chat. Neue Chats starten mit dem Standard aus dem Einstellungsmenü der App bzw.
-  `/plugin configure <mod>@bjoern-mods`. Standard des Leitstands: Auto-Mode, Verdecken und
+  `/plugin configure <mod>@bjoern-mods`. Standard des Leitstands: Auto-Modus, Verdecken und
   Passwortschutz an, Ansicht minimal, alles andere aus. Reflect prüft Korrekturen standardmäßig,
   die Automatik von Prompt Upgrade ist aus.
-- Der Leitstand startet in der Arbeitsweise "Auto-Mode" ohne Plan-Freigabe. In der Gruppenarbeit
+- Der Leitstand startet in der Arbeitsweise "Auto-Modus" ohne Plan-Freigabe. In der Gruppenarbeit
   nennt Claude den Plan im Chat und wartet auf "los" oder Start. Bei laufendem Autopilot startet
   ein wartender Plan nach 30 Sekunden von selbst; solange Arbeiter im Hintergrund laufen, stößt
   der Autopilot nicht an.
