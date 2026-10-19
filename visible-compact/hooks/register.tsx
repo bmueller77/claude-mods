@@ -275,7 +275,14 @@ const toggleTranslate = async ($: EngineInterface) => {
 const tokens = (n?: number) =>
   n === undefined ? '?' : n >= 1000 ? `${Math.round(n / 1000).toLocaleString('de-DE')}k` : String(n)
 
-const clock = (at: number) => new Date(at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+// Berlin time, on servers and in the cloud that run on UTC too; the machine's own where the runtime has no zone data.
+export const clock = (at: number) => {
+  try {
+    return new Date(at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Berlin' })
+  } catch {
+    return new Date(at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+  }
+}
 
 const who = (meta: CompactMeta) => (meta.agentId === undefined ? 'Hauptchat' : (meta.agentLabel ?? `Helfer ${meta.agentId}`))
 

@@ -934,8 +934,10 @@ test('formatSize: bytes, binary units, one decimal under 100, ? for unknown', as
   expect(formatSize(-1)).toBe('?')
 })
 
-test('stamp: German date order', async () => {
-  expect(stamp(new Date(2026, 9, 18, 9, 5).getTime())).toBe('18.10.2026 09:05')
+test('stamp: German date order, in Berlin time on every machine, summer and winter time alike', async () => {
+  expect(stamp(Date.UTC(2026, 9, 18, 7, 5))).toBe('18.10.2026 09:05')
+  expect(stamp(Date.UTC(2026, 9, 18, 22, 30))).toBe('19.10.2026 00:30')
+  expect(stamp(Date.UTC(2026, 10, 1, 22, 30))).toBe('01.11.2026 23:30')
   expect(stamp(0)).toBe('')
 })
 

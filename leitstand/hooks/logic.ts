@@ -1,5 +1,6 @@
 import type { GlanceChatSettings, GlanceChecklist, GlanceHelper, GlanceHistoryView, GlanceOtherChat, GlanceTask, GlanceTaskSize, GlanceUsage } from '../types'
 import { SIZE_WEIGHT, teamReport, weekSummary } from './history'
+import { inBerlin } from './berlin'
 import { maskPrivate } from './privacy'
 
 export const PLUGIN = 'leitstand'
@@ -21,25 +22,26 @@ export const CODE_FILE =
 
 export const pad2 = (value: number) => String(value).padStart(2, '0')
 
-/** "10:01:45 UTC" in the person's own time, "13:01:45" in Athens; a time without UTC, GMT or Z is left as written. */
+/** "10:01:45 UTC" in Berlin time, "12:01:45" in summer; a time without UTC, GMT or Z is left as written. */
 export function localTimes(text: string, today = new Date()): string {
   return text.replace(/(?<![\d:])(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?\s?(?:UTC|GMT|Z)\b/g, (whole, hours, minutes, seconds) => {
     if (Number(hours) > 23 || Number(minutes) > 59) return whole
-    const at = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), Number(hours), Number(minutes), Number(seconds ?? 0)))
-    return `${pad2(at.getHours())}:${pad2(at.getMinutes())}${seconds === undefined ? '' : `:${pad2(at.getSeconds())}`}`
+    const at = inBerlin(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), Number(hours), Number(minutes), Number(seconds ?? 0)))
+    return `${pad2(at.hours)}:${pad2(at.minutes)}${seconds === undefined ? '' : `:${pad2(at.seconds)}`}`
   })
 }
 
 // Short weekday names, Sunday first as getDay() counts them.
 const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 
-/** When a plan window resets, in the person's own time: "um 18:40", or "am Do um 09:00" when it is more than a day away. */
+/** When a plan window resets, in Berlin time: "um 18:40", or "am Do um 09:00" when it is more than a day away. */
 export function resetTime(resetsAt: string | null, at: number): string | null {
   const when = resetsAt ? new Date(resetsAt) : null
   if (when === null || Number.isNaN(when.getTime())) return null
-  const time = `${pad2(when.getHours())}:${pad2(when.getMinutes())}`
+  const berlin = inBerlin(when.getTime())
+  const time = `${pad2(berlin.hours)}:${pad2(berlin.minutes)}`
   if (when.getTime() - at <= 24 * 3_600_000) return `um ${time}`
-  return `am ${WEEKDAY_SHORT[when.getDay()]} um ${time}`
+  return `am ${WEEKDAY_SHORT[berlin.weekday]} um ${time}`
 }
 
 /** Turns any step or job name, or a step's summary, into short plain English. */

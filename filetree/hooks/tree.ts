@@ -311,10 +311,34 @@ export function visibleRows(t: FileTree): Row[] {
   return rows
 }
 
+// Times read in Berlin time, on servers and in the cloud that run on UTC too.
+const BERLIN = (() => {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Berlin',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+  } catch {
+    return null
+  }
+})()
+
+/** dd.mm.yyyy hh:mm in Berlin time; the machine's own where the runtime has no time zone data. */
 export function stamp(ms: number): string {
   if (!ms) return ''
   const d = new Date(ms)
   const p = (v: number) => String(v).padStart(2, '0')
+  if (BERLIN !== null) {
+    const parts: Record<string, string> = {}
+    for (const part of BERLIN.formatToParts(d)) parts[part.type] = part.value
+    const [day, month, year, hour, minute] = [parts.day, parts.month, parts.year, parts.hour, parts.minute].map(Number)
+    if ([day, month, year, hour, minute].every(Number.isFinite)) return `${p(day!)}.${p(month!)}.${year} ${p(hour! % 24)}:${p(minute!)}`
+  }
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 

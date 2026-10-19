@@ -1,6 +1,6 @@
 {
   "name": "filetree",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Dateibaum wie in einer IDE als Seitenfenster: zeigt, welche Dateien Claude gerade liest, schreibt oder committet. Deutsche Fassung von data-goblin/claude-code-filetree (MIT), übersetzt von Björn Müller.",
   "types": "./types/index.d.ts",
   "author": {

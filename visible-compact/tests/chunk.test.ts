@@ -2,7 +2,7 @@ import type { SessionMessage } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import { chunkMessages, chunkText, fenced, messageText } from '../hooks/chunk'
-import { count, triggerLabel } from '../hooks/register'
+import { clock, count, triggerLabel } from '../hooks/register'
 
 const squash = (s: string) => s.replace(/\s+/g, '')
 
@@ -204,4 +204,9 @@ describe('deutsche Anzeige', () => {
     const texts = (await ui.findAll({ type: 'Text' })).map(one => one.text).join(' ')
     expect(texts).toContain('In diesem Chat wurde noch nichts verdichtet.')
   })
+})
+
+test('clock shows Berlin time on every machine, summer and winter time alike', () => {
+  expect(clock(Date.UTC(2026, 9, 18, 22, 30))).toBe('19.10.26, 00:30')
+  expect(clock(Date.UTC(2026, 10, 1, 22, 30))).toBe('01.11.26, 23:30')
 })

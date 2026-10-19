@@ -577,8 +577,27 @@ export function grund(r: { reason: string; status?: number }): string {
   }
 }
 
-function uhrzeit(at: number) {
+/** Berliner Zeit, auch auf Servern und in der Cloud, die auf UTC laufen. */
+const BERLIN = (() => {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  } catch {
+    return null
+  }
+})()
+
+/** Uhrzeit hh:mm in Berliner Zeit; ohne Zeitzonendaten die des Rechners. */
+export function uhrzeit(at: number) {
   const d = new Date(at)
+  if (BERLIN !== null) {
+    const teile: Record<string, string> = {}
+    for (const teil of BERLIN.formatToParts(d)) teile[teil.type] = teil.value
+    const stunde = Number(teile.hour)
+    const minute = Number(teile.minute)
+    if (Number.isFinite(stunde) && Number.isFinite(minute)) {
+      return `${String(stunde % 24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+    }
+  }
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 

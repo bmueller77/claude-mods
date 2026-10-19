@@ -69,13 +69,15 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   `extraKnownMarketplaces.bjoern-mods.source` ändern, dann `claude plugin marketplace add <neue Quelle>`
   (in einer eigenen `CLAUDE_CONFIG_DIR` geprüft, 2.1.303). Solange der Eintrag nicht passt, lehnt
   `add` die neue Quelle ab.
-- Björn will Uhrzeiten immer in Berliner Zeit, auch auf UTC-Servern und in der Cloud. Statistik tut
-  das seit 0.16.1 über `Intl.DateTimeFormat` mit `timeZone: 'Europe/Berlin'` (im Sandkasten
-  vorhanden); ihre Tests legen Zeitpunkte mit `Date.UTC` an und erwarten Berliner Zeit.
-- Tests laufen auch in der Cloud (Linux, UTC), `TZ` ändert daran nichts. Zeigt ein Mod noch die
-  Zeit des Rechners, Zeitpunkte in Tests in Ortszeit anlegen (`new Date(j, m, t, h, min)`).
-  Windows-Pfade wie `C:\…` sind unter Linux relativ; die Engine setzt den Mod-Ordner davor,
-  Test-Attrappen müssen das abschneiden.
+- Björn will Uhrzeiten immer in Berliner Zeit, auch auf UTC-Servern und in der Cloud. Alle Mods tun
+  das über `Intl.DateTimeFormat` mit `timeZone: 'Europe/Berlin'` (im Sandkasten vorhanden), seit
+  statistik 0.16.1, leitstand 0.53.1, reflect 0.2.2, filetree 0.4.1 und visible-compact 0.5.1. Im
+  Leitstand steckt das in `hooks/berlin.ts` (`inBerlin`), auch die Tagesschlüssel des Verlaufs.
+  Neue Zeitanzeigen nie mit `getHours`, `getDay` oder `toLocale…` ohne `timeZone` bauen.
+- Tests laufen auch in der Cloud (Linux, UTC), `TZ` ändert daran nichts. Zeitpunkte in Tests mit
+  `Date.UTC` anlegen und Berliner Zeit erwarten, nie `new Date(j, m, t, h, min)`; der Leitstand-Test
+  hat dafür `berlinZeit(j, m, t, h, min)`. Windows-Pfade wie `C:\…` sind unter Linux relativ; die
+  Engine setzt den Mod-Ordner davor, Test-Attrappen müssen das abschneiden.
 - Oberflächen: Das Band über der Eingabe (`AbovePrompt`) zeichnen laut API nur Terminal und
   Desktop-App, ein Fenster (`Pane`) jede Oberfläche.
 
@@ -90,7 +92,5 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 4. Instanzen mit `UMSTIEG.md` und Zip umstellen (Björn).
 5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
    und filetree (3).
-6. Berliner Zeit auch in leitstand (Uhrzeiten, Wochentag, Tagesschlüssel des Verlaufs), reflect,
-   filetree und visible-compact; die zeigen noch die Zeit des Rechners. Björn fragen.
-7. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
+6. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.

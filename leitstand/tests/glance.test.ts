@@ -7,6 +7,14 @@ import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionO
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
 import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
+import { inBerlin } from '../hooks/berlin'
+
+/** A time on Berlin's wall clock as a moment: what the Leitstand shows on every machine, on UTC servers too. */
+const berlinZeit = (year: number, month: number, date: number, hours = 0, minutes = 0, seconds = 0) => {
+  const wall = Date.UTC(year, month, date, hours, minutes, seconds)
+  const seen = inBerlin(wall)
+  return wall - (Date.UTC(seen.year, seen.month - 1, seen.date, seen.hours, seen.minutes, seen.seconds) - wall)
+}
 
 const PLAN = 'mcp__leitstand__plan_steps'
 const PROGRESS = 'mcp__leitstand__report_progress'
@@ -1243,7 +1251,7 @@ async function paneTexts($: Engine): Promise<string[]> {
 
 describe('history days', () => {
   test('today, yesterday and a date are understood', () => {
-    const now = new Date(2026, 9, 6, 12).getTime()
+    const now = berlinZeit(2026, 9, 6, 12)
     expect(dayFromArgument('', now)).toBe('2026-10-06')
     expect(dayFromArgument(' yesterday', now)).toBe('2026-10-05')
     expect(dayFromArgument(' heute', now)).toBe('2026-10-06')
@@ -1253,7 +1261,7 @@ describe('history days', () => {
   })
 
   test('days older than 30 are cleaned away', () => {
-    const now = new Date(2026, 9, 6, 12).getTime()
+    const now = berlinZeit(2026, 9, 6, 12)
     expect(expiredHistoryKeys(['history:2026-08-01', 'history:2026-09-20', 'glanceEnabled'], now)).toEqual([
       'history:2026-08-01',
     ])
@@ -1268,7 +1276,7 @@ describe('history days', () => {
   })
 
   test("each chat keeps its own key for a day; the day's old shared key is told apart", () => {
-    const now = new Date(2026, 9, 6, 12).getTime()
+    const now = berlinZeit(2026, 9, 6, 12)
     expect(historyKey('2026-10-06', 'chat-1')).toBe('history:2026-10-06:chat-1')
     expect(historyDay('history:2026-10-06:chat-1')).toBe('2026-10-06')
     expect(historyDay('history:2026-10-06')).toBe('2026-10-06')
@@ -1301,7 +1309,7 @@ test('/leitstand on and off set a setting, and anything else flips it', () => {
 })
 
 test("each finished job is saved, and /leitstand history shows the day's jobs for this project", async ($, on) => {
-  const clock = mock.clock(on, { now: new Date(2026, 9, 6, 9, 42).getTime() })
+  const clock = mock.clock(on, { now: berlinZeit(2026, 9, 6, 9, 42) })
   mock.store(on)
   const project = { cwd: '/work/landing-site' }
   historyWorld(on, project)
@@ -1363,7 +1371,7 @@ const ENTRY = {
 } as const
 
 test('the team report is plain: done, in progress, stuck and time, without tokens or quick questions', () => {
-  const at = new Date(2026, 9, 6, 9, 0).getTime()
+  const at = berlinZeit(2026, 9, 6, 9, 0)
   const report = teamReport({
     day: '2026-10-06',
     project: '/work/landing-site',
@@ -1682,10 +1690,10 @@ test('in the details view the Plan panel shows no usage line: the mod Statistik 
 })
 
 test('in the Desktop app History reads every time one way, as the report does, and the report puts Copy report last', async ($, on) => {
-  mock.clock(on, { now: new Date(2026, 9, 6, 18, 0).getTime() })
+  mock.clock(on, { now: berlinZeit(2026, 9, 6, 18, 0) })
   mock.store(on, {
     'history:2026-10-06': [
-      { ...ENTRY, jobId: 'a', startedAt: new Date(2026, 9, 6, 9, 0).getTime(), finishedAt: new Date(2026, 9, 6, 9, 12, 30).getTime(), title: 'Build the pricing section', outcome: 'done', stepsDone: 2, stepsTotal: 2, doneSteps: ['Write it', 'Check it'], openSteps: [] },
+      { ...ENTRY, jobId: 'a', startedAt: berlinZeit(2026, 9, 6, 9, 0), finishedAt: berlinZeit(2026, 9, 6, 9, 12, 30), title: 'Build the pricing section', outcome: 'done', stepsDone: 2, stepsTotal: 2, doneSteps: ['Write it', 'Check it'], openSteps: [] },
     ],
   })
   on('session.cwd', () => ({ value: '/work/landing-site' }) as never)
@@ -2084,10 +2092,10 @@ test('on the desktop every drawing says what it is, in every state of the checkl
 })
 
 test('the History button opens the panel; the day picker moves between days', async ($, on) => {
-  const clock = mock.clock(on, { now: new Date(2026, 9, 6, 10, 0).getTime() })
+  const clock = mock.clock(on, { now: berlinZeit(2026, 9, 6, 10, 0) })
   mock.store(on, {
     'history:2026-10-05': [
-      { ...ENTRY, jobId: 'y', startedAt: new Date(2026, 9, 5, 15, 0).getTime(), finishedAt: new Date(2026, 9, 5, 15, 5).getTime(), title: 'Write the welcome email', outcome: 'done', stepsDone: 2, stepsTotal: 2, doneSteps: ['Draft it', 'Check it'], openSteps: [] },
+      { ...ENTRY, jobId: 'y', startedAt: berlinZeit(2026, 9, 5, 15, 0), finishedAt: berlinZeit(2026, 9, 5, 15, 5), title: 'Write the welcome email', outcome: 'done', stepsDone: 2, stepsTotal: 2, doneSteps: ['Draft it', 'Check it'], openSteps: [] },
     ],
   })
   let opened = 0
@@ -2124,10 +2132,10 @@ test('the History button opens the panel; the day picker moves between days', as
 })
 
 test('Team report shows the report and copies it', async ($, on) => {
-  mock.clock(on, { now: new Date(2026, 9, 6, 18, 0).getTime() })
+  mock.clock(on, { now: berlinZeit(2026, 9, 6, 18, 0) })
   mock.store(on, {
     'history:2026-10-06': [
-      { ...ENTRY, jobId: 'a', startedAt: new Date(2026, 9, 6, 9, 0).getTime(), finishedAt: new Date(2026, 9, 6, 9, 12).getTime(), title: 'Build the pricing section', outcome: 'done', stepsDone: 2, stepsTotal: 2, doneSteps: ['Write it', 'Check it'], openSteps: [] },
+      { ...ENTRY, jobId: 'a', startedAt: berlinZeit(2026, 9, 6, 9, 0), finishedAt: berlinZeit(2026, 9, 6, 9, 12), title: 'Build the pricing section', outcome: 'done', stepsDone: 2, stepsTotal: 2, doneSteps: ['Write it', 'Check it'], openSteps: [] },
     ],
   })
   let copied = ''
@@ -3836,7 +3844,8 @@ test('near a plan limit the warning says when it resets, and a notice says so to
   await clock.advance(1)
   shown.length = 0
   const resetsAt = new Date(1_000_000 + 2 * 3_600_000)
-  const at = `${String(resetsAt.getHours()).padStart(2, '0')}:${String(resetsAt.getMinutes()).padStart(2, '0')}`
+  // 8_200_000 is 02:16 UTC on 1 January 1970, 03:16 in Berlin.
+  const at = '03:16'
   await $.session.measure({
     context: { window: 200_000, tokens: 20_000, percent: 10 },
     rateLimits: [{ kind: 'five_hour', percentUsed: 82, resetsAt: resetsAt.toISOString() }],
@@ -3847,9 +3856,9 @@ test('near a plan limit the warning says when it resets, and a notice says so to
   expect((await texts($, 'terminal')).join('\n')).toContain(`Du hast 82% deines Limits (5 Std.) verbraucht · wird um ${at} zurückgesetzt`)
   expect(shown).toEqual([['Plan-Limit', `Du hast 82% deines Limits (5 Std.) verbraucht. Es wird um ${at} zurückgesetzt.`]])
 
-  const later = new Date(2026, 9, 6, 12, 0).getTime()
-  expect(resetTime(new Date(2026, 9, 6, 18, 40).toISOString(), later)).toBe('um 18:40')
-  expect(resetTime(new Date(2026, 9, 8, 9, 0).toISOString(), later)).toBe('am Do um 09:00')
+  const later = berlinZeit(2026, 9, 6, 12, 0)
+  expect(resetTime(new Date(berlinZeit(2026, 9, 6, 18, 40)).toISOString(), later)).toBe('um 18:40')
+  expect(resetTime(new Date(berlinZeit(2026, 9, 8, 9, 0)).toISOString(), later)).toBe('am Do um 09:00')
   expect(resetTime(null, later)).toBe(null)
 })
 
@@ -4241,12 +4250,12 @@ test("the team report says what each step got done, in Claude's words where it g
 })
 
 test('the weekly team report covers the 7 days up to the day picked, and This week switches to it', async ($, on) => {
-  mock.clock(on, { now: new Date(2026, 9, 6, 18, 0).getTime() })
+  mock.clock(on, { now: berlinZeit(2026, 9, 6, 18, 0) })
   const job = (jobId: string, day: number, title: string) => ({
     ...ENTRY,
     jobId,
-    startedAt: new Date(2026, 9, day, 9, 0).getTime(),
-    finishedAt: new Date(2026, 9, day, 9, 30).getTime(),
+    startedAt: berlinZeit(2026, 9, day, 9, 0),
+    finishedAt: berlinZeit(2026, 9, day, 9, 30),
     title,
     outcome: 'done',
     stepsDone: 1,
@@ -4284,13 +4293,13 @@ test('the weekly team report covers the 7 days up to the day picked, and This we
 })
 
 test('your week sums up every project: steps, tasks, time, the busiest day and the biggest tasks', async ($, on) => {
-  mock.clock(on, { now: new Date(2026, 9, 6, 18, 0).getTime() })
+  mock.clock(on, { now: berlinZeit(2026, 9, 6, 18, 0) })
   const job = (jobId: string, day: number, title: string, steps: number, project = '/work/landing-site') => ({
     ...ENTRY,
     jobId,
     project,
-    startedAt: new Date(2026, 9, day, 9, 0).getTime(),
-    finishedAt: new Date(2026, 9, day, 9, 30).getTime(),
+    startedAt: berlinZeit(2026, 9, day, 9, 0),
+    finishedAt: berlinZeit(2026, 9, day, 9, 30),
     title,
     outcome: 'done',
     stepsDone: steps,
@@ -4419,15 +4428,13 @@ test('someone who already uses Leitstand is not welcomed again', async ($, on) =
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
 })
 
-test('a time Claude writes in UTC shows in the person\'s own time', () => {
+test('a time Claude writes in UTC shows in Berlin time', () => {
   const today = new Date(Date.UTC(2026, 9, 6, 9, 0))
-  const local = (hours: number, minutes: number, seconds?: number) => {
-    const at = new Date(Date.UTC(2026, 9, 6, hours, minutes, seconds ?? 0))
-    const two = (value: number) => String(value).padStart(2, '0')
-    return `${two(at.getHours())}:${two(at.getMinutes())}${seconds === undefined ? '' : `:${two(at.getSeconds())}`}`
-  }
-  expect(localTimes('Wait until 10:01:45 UTC to start the deploy', today)).toBe(`Wait until ${local(10, 1, 45)} to start the deploy`)
-  expect(localTimes('Check again at 9:30 GMT and 23:05Z', today)).toBe(`Check again at ${local(9, 30)} and ${local(23, 5)}`)
+  // October: Berlin runs two hours ahead of UTC.
+  expect(localTimes('Wait until 10:01:45 UTC to start the deploy', today)).toBe('Wait until 12:01:45 to start the deploy')
+  expect(localTimes('Check again at 9:30 GMT and 23:05Z', today)).toBe('Check again at 11:30 and 01:05')
+  // November: one hour, winter time.
+  expect(localTimes('Deploy at 22:30 UTC', new Date(Date.UTC(2026, 10, 2, 9, 0)))).toBe('Deploy at 23:30')
   // Without UTC, GMT or Z the time could be anyone's: it stays as Claude wrote it.
   expect(localTimes('Wait for the 10:15 cron run to finish', today)).toBe('Wait for the 10:15 cron run to finish')
   expect(cleanName('Wait until 10:01:45 UTC to start the checks')).not.toContain('UTC')
@@ -5284,8 +5291,8 @@ test('Tidy it up saves a checkpoint first, compacts keeping it, and Claude reads
 })
 
 test("two chats saving jobs the same day keep both; the day's old shared key moves into the chat's own once", async ($, on) => {
-  const clock = mock.clock(on, { now: new Date(2026, 9, 6, 9, 42).getTime() })
-  const at = new Date(2026, 9, 6, 9, 0).getTime()
+  const clock = mock.clock(on, { now: berlinZeit(2026, 9, 6, 9, 42) })
+  const at = berlinZeit(2026, 9, 6, 9, 0)
   const job = (jobId: string, title: string) => ({ ...pastJob(jobId, '/work/landing-site', 2, 60_000), startedAt: at, finishedAt: at + 60_000, title })
   const store = new Map<string, unknown>([
     ['adoptedGlance', true],
@@ -8158,8 +8165,8 @@ describe('Einstellungen je Chat', () => {
 
     await openChat($, session, 'chat-1')
     // Its own checkpoint, saved at 900_000, not the one chat-2 saved at 1_000_000.
-    const at = new Date(900_000)
-    const time = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+    // 900_000 is 00:15 UTC on 1 January 1970, 01:15 in Berlin.
+    const time = '01:15'
     expect(await settingsTexts($)).toContain(`Letzter Sicherungspunkt um ${time} gespeichert.`)
   })
 
@@ -8653,4 +8660,13 @@ describe('Eigene Befehle /leitstand-…', () => {
     await append($, `<local-command-stdout>leitstand: ${help}</local-command-stdout>`)
     expect(rows(sitzung)[1]).toBe(`<local-command-stdout>${help}\n(gemeldet vom Mod Leitstand)</local-command-stdout>`)
   })
+})
+
+test('days and times count in Berlin on every machine, summer and winter time alike', () => {
+  expect(dayKey(Date.UTC(2026, 9, 5, 22, 30))).toBe('2026-10-06')
+  expect(dayKey(Date.UTC(2026, 10, 1, 22, 30))).toBe('2026-11-01')
+  // The night the clocks go forward has 23 hours: yesterday is still the calendar's day before.
+  expect(shiftDay('2026-03-30', -1)).toBe('2026-03-29')
+  expect(dayFromArgument('gestern', Date.UTC(2026, 2, 29, 22, 30))).toBe('2026-03-29')
+  expect(resetTime(new Date(Date.UTC(2026, 10, 5, 8, 0)).toISOString(), Date.UTC(2026, 10, 1, 12, 0))).toBe('am Do um 09:00')
 })

@@ -4,7 +4,7 @@
  */
 import { expect, test } from 'claude-code/testing'
 
-import { cleanRule, explizit, globaleDatei, isTrivial, looksSecret, parseVerdict, similarity, withRule } from '../hooks/register'
+import { cleanRule, explizit, globaleDatei, isTrivial, looksSecret, parseVerdict, similarity, uhrzeit, withRule } from '../hooks/register'
 import { FLAECHEN, START_ZEIT, TAG, abschnittText, band, befehl, druecke, say, start, welt, zeilen } from './welt'
 
 const PNPM = { is_rule: true, rule: 'Nutze pnpm statt npm in diesem Repo', scope: 'project', confidence: 0.92 }
@@ -389,4 +389,9 @@ test('mehr als zwei wartende Regeln: zwei Zeilen und ein Hinweis auf /reflect re
     expect(await ui.find({ type: 'Text', text: '+1 weitere · /reflect regeln' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('Uhrzeiten in Berliner Zeit, auch unter UTC, mit Sommer- und Winterzeit', () => {
+  expect(uhrzeit(Date.UTC(2026, 9, 18, 22, 30))).toBe('00:30')
+  expect(uhrzeit(Date.UTC(2026, 10, 1, 22, 30))).toBe('23:30')
 })

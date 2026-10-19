@@ -1,6 +1,7 @@
 // The day's history of jobs, for a retro: pure functions, no engine calls.
 
 import type { GlanceChecklist, GlanceFile, GlanceHistoryEntry, GlanceOutcome, GlanceTaskSize } from '../types'
+import { inBerlin } from './berlin'
 
 export const HISTORY_PREFIX = 'history:'
 export const HISTORY_DAYS = 30
@@ -14,25 +15,25 @@ function pad(value: number): string {
   return String(value).padStart(2, '0')
 }
 
-/** A moment's local day, YYYY-MM-DD: the store key's suffix. */
+/** A moment's day in Berlin, YYYY-MM-DD: the store key's suffix. */
 export function dayKey(at: number): string {
-  const date = new Date(at)
+  const { year, month, date } = inBerlin(at)
 
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+  return `${year}-${pad(month)}-${pad(date)}`
 }
 
-/** A moment's local time of day, HH:MM. */
+/** A moment's time of day in Berlin, HH:MM. */
 export function clockTime(at: number): string {
-  const date = new Date(at)
+  const { hours, minutes } = inBerlin(at)
 
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return `${pad(hours)}:${pad(minutes)}`
 }
 
 /** The day a /leitstand history argument names: today or heute, yesterday or gestern, or YYYY-MM-DD. Null when it names none. */
 export function dayFromArgument(argument: string, now: number): string | null {
   const word = argument.trim().toLowerCase()
   if (word === '' || word === 'today' || word === 'heute') return dayKey(now)
-  if (word === 'yesterday' || word === 'gestern') return dayKey(now - DAY_MS)
+  if (word === 'yesterday' || word === 'gestern') return shiftDay(dayKey(now), -1)
 
   return /^\d{4}-\d{2}-\d{2}$/.test(word) ? word : null
 }
@@ -167,11 +168,12 @@ export function projectName(project: string): string {
   return project.split(/[\\/]/).filter(Boolean).pop() ?? project
 }
 
-/** The day before or after a YYYY-MM-DD day. */
+/** The day before or after a YYYY-MM-DD day, counted on the calendar alone (a day may have 23 or 25 hours). */
 export function shiftDay(day: string, by: number): string {
   const [year, month, date] = day.split('-').map(Number)
+  const shifted = new Date(Date.UTC(year!, month! - 1, date! + by, 12))
 
-  return dayKey(new Date(year!, month! - 1, date! + by, 12).getTime())
+  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`
 }
 
 /** The days the weekly report covers: the day picked and the 6 before it. */

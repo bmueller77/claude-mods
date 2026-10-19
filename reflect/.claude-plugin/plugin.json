@@ -1,6 +1,6 @@
 {
   "name": "reflect",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Lernt aus Korrekturen und prüft die eigene Arbeit: Kurze Nachrichten werden auf wiederverwendbare Regeln geprüft, die ein Band über dem Eingabefeld (oder /reflect regeln) in CLAUDE.md oder nur für den Chat übernimmt. /reflect lässt Claude die bisherige Arbeit kritisch durchsehen.",
   "author": {
     "name": "Björn Müller"
