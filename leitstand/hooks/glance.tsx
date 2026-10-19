@@ -39,6 +39,8 @@ import type { Secret } from './privacy'
 import {
   CHECKPOINT_PREFIX,
   FACTORY_SETTINGS,
+  LEITSTAND_BEFEHLE,
+  LEITSTAND_BEFEHL_NAMEN,
   MAX_DETAIL,
   MAX_NAME,
   PLUGIN,
@@ -54,6 +56,8 @@ import {
   activityTarget,
   apiErrorSentence,
   applyProgress,
+  befehlsHilfe,
+  befehlsUeberblick,
   askedMergeSha,
   asksQuestion,
   carryTokens,
@@ -64,6 +68,7 @@ import {
   formatDuration,
   formatLeft,
   formatTokens,
+  fragtNachHilfe,
   hasUnfinishedWork,
   headerDetails,
   isBusy,
@@ -821,19 +826,21 @@ const noteFile = async ($: $, path: string, isNew: boolean) => {
 const setStuck = ($: $, reason: string) =>
   change($, list => ({ ...list, phase: 'stuck', stuckReason: reason, needsYouReason: null }))
 
-/** Stops Claude's running turn; Continue picks it up again. */
+/** Stops Claude's running turn; Continue picks it up again. True when it paused. */
 const pauseJob = async ($: $) => {
   if (runningTurn === undefined) {
     $.ui.toast('Gerade läuft nichts.')
-    return
+    return false
   }
   isPausing = true
   try {
     await $.turn.abort({ turnId: runningTurn })
     $.ui.toast('Pausiert. Drück Weiter, um dort weiterzumachen, wo Claude aufgehört hat.')
+    return true
   } catch {
     isPausing = false
     $.ui.toast("Pausieren geht gerade nicht. Drück stattdessen Esc, um zu stoppen.")
+    return false
   }
 }
 
@@ -2118,6 +2125,386 @@ function answerOf(text: string): string {
   return text.replace(VORSATZ, '').replace(/<\/local-command-stdout>\s*$/, '').trim()
 }
 
+// Die eigenen Befehle /leitstand-…: je einer für jeden Knopf und Schalter, mit denselben Funktionen dahinter. Jeder
+// antwortet sofort mit Text; ein Fenster geht danach im Hintergrund auf. Vom Handy (Remote Control), wo Fenster nicht
+// zu sehen sind, sagt die Antwort das oder bringt den Inhalt selbst mit.
+
+const NUR_HIER = '(nur in diesem Chat)'
+const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Knopf im Leitstand.'
+const COMPACTING_WORDS = 'Der Chat wird gerade aufgeräumt. Versuch es gleich noch einmal.'
+// The skill behind 🧠, by either name.
+const ADHD_NAMES = ['i-have-adhd:i-have-adhd', 'i-have-adhd']
+const ANSICHT_WORTE = { simple: 'Einfach', detailed: 'Ausführlich', minimal: 'Minimal' } as const
+
+const anAus = (isOn: boolean) => (isOn ? 'an' : 'aus')
+const istJa = (args: string) => args.trim().toLowerCase() === 'ja'
+/** The answer of a switch: its new state, for this chat alone. */
+const zustand = (satz: string, isOn: boolean) => `${satz} jetzt ${anAus(isOn)} ${NUR_HIER}.`
+
+/**
+ * Sets off what a command starts (a message, another command, a compaction) once its answer is given, outside the
+ * command: a message sent from inside it would wait for the session to be idle.
+ */
+const danach = ($: $, run: () => Promise<unknown>) => {
+  $.clock.after(0, () => {
+    void run().catch(() => undefined)
+  })
+}
+
+/** Opens a pane once the command has its answer, without holding it up. */
+const imHintergrund = (open: () => Promise<unknown>) => {
+  void Promise.resolve()
+    .then(open)
+    .catch(() => undefined)
+}
+
+/** Opens the history pane on the day it holds. */
+const oeffneVerlauf = async ($: $) => {
+  const view = await read($, historyAtom)
+  if (view === null) return null
+  return $.ui.open({ id: HISTORY_PANE, title: `Verlauf · ${projectName(view.project)}`, closeOnEscape: true })
+}
+
+/** The plan as plain text, for the phone: every step with its mark, and what each finished one got done. */
+const planAlsText = (list: GlanceChecklist): string => {
+  const mark = (one: GlanceTask) => (one.status === 'done' ? '✓' : one.status === 'active' ? '▶' : '○')
+  const done = list.tasks.filter(one => one.status === 'done').length
+  return [
+    list.title,
+    `${done} von ${list.tasks.length} Schritten fertig.`,
+    '',
+    ...list.tasks.flatMap(one => [`${mark(one)} ${one.name}`, ...(one.status === 'done' && one.summary ? [`   ${one.summary}`] : [])]),
+  ].join('\n')
+}
+
+/** One day's history as plain text, for the phone. */
+const verlaufAlsText = (day: string, entries: readonly GlanceHistoryEntry[]): string => {
+  const line = (one: GlanceHistoryEntry) =>
+    `• ${clockTime(one.startedAt)} ${one.title} (${OUTCOME_WORDS[one.outcome][0]}${one.stepsTotal > 0 ? `, ${one.stepsDone} von ${one.stepsTotal} Schritten` : ''})`
+  return [`Verlauf für ${germanDay(day)}: ${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}.`, ...entries.map(line)].join('\n')
+}
+
+/** Where a skill or another mod's command stands in this session: listed (`hit`), and the name to type (`typed`). */
+const skillLage = async ($: $, names: string[]) => {
+  const hit = await lookUpCommand($, names)
+  return { hit, typed: typedCommand(hit, names) }
+}
+
+/**
+ * What a skill's command answers, and whether to start it as its button does. Not there: the answer says so. Known
+ * only by a prefixed name it waits in the prompt, which the phone does not show: there the answer names it instead.
+ */
+const skillAntwort = (label: string, lage: Awaited<ReturnType<typeof skillLage>>, isPhone: boolean, gestartet: string): { text: string; run: boolean } => {
+  if (lage.typed === null) return { text: `${label} ist in dieser Sitzung nicht verfügbar.`, run: false }
+  if (lage.hit === null) {
+    return isPhone
+      ? { text: `${label} lässt sich von hier nicht starten. Schreib /${lage.typed}.`, run: false }
+      : { text: `/${lage.typed} steht im Eingabefeld: Drück Enter, um zu starten.`, run: true }
+  }
+  return { text: gestartet, run: true }
+}
+
+/** The day's or the week's team report, or your own week: shown and copied as the button does, and the answer itself. */
+const bericht = async ($: $, span: GlanceHistoryView['reportSpan']) => {
+  await showHistory($, dayKey(await now($)), false)
+  await showReportSpan($, span)
+  const view = await read($, historyAtom)
+  if (view === null) return 'Noch kein Verlauf.'
+  imHintergrund(() => oeffneVerlauf($))
+  return reportOf(view)
+}
+
+/** In Gruppenarbeit every plan waits for approval: there, as on the button, nothing changes. */
+const planFreigeben = async ($: $, isOn: boolean) => {
+  if ((await read($, workModeAtom)) === 'dynamisch') {
+    return 'In der Gruppenarbeit wartet jeder Plan auf deine Freigabe: Plan zuerst freigeben ist dort immer an.'
+  }
+  await setApprove($, isOn)
+  return zustand('Plan zuerst freigeben ist', isOn)
+}
+
+/** Remote Control on or off. Through the app's switch it changes at once; /remote-control runs once this command is done. */
+const fernsteuerung = async ($: $, isOn: boolean) => {
+  await readRemote($)
+  const sides = remoteSides(await read($, remoteAtom))
+  const shown = remoteShown(sides)
+  if (shown === 'missing') return 'Remote Control ist hier nicht verfügbar.'
+  if ((shown === 'on') === isOn) return `Remote Control ist schon ${anAus(isOn)}.`
+  const viaApp = isOn ? sides.app !== 'missing' : sides.command !== 'on'
+  if (!viaApp) {
+    danach($, () => toggleRemote($))
+    return `Remote Control geht ${anAus(isOn)} ${NUR_HIER}.`
+  }
+  await toggleRemote($)
+  const after = remoteShown(await read($, remoteAtom))
+  return after === (isOn ? 'on' : 'off') ? zustand('Remote Control ist', isOn) : 'Remote Control ließ sich nicht umschalten.'
+}
+
+/** grill-me: on a topic, else on the current plan; with neither, the phone asks for a topic, the desktop fills the prompt. */
+const ausfragen = async ($: $, args: string, isPhone: boolean) => {
+  const lage = await skillLage($, GRILL_NAMES)
+  if (args !== '') {
+    const answer = skillAntwort('Der Skill grill-me', lage, isPhone, `grill-me fragt dich zu „${args}“ aus.`)
+    if (answer.run) danach($, () => runCommand($, 'grill-me', GRILL_NAMES, args))
+    return answer.text
+  }
+  const list = await read($, checklistAtom)
+  if (list !== null && list.hasPlan && list.tasks.length > 0) {
+    const answer = skillAntwort('Der Skill grill-me', lage, isPhone, 'grill-me fragt dich zum aktuellen Plan aus.')
+    if (answer.run) danach($, () => grillMe($))
+    return answer.text
+  }
+  if (lage.typed === null) return 'Der Skill grill-me ist in dieser Sitzung nicht verfügbar.'
+  if (isPhone) return 'Nenn ein Thema, etwa: /leitstand-ausfragen Umzug der Datenbank'
+  danach($, () => grillMe($))
+  return 'grill-me steht im Eingabefeld: Schreib dein Thema dazu und drück Enter.'
+}
+
+/** Humanize: the last answer, with vermenschlichen when it is German, else with humanizer. */
+const vermenschlichen = async ($: $, isPhone: boolean) => {
+  const messages = await $.session.messages().catch(() => [])
+  const last = [...messages].reverse().find(one => one.role === 'assistant' && one.text.trim() !== '')
+  if (last === undefined) return 'Noch keine Antwort zum Überarbeiten.'
+  const isGerman = isGermanText(last.text)
+  const names = isGerman ? ['anthropic-skills:vermenschlichen', 'humanizer-de'] : ['humanizer']
+  const answer = skillAntwort(isGerman ? 'vermenschlichen' : 'humanizer', await skillLage($, names), isPhone, 'Claude überarbeitet seine letzte Antwort.')
+  if (answer.run) danach($, () => humanizeLast($))
+  return answer.text
+}
+
+/** The shield, after ja: only where a .env has a place and the chat holds a secret; the move itself goes on after. */
+const geheimnisseSichern = async ($: $, args: string) => {
+  if (!istJa(args)) {
+    return 'Würde Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner verschieben und den Chat danach aufräumen; Claude kennt dann nur noch Platzhalter.\nZum Ausführen: /leitstand-geheimnisse-sichern ja'
+  }
+  const folder = await $.session.cwd().catch(() => '')
+  if (folder === '' || folder.replace(/\\/g, '/').includes('scratch-workspaces')) return 'Dieser Chat hat keinen Projektordner, darum gibt es keinen Ort für eine .env.'
+  const found = extractSecrets(chatPieces(await $.session.messages().catch(() => [])))
+  if (found.length === 0) return 'Im Chat stehen keine Passwörter oder Schlüssel.'
+  danach($, () => vaultSecrets($))
+  return 'Verschiebe die Passwörter und Schlüssel dieses Chats in die .env und räume den Chat danach auf.'
+}
+
+/** One day's history: a line on the desktop, where the pane opens beside it; every job on the phone. */
+const verlaufZeigen = async ($: $, args: string, isPhone: boolean) => {
+  const day = dayFromArgument(args, await now($))
+  if (day === null) return 'Versuch /leitstand-verlauf-zeigen, /leitstand-verlauf-zeigen gestern oder /leitstand-verlauf-zeigen 2026-10-06.'
+  await showHistory($, day, false)
+  const entries = (await read($, historyAtom))?.entries ?? []
+  imHintergrund(() => oeffneVerlauf($))
+  if (isPhone) return verlaufAlsText(day, entries)
+  return `Verlauf für ${germanDay(day)}: ${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}. Er ist in der Seitenleiste.`
+}
+
+/** Letzter Stand: the pane, and on the phone the checkpoint itself, masked as the pane masks it. */
+const letzterStand = async ($: $, isPhone: boolean) => {
+  const note = await checkpointOf($).catch(() => null)
+  if (note === null) return 'In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.'
+  imHintergrund(() => showRecap($))
+  if (!isPhone) return 'Der letzte Stand ist in der Seitenleiste.'
+  const at = await read($, checkpointAtom)
+  const bare = note.replace(/^(Checkpoint|Sicherungspunkt):\s*/, '')
+  const text = localTimes((await read($, maskAtom)) ? maskPrivate(bare) : bare)
+  return `Letzter Stand${at === null ? '' : `, gespeichert um ${clockTime(at)}`}:\n\n${text}`
+}
+
+/** What one of the own commands does, as its button does it; its answer. */
+const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boolean): Promise<string> => {
+  switch (name) {
+    case 'leitstand-hilfe':
+      return befehlsUeberblick()
+    case 'leitstand-an':
+    case 'leitstand-aus': {
+      const isOn = name === 'leitstand-an'
+      await setEnabled($, isOn)
+      return zustand('Der Leitstand ist', isOn)
+    }
+    case 'leitstand-tour':
+      await update($, enabledAtom, () => true)
+      await update($, tourAtom, () => 0)
+      return 'Die Begrüßung steht über dem Eingabefeld: Drück Weiter, um sie durchzugehen.'
+
+    case 'leitstand-ansicht-einfach':
+    case 'leitstand-ansicht-ausfuehrlich':
+    case 'leitstand-ansicht-minimal': {
+      const view = name === 'leitstand-ansicht-einfach' ? 'simple' : name === 'leitstand-ansicht-ausfuehrlich' ? 'detailed' : 'minimal'
+      await setView($, view)
+      return `Die Ansicht ist jetzt ${ANSICHT_WORTE[view]} ${NUR_HIER}.`
+    }
+    case 'leitstand-arbeitsmodus-auto':
+    case 'leitstand-arbeitsmodus-gruppenarbeit': {
+      const mode: WorkMode = name === 'leitstand-arbeitsmodus-auto' ? 'auto' : 'dynamisch'
+      await setWorkMode($, mode)
+      return `Die Arbeitsweise ist jetzt ${WORK_MODE_WORDS[mode]} ${NUR_HIER}.`
+    }
+
+    case 'leitstand-plan-starten': {
+      const plan = waitingPlanOf(await read($, checklistAtom))
+      if (plan === null) return 'Gerade wartet kein Plan auf Start.'
+      if (await read($, compactingAtom)) return COMPACTING_WORDS
+      if ((await read($, startingAtom)) === plan) return 'Der Plan startet schon.'
+      danach($, () => startPlan($))
+      return 'Der Plan startet.'
+    }
+    case 'leitstand-pause':
+      if (runningTurn === undefined) return 'Gerade läuft nichts, das sich anhalten ließe.'
+      return (await pauseJob($))
+        ? 'Pausiert. Mit /leitstand-weiter macht Claude dort weiter, wo es aufgehört hat.'
+        : 'Anhalten geht gerade nicht. Drück stattdessen Esc, um zu stoppen.'
+    case 'leitstand-weiter':
+      if (await read($, compactingAtom)) return COMPACTING_WORDS
+      danach($, () => continueJob($))
+      return 'Claude macht weiter.'
+    case 'leitstand-plan-zeigen': {
+      const list = await read($, checklistAtom)
+      if (list === null || !list.hasPlan) return 'Noch kein Plan. Bitte Claude um etwas, dann erscheint hier sein Plan.'
+      imHintergrund(() => showPlan($))
+      return isPhone ? planAlsText(list) : 'Der Plan ist in der Seitenleiste.'
+    }
+    case 'leitstand-letzter-stand-zeigen':
+      return letzterStand($, isPhone)
+    case 'leitstand-neuer-chat':
+      if (!istJa(args)) {
+        return 'Würde eine Übergabenotiz schreiben, diesen Chat leeren und die Notiz als erste Nachricht in den neuen Chat schicken.\nZum Ausführen: /leitstand-neuer-chat ja'
+      }
+      if ((await read($, handoffAtom)) === 'working') return 'Die Übergabenotiz wird schon geschrieben.'
+      danach($, () => startFreshChat($))
+      return `Starte einen neuen Chat mit Übergabenotiz…${isPhone ? ' Kommt danach nichts, schreib /leitstand handoff note.' : ''}`
+    case 'leitstand-abschliessen':
+      if (!(await read($, hasGithubAtom))) return 'Dieses Projekt liegt nicht auf GitHub, darum gibt es hier keinen Push.'
+      if (!istJa(args)) {
+        return 'Würde die Änderungen aufräumen, committen, einen Pull Request öffnen und nach deiner Freigabe mergen.\nZum Ausführen: /leitstand-abschliessen ja'
+      }
+      danach($, () => shipIt($))
+      return 'Liefere auf GitHub aus…'
+
+    case 'leitstand-verlauf-zeigen':
+      return verlaufZeigen($, args, isPhone)
+    case 'leitstand-tagesbericht':
+      return bericht($, 'day')
+    case 'leitstand-wochenbericht':
+      return bericht($, 'week')
+    case 'leitstand-meine-woche':
+      return bericht($, 'mine')
+
+    case 'leitstand-ausfragen':
+      return ausfragen($, args, isPhone)
+    case 'leitstand-sauberer-code': {
+      const answer = skillAntwort('clean-code', await skillLage($, ['clean-code']), isPhone, 'clean-code startet.')
+      if (answer.run) danach($, () => runCleanCode($))
+      return answer.text
+    }
+    case 'leitstand-reflexion': {
+      const answer = skillAntwort('Reflect', await skillLage($, ['reflect']), isPhone, 'Reflect startet.')
+      if (answer.run) danach($, () => runReflect($))
+      return answer.text
+    }
+    case 'leitstand-vermenschlichen':
+      return vermenschlichen($, isPhone)
+    case 'leitstand-dateibaum': {
+      const opened = isPhone ? 'Filetree öffnet sich am Computer; auf dem Handy sind Fenster nicht zu sehen.' : 'Filetree öffnet sich in der Seitenleiste.'
+      const answer = skillAntwort('Filetree', await skillLage($, ['filetree']), isPhone, opened)
+      if (answer.run) danach($, () => openFiletree($))
+      return answer.text
+    }
+    case 'leitstand-adhs-an': {
+      if (await read($, adhdAtom)) return 'Der ADHS-Modus ist schon an.'
+      const answer = skillAntwort('Der ADHS-Modus', await skillLage($, ADHD_NAMES), isPhone, `Der ADHS-Modus geht an ${NUR_HIER}: Claude antwortet mit dem nächsten Schritt zuerst.`)
+      if (answer.run) danach($, () => toggleAdhd($))
+      return answer.text
+    }
+    case 'leitstand-adhs-aus':
+      if (!(await read($, adhdAtom))) return 'Der ADHS-Modus ist schon aus.'
+      danach($, () => toggleAdhd($))
+      return `Der ADHS-Modus geht aus ${NUR_HIER}.`
+    case 'leitstand-fernsteuerung-an':
+    case 'leitstand-fernsteuerung-aus':
+      return fernsteuerung($, name === 'leitstand-fernsteuerung-an')
+
+    case 'leitstand-verdecken-an':
+    case 'leitstand-verdecken-aus': {
+      const isOn = name === 'leitstand-verdecken-an'
+      await setMasking($, isOn)
+      return zustand('Verdecken ist', isOn)
+    }
+    case 'leitstand-passwortschutz-an':
+    case 'leitstand-passwortschutz-aus': {
+      const isOn = name === 'leitstand-passwortschutz-an'
+      await setGuard($, isOn)
+      return zustand('Der Passwortschutz ist', isOn)
+    }
+    case 'leitstand-geheimnisse-sichern':
+      return geheimnisseSichern($, args)
+
+    case 'leitstand-einstellungen-zeigen':
+      imHintergrund(() => showSettings($))
+      return isPhone
+        ? 'Die Einstellungen öffnen sich am Computer; auf dem Handy sind Fenster nicht zu sehen. Umstellen geht hier mit den Befehlen, siehe /leitstand-hilfe.'
+        : 'Die Einstellungen sind in der Seitenleiste.'
+    case 'leitstand-ton-aus':
+    case 'leitstand-ton-signalton':
+    case 'leitstand-ton-stimme': {
+      const mode = name === 'leitstand-ton-aus' ? 'off' : name === 'leitstand-ton-signalton' ? 'chime' : 'voice'
+      await setSound($, mode)
+      return mode === 'off' ? `Töne sind jetzt aus ${NUR_HIER}.` : `Töne sind jetzt an, ${mode === 'voice' ? 'Signalton und Stimme' : 'Signalton'} ${NUR_HIER}.`
+    }
+    case 'leitstand-ton-anhoeren': {
+      const sound = await read($, soundAtom)
+      if (sound === 'off') return 'Die Töne sind aus. Schalt sie erst ein: /leitstand-ton-signalton oder /leitstand-ton-stimme.'
+      void alertSample($, sound).catch(() => undefined)
+      return `Spiele ${sound === 'voice' ? 'Signalton und Stimme' : 'den Signalton'} ab${isPhone ? ', zu hören am Computer' : ''}.`
+    }
+    case 'leitstand-benachrichtigungen-an':
+    case 'leitstand-benachrichtigungen-aus': {
+      const isOn = name === 'leitstand-benachrichtigungen-an'
+      await setNotice($, isOn)
+      return zustand('Desktop-Benachrichtigungen sind', isOn)
+    }
+    case 'leitstand-andere-chats-an':
+    case 'leitstand-andere-chats-aus': {
+      const isOn = name === 'leitstand-andere-chats-an'
+      await setOthers($, isOn)
+      return zustand('Die Anzeige anderer Chats ist', isOn)
+    }
+    case 'leitstand-ruhemodus-an':
+    case 'leitstand-ruhemodus-aus': {
+      const isOn = name === 'leitstand-ruhemodus-an'
+      await setCalm($, isOn)
+      return zustand('Der Ruhemodus ist', isOn)
+    }
+    case 'leitstand-plan-freigeben-an':
+    case 'leitstand-plan-freigeben-aus':
+      return planFreigeben($, name === 'leitstand-plan-freigeben-an')
+    case 'leitstand-github-abschluss-an':
+    case 'leitstand-github-abschluss-aus': {
+      const isOn = name === 'leitstand-github-abschluss-an'
+      await setShipOnGithub($, isOn)
+      return zustand('Auf GitHub abschließen ist', isOn)
+    }
+    case 'leitstand-jetzt-aufraeumen':
+      // Not awaited: the compaction it may start runs once this command is done.
+      danach($, () => tidyUp($))
+      return 'Speichere einen Sicherungspunkt und räume dann den Chat auf.'
+    case 'leitstand-zuruecksetzen':
+      await resetSettings($)
+      return `Alle Leitstand-Einstellungen stehen wieder auf dem Standard ${NUR_HIER}.`
+    default:
+      return BEFEHL_FEHLER
+  }
+}
+
+/** Runs one of the own commands: its help with hilfe or ?, else what it does; any failure as a plain sentence. */
+const leitstandBefehl = async ($: $, name: string, args: string, isPhone: boolean): Promise<string> => {
+  const one = LEITSTAND_BEFEHLE.find(befehl => befehl.name === name)
+  if (one === undefined) return BEFEHL_FEHLER
+  if (fragtNachHilfe(args)) return befehlsHilfe(one)
+  try {
+    return await befehlAusfuehren($, name, args.trim(), isPhone)
+  } catch {
+    return BEFEHL_FEHLER
+  }
+}
+
 export function registerGlance(on: On, options: PluginOptions = {}): void {
   // What a new chat starts with; a change in the config menu reloads the module with the new values.
   defaults = defaultSettings(options)
@@ -2235,6 +2622,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       description:
         'Den Leitstand steuern: /leitstand on|off, details on|off, sound on|voice|off, notify on|off, others on|off, calm on|off, guard on|off, privacy on|off, approve on|off, arbeitsweise auto|dynamisch, ship on|off, week, tour, pause, continue, plan, checkpoint, settings, tidy [at N|off], history [gestern|JJJJ-MM-TT], handoff',
     })
+    // One command of its own for each button and switch; /leitstand stays as the short form. Immediate, like a press:
+    // /leitstand-pause has to reach a running turn, and a switch needs no turn at all.
+    for (const one of LEITSTAND_BEFEHLE) {
+      await $.command
+        .register({ name: one.name, description: one.description, immediate: true, ...(one.argumentHint === undefined ? {} : { argumentHint: one.argumentHint }) })
+        .catch(() => undefined)
+    }
     // A reload drops the module's timers; pick the animation back up.
     syncTicker($, await read($, checklistAtom))
 
@@ -2430,6 +2824,16 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // Only this answer gets "(gemeldet vom Mod Leitstand)" in its stored row (session.append below).
     lastOwnAnswer = answer.text
     return answer
+  })
+
+  // The own commands /leitstand-…: their answer, like /leitstand's, gets "(gemeldet vom Mod Leitstand)" in its stored row.
+  on('command.run', { command: [...LEITSTAND_BEFEHL_NAMEN] }, async ($, e) => {
+    const text = await leitstandBefehl($, e.command, e.args ?? '', e.origin?.kind === 'bridge')
+    lastOwnAnswer = text
+    return { text }
+  }).catch(() => {
+    lastOwnAnswer = BEFEHL_FEHLER
+    return { text: BEFEHL_FEHLER }
   })
 
   // The engine puts the names of the plugins hooking a command before its answer. The Leitstand takes its own out of the

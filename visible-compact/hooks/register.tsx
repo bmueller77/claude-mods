@@ -1,8 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { CommandRunInput, EngineInterface, Register } from 'claude-code'
 
 import type { Chunk, CompactMeta, Side, ViewMode } from '../types'
 import { chunkMessages } from './chunk'
+import { anmeldung, hilfeText, istHilfe, uebersicht, vomHandy } from './knopfbefehle'
+import type { Knopfbefehl } from './knopfbefehle'
 import { TRANSLATE_SYSTEM, maskCode, needsTranslation, readTranslation, unmask } from './translate'
 
 /** Chunks per file: 100 × 4,000 chars stays well under the 4 MiB a file read or write allows. */
@@ -251,13 +253,23 @@ export const translateShown = async ($: EngineInterface) => {
   }
 }
 
-const toggleTranslate = async ($: EngineInterface) => {
-  const isOn = await update($, translate, current => !current)
+/**
+ * Der Knopf Übersetzen / Original zeigen, und /visible-compact-uebersetzen-an|aus: schaltet um ('um') oder setzt,
+ * nur für diesen Chat. `imHintergrund` lässt die Übersetzung laufen, ohne auf sie zu warten.
+ */
+const schalteUebersetzung = async ($: EngineInterface, wert: boolean | 'um', imHintergrund = false) => {
+  const isOn = await update($, translate, current => (wert === 'um' ? !current : wert))
   await $.store.set(TRANSLATE_STORE_PREFIX + (await $.session.id()), { at: await $.clock.now(), isOn })
   if (isOn) {
     await update($, translation, t => ({ ...t, failed: 0 }))
-    await translateShown($)
+    if (imHintergrund) void translateShown($)
+    else await translateShown($)
   }
+  return isOn
+}
+
+const toggleTranslate = async ($: EngineInterface) => {
+  await schalteUebersetzung($, 'um')
 }
 
 const tokens = (n?: number) =>
@@ -311,6 +323,80 @@ export function ohneVorsatz(text: string): string {
   return (m[1] ?? '') + (rest.length ? `${rest.join('+')}: ` : '') + rumpf + trenner + zusatz + ende
 }
 
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /visible-compact-hilfe zeigt die Befehle.'
+
+/** Je Knopf ein Befehl; /show-last-compact bleibt als Kurzform. Die Wirkung steht in `befehlAus`. */
+export const BEFEHLE: readonly Knopfbefehl[] = [
+  {
+    name: 'visible-compact-hilfe',
+    description: 'Listet alle Befehle von Visible Compact',
+    tut: 'Listet alle Befehle von Visible Compact mit je einer Zeile.',
+    knopf: 'keiner, nur Übersicht',
+    geltung: 'überall; ändert nichts',
+    argumente: 'keine',
+    beispiel: '/visible-compact-hilfe',
+  },
+  {
+    name: 'visible-compact-zeigen',
+    description: 'Öffnet das Fenster „Verdichtungen des Chats“ (wie /show-last-compact)',
+    tut: 'Öffnet das Fenster „Verdichtungen des Chats“ mit der neuesten Verdichtung, wie /show-last-compact. Vom Handy aus kommt sie als kurzer Text, denn das Fenster geht nur am Rechner.',
+    knopf: 'keiner; wie /show-last-compact',
+    geltung: 'dieser Chat (seine Verdichtungen)',
+    argumente: 'keine',
+    beispiel: '/visible-compact-zeigen',
+  },
+  {
+    name: 'visible-compact-uebersetzen-an',
+    description: 'Zeigt englische Abschnitte im Fenster auf Deutsch, nur in diesem Chat',
+    tut: 'Schaltet die Übersetzung ein: Englische Abschnitte im Fenster „Verdichtungen des Chats“ erscheinen auf Deutsch.',
+    knopf: '„Übersetzen“ im Fenster',
+    geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus den Einstellungen',
+    argumente: 'keine',
+    beispiel: '/visible-compact-uebersetzen-an',
+  },
+  {
+    name: 'visible-compact-uebersetzen-aus',
+    description: 'Zeigt die Abschnitte im Fenster wieder im Original, nur in diesem Chat',
+    tut: 'Schaltet die Übersetzung aus: Das Fenster „Verdichtungen des Chats“ zeigt die Abschnitte wieder in ihren eigenen Worten.',
+    knopf: '„Original zeigen“ im Fenster',
+    geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus den Einstellungen',
+    argumente: 'keine',
+    beispiel: '/visible-compact-uebersetzen-aus',
+  },
+]
+
+/** /visible-compact-zeigen: erst der Text, das Fenster öffnet sich dahinter; vom Handy die neueste Verdichtung als Text. */
+async function befehlZeigen($: EngineInterface, e: CommandRunInput): Promise<string> {
+  const all = await read($, index)
+  if (all.length === 0) return 'In diesem Chat wurde noch nichts verdichtet. Führ zuerst /compact aus.'
+  if (vomHandy(e)) {
+    const m = all[all.length - 1]!
+    return `Das Fenster geht nur am Rechner. Die neueste Verdichtung: ${optionLabel(m)}, Tokens verringert auf ${tokens(m.tokensAfter)} von ${tokens(m.tokensBefore)}, ${count(m.messages.before, 'Nachricht', 'Nachrichten')} vorher, ${m.messages.after} danach.`
+  }
+  await show($, null)
+  void $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
+  void translateShown($)
+  return '"Verdichtungen des Chats" öffnet sich.'
+}
+
+/** Die Wirkung der Befehle, je wie ihr Knopf; zurück kommt die Antwort in einem Satz. */
+async function befehlAus($: EngineInterface, name: string, e: CommandRunInput): Promise<string> {
+  switch (name) {
+    case 'visible-compact-hilfe':
+      return uebersicht('Visible Compact – die Befehle:', BEFEHLE)
+    case 'visible-compact-zeigen':
+      return befehlZeigen($, e)
+    case 'visible-compact-uebersetzen-an':
+      await schalteUebersetzung($, true, true)
+      return 'Die Übersetzung ist in diesem Chat an: Englische Abschnitte im Fenster erscheinen auf Deutsch.'
+    case 'visible-compact-uebersetzen-aus':
+      await schalteUebersetzung($, false, true)
+      return 'Die Übersetzung ist in diesem Chat aus: Das Fenster zeigt die Abschnitte im Original.'
+    default:
+      return BEFEHL_FEHLER
+  }
+}
+
 export const register: Register = (on, options) => {
   on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
     const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text) } : b))
@@ -326,6 +412,8 @@ export const register: Register = (on, options) => {
       name: COMMAND,
       description: 'Öffnet "Verdichtungen des Chats" wieder: was verdichtet wurde, neben dem, was danach übrig blieb',
     })
+    // Je Knopf ein Befehl; einer, der nicht ankommt, hält die anderen nicht auf.
+    for (const b of BEFEHLE) await $.command.register(anmeldung(b)).catch(() => undefined)
     // Compactions live on disk under the session id, so a restart or --resume picks them up again.
     const saved = await readIndex($)
     await update($, index, () => saved)
@@ -399,6 +487,17 @@ export const register: Register = (on, options) => {
 
     return { text: '"Verdichtungen des Chats" ist geöffnet.' }
   })
+
+  for (const b of BEFEHLE) {
+    on('command.run', { command: b.name }, async ($, e) => {
+      try {
+        if (istHilfe(e.args ?? '')) return { text: hilfeText(b) }
+        return { text: await befehlAus($, b.name, e) }
+      } catch {
+        return { text: BEFEHL_FEHLER }
+      }
+    }).catch(() => ({ text: BEFEHL_FEHLER }))
+  }
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const ui = $.ui.resolve(e)

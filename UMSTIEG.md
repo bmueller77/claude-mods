@@ -43,8 +43,8 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    "mcp__ccd_session_mgmt__set_remote_control" ergänzen, vorhandene Einträge behalten. Sonst
    lehnt der Auto-Modus den Knopf 🛜 ab. Außerdem die Dateien aus `commands/` im Repo (bzw. im
    Zip) nach ~/.claude/commands/ kopieren und eine alte ~/.claude/commands/nachtschicht.md
-   entfernen; dann kennt die App /autopilot, /statistik, /warmhalten, /zusammenfassung,
-   /replay, /reflect und /better schon in der ersten Nachricht.
+   entfernen; dann kennt die App alle Befehle der Mods (über 100, z. B. /leitstand-hilfe,
+   /autopilot-an, /reflect-zeigen) schon in der ersten Nachricht.
 6. Prüfen: `claude plugin list` zeigt die zehn als enabled mit Scope user. Danach neu starten:
    die Desktop-App ganz beenden und öffnen; auf Servern laufende Sitzungen über ihren Dienst neu
    starten (z. B. die Remote-Control-Bridge per systemctl), nicht von Hand im tmux.
@@ -77,6 +77,9 @@ deshalb gleiches Bild auf jeder Instanz.
 
 - Im Terminal (Server) zeichnen die Mods Text und Tastenkürzel, Knöpfe und Bildchen nur in der
   Desktop-App. 🛜 Remote Control gibt es nur dort.
+- Jeder Knopf hat einen Befehl nach dem Muster `/<mod>-<funktion>[-<wert>]`, etwa
+  `/leitstand-arbeitsmodus-gruppenarbeit` oder `/statistik-warmhalten-aus`; `/<mod>-hilfe` listet sie, und jeder
+  Befehl erklärt sich mit `hilfe` dahinter. Vom Handy (Remote Control) ist das der Weg zu allen Schaltern.
 - Einstellungen gelten je Chat: Ein Schalter, den man in einem Chat umlegt, ändert keinen anderen
   Chat. Neue Chats starten mit dem Standard aus dem Einstellungsmenü der App bzw.
   `/plugin configure <mod>@bjoern-mods`. Standard des Leitstands: Auto-Mode, Verdecken und

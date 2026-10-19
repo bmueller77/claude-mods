@@ -354,6 +354,179 @@ export function ohneVorsatz(text: string, name: string, gemeldet: string | null)
     return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
 }
 
+/**
+ * Schaltet den Autopiloten an (`soll`) oder aus, wie /autopilot an und /autopilot aus;
+ * zurueck kommt die Antwort des Befehls.
+ */
+async function schalte($: EngineInterface, soll: boolean): Promise<string> {
+    const s = await read($, schicht)
+    if (!soll) {
+        // Kommt das aus vom Knopf 🅰️ im Leitstand, sagt der Bericht das.
+        const b = await beenden($, s && (await sollAus($, s)) ? GRUND_KNOPF : 'du hast ihn beendet')
+        if (b) {
+            return `Der Autopilot ist aus: ${zahlen(b.geschoben, b.fragen.length)}.`
+        }
+        // Den Druck auf 🅰️ hat die Schicht meist schon am Ende der Runde erledigt;
+        // das /autopilot aus des Leitstands kommt erst danach, wenn die Sitzung still ist.
+        const vorher = await read($, bericht)
+        return vorher?.grund === GRUND_KNOPF
+            ? `Der Autopilot ist aus: ${zahlen(vorher.geschoben, vorher.fragen.length)}.`
+            : 'Der Autopilot war nicht an.'
+    }
+    if (s?.phase === 'laeuft') {
+        return 'Der Autopilot läuft schon. /autopilot aus beendet ihn.'
+    }
+    if (s) {
+        // Angehalten oder fertig: dieselbe Schicht geht weiter, die Zaehler von vorn.
+        const gleich = await fortsetzen($)
+        return `Der Autopilot läuft wieder.${gleich ? ' Claude macht jetzt gleich weiter.' : ''}`
+    }
+    const gleich = await beginnen($)
+    return (
+        'Der Autopilot ist an: Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe. ' +
+        (gleich ? 'Es macht jetzt gleich weiter. ' : '') +
+        'Freigabe-Dialoge halten ihn trotzdem an. /autopilot schaltet ihn wieder aus.'
+    )
+}
+
+/** Die selbst entschiedenen Fragen als Text, wie sie der Knopf Fragen aufklappt. */
+async function fragenAlsText($: EngineInterface): Promise<string> {
+    const s = await read($, schicht)
+    const b = s ? null : await read($, bericht)
+    if (!s && !b) {
+        return 'Der Autopilot war in diesem Chat nicht an, es gibt keine selbst entschiedenen Fragen.'
+    }
+    const fragen = s ? s.fragen : (b?.fragen ?? [])
+    if (fragen.length === 0) {
+        return 'Claude hat bisher keine Frage selbst entschieden.'
+    }
+    const kopf = fragen.length === 1 ? 'Diese Frage hat Claude selbst entschieden:' : `Diese ${fragen.length} Fragen hat Claude selbst entschieden:`
+    return [kopf, ...fragen.map(f => `- ${f}`)].join('\n')
+}
+
+/** Der Knopf Weg: den Bericht einer beendeten Schicht wegraeumen. */
+async function berichtWegText($: EngineInterface): Promise<string> {
+    if (await read($, schicht)) {
+        return 'Der Autopilot läuft noch; einen Bericht gibt es erst, wenn er endet.'
+    }
+    if (!(await read($, bericht))) {
+        return 'Es gibt keinen Bericht des Autopiloten, den man wegräumen könnte.'
+    }
+    await berichtWeg($)
+    return 'Der Bericht des Autopiloten ist weg.'
+}
+
+// --- Befehle mit Hilfe ---
+
+/** Ein Befehl des Mods mit allem, was seine Hilfe sagt. */
+export type Befehl = {
+    name: string
+    /** Die eine Zeile in der Befehlsliste. */
+    description: string
+    argumentHint?: string
+    /** Was er tut. */
+    was: string
+    /** Welchem Knopf er entspricht. */
+    knopf: string
+    /** Wo er gilt. */
+    gilt: string
+    argumente: string
+    beispiel: string
+}
+
+/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform. */
+const KURZFORMEN: readonly { name: string; description: string }[] = [
+    { name: 'autopilot', description: 'schaltet den Autopiloten ein oder aus (Kurzform, versteht an und aus)' },
+]
+
+export const BEFEHLE: readonly Befehl[] = [
+    {
+        name: 'autopilot-hilfe',
+        description: 'Alle Befehle des Autopiloten mit einer Zeile Erklärung (Autopilot)',
+        was: 'Listet alle Befehle des Autopiloten mit einer Zeile Erklärung.',
+        knopf: 'keiner',
+        gilt: 'zeigt nur Text, ändert nichts',
+        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
+        beispiel: '/autopilot-hilfe',
+    },
+    {
+        name: 'autopilot-an',
+        description: 'Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist (Autopilot)',
+        was: 'Schaltet den Autopiloten ein, wie /autopilot an. Claude stellt keine Rückfragen mehr, schiebt Runden ohne Abschluss an und schreibt am Ende eine Übergabe. Ein angehaltener Autopilot läuft wieder.',
+        knopf: 'keiner in der Autopilot-Zeile; dasselbe wie /autopilot an',
+        gilt: 'nur in diesem Chat',
+        argumente: 'keine',
+        beispiel: '/autopilot-an',
+    },
+    {
+        name: 'autopilot-aus',
+        description: 'Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld (Autopilot)',
+        was: 'Beendet den Autopiloten und zeigt seinen Bericht, wie /autopilot aus.',
+        knopf: 'Beenden in der Autopilot-Zeile',
+        gilt: 'nur in diesem Chat',
+        argumente: 'keine',
+        beispiel: '/autopilot-aus',
+    },
+    {
+        name: 'autopilot-fragen-zeigen',
+        description: 'Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text (Autopilot)',
+        was: 'Zeigt die Rückfragen, die Claude während des Autopiloten selbst entschieden hat, als Liste im Chat.',
+        knopf: 'Fragen in der Autopilot-Zeile, hier als Text statt aufgeklappt',
+        gilt: 'nur in diesem Chat; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/autopilot-fragen-zeigen',
+    },
+    {
+        name: 'autopilot-bericht-weg',
+        description: 'Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen (Autopilot)',
+        was: 'Räumt den Bericht des beendeten Autopiloten über dem Eingabefeld weg.',
+        knopf: 'Weg in der Autopilot-Zeile',
+        gilt: 'nur in diesem Chat',
+        argumente: 'keine',
+        beispiel: '/autopilot-bericht-weg',
+    },
+]
+
+/** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
+export function istHilfe(args: string): boolean {
+    const a = args.trim().toLowerCase()
+    return a === 'hilfe' || a === '?'
+}
+
+/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+export function hilfeText(b: Befehl): string {
+    return [`/${b.name}: ${b.was}`, `Knopf: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+}
+
+/** Was ein Befehl sagt, wenn er scheitert. */
+export function fehlerText(name: string): string {
+    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+}
+
+/** Alle Befehle des Mods, je eine Zeile. */
+export function uebersicht(): string {
+    const zeilen = [...BEFEHLE.map(b => ({ name: b.name, description: b.description.replace(/ \(Autopilot\)$/, '') })), ...KURZFORMEN]
+    return ['Befehle des Autopiloten (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
+}
+
+/** Was ein Befehl tut; zurueck kommt die Antwort. */
+async function wirke($: EngineInterface, name: string): Promise<string> {
+    switch (name) {
+        case 'autopilot-hilfe':
+            return uebersicht()
+        case 'autopilot-an':
+            return schalte($, true)
+        case 'autopilot-aus':
+            return schalte($, false)
+        case 'autopilot-fragen-zeigen':
+            return fragenAlsText($)
+        case 'autopilot-bericht-weg':
+            return berichtWegText($)
+        default:
+            throw new Error(`kein Befehl ${name}`)
+    }
+}
+
 export const register: Register = (on, options) => {
     maxRunden = Math.max(1, Math.floor(Number(options.maxRunden ?? 10)))
 
@@ -370,6 +543,17 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
+        // Je Knopf ein eigener Befehl, dazu die Hilfe.
+        for (const b of BEFEHLE) {
+            await $.command
+                .register({
+                    name: b.name,
+                    description: b.description,
+                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
+                    immediate: true,
+                })
+                .catch(() => {})
+        }
         return next(e)
     })
 
@@ -384,39 +568,22 @@ export const register: Register = (on, options) => {
         const arg = e.args.trim().toLowerCase()
         const s = await read($, schicht)
         const soll = arg === 'an' || arg === 'ein' ? true : arg === 'aus' ? false : s === null
-
-        if (!soll) {
-            // Kommt das aus vom Knopf 🅰️ im Leitstand, sagt der Bericht das.
-            const b = await beenden($, s && (await sollAus($, s)) ? GRUND_KNOPF : 'du hast ihn beendet')
-            if (b) {
-                return { text: `Der Autopilot ist aus: ${zahlen(b.geschoben, b.fragen.length)}.` }
-            }
-            // Den Druck auf 🅰️ hat die Schicht meist schon am Ende der Runde erledigt;
-            // das /autopilot aus des Leitstands kommt erst danach, wenn die Sitzung still ist.
-            const vorher = await read($, bericht)
-            return {
-                text:
-                    vorher?.grund === GRUND_KNOPF
-                        ? `Der Autopilot ist aus: ${zahlen(vorher.geschoben, vorher.fragen.length)}.`
-                        : 'Der Autopilot war nicht an.',
-            }
-        }
-        if (s?.phase === 'laeuft') {
-            return { text: 'Der Autopilot läuft schon. /autopilot aus beendet ihn.' }
-        }
-        if (s) {
-            // Angehalten oder fertig: dieselbe Schicht geht weiter, die Zaehler von vorn.
-            const gleich = await fortsetzen($)
-            return { text: `Der Autopilot läuft wieder.${gleich ? ' Claude macht jetzt gleich weiter.' : ''}` }
-        }
-        const gleich = await beginnen($)
-        return {
-            text:
-                'Der Autopilot ist an: Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe. ' +
-                (gleich ? 'Es macht jetzt gleich weiter. ' : '') +
-                'Freigabe-Dialoge halten ihn trotzdem an. /autopilot schaltet ihn wieder aus.',
-        }
+        return { text: await schalte($, soll) }
     })
+
+    // Die Einzelbefehle: jeder versteht hilfe und ?, und ein Fehler wird ein schlichter Satz.
+    for (const b of BEFEHLE) {
+        on('command.run', { command: b.name }, async ($, e) => {
+            if (istHilfe(e.args)) {
+                return { text: hilfeText(b) }
+            }
+            try {
+                return { text: await wirke($, b.name) }
+            } catch {
+                return { text: fehlerText(b.name) }
+            }
+        }).catch(() => ({ text: fehlerText(b.name) }))
+    }
 
     on('prompt.submit', async ($, e, next) => {
         const s = await read($, schicht)

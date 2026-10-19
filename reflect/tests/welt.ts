@@ -105,7 +105,11 @@ export function welt(on: On, opts: Opts = {}) {
     filled.push({ text: e.text, mode: e.mode })
     return { isFilled: true } as never
   })
-  on('command.register', async ($, e) => ok({ command: e.name }))
+  const angemeldet: { name: string; description: string; argumentHint?: string; immediate?: true }[] = []
+  on('command.register', async ($, e) => {
+    angemeldet.push(e)
+    return ok({ command: e.name })
+  })
   on('ui.toast', async ($, e) => {
     toasts.push(e.text)
     return VOID
@@ -132,7 +136,7 @@ export function welt(on: On, opts: Opts = {}) {
   on('turn.start', async ($, e) => ({ turnId: e.turnId }) as never)
   on('tool.call', async () => ({ result: 'ok' }) as never)
   on('turn.complete', async ($, e) => ({ text: e.answer }) as never)
-  return { clock, files, asked, systems, filled, toasts, opened, closed, copied, forks, submitted }
+  return { clock, files, asked, systems, filled, toasts, opened, closed, copied, forks, submitted, angemeldet }
 }
 
 export const start = ($: Engine) =>

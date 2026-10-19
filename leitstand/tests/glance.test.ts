@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 
 const PLAN = 'mcp__leitstand__plan_steps'
@@ -7140,6 +7140,24 @@ describe('Verdecken und Tresor', () => {
     expect(state.toasts.find(one => one.startsWith('Die .env ließ sich nicht schreiben ('))).toMatch(/\(.+\)\. Der Chat bleibt, wie er ist\.$/)
     expect(state.compacts).toEqual([])
   })
+
+  test('/leitstand-geheimnisse-sichern: ohne ja passiert nichts, mit ja wie 🛡️ beim zweiten Druck', VIEW_SIMPLE, async ($, on) => {
+    const state = await vaultWorld($, on, { messages: CHAT, files: { 'C:\\work\\shop\\.git\\HEAD': 'ref' } })
+    const run = async (args: string) => String((await $.command.run({ command: 'leitstand-geheimnisse-sichern', args } as never)).text)
+    const { setTimeout: later } = globalThis as unknown as { setTimeout: (done: () => void, ms: number) => unknown }
+    const asked = await run('')
+    expect(asked.endsWith('\nZum Ausführen: /leitstand-geheimnisse-sichern ja')).toBe(true)
+    await state.clock.advance(1)
+    await new Promise<void>(done => later(done, 20))
+    expect(state.writes).toEqual([])
+    expect(state.compacts).toEqual([])
+
+    expect(await run('ja')).toBe('Verschiebe die Passwörter und Schlüssel dieses Chats in die .env und räume den Chat danach auf.')
+    await state.clock.advance(1)
+    await new Promise<void>(done => later(done, 50))
+    expect(state.files.get('C:/work/shop/.env')).toContain(`GITHUB_TOKEN=${GITHUB}\n`)
+    expect(state.compacts).toHaveLength(1)
+  })
 })
 
 // Messages the person wrote while a plan waited for Start; each asked for the work, none said "leg los".
@@ -8293,3 +8311,345 @@ function rows(sitzung: ReturnType<typeof mock.session>): string[] {
     return typeof b?.text === 'string' ? b.text : ''
   })
 }
+
+describe('Eigene Befehle /leitstand-…', () => {
+  const START = { cwd: '/work', surface: 'terminal' } as never
+  type Spec = { name: string; description: string; argumentHint?: string; immediate?: boolean }
+  /** Runs a command as typed, at the computer or from the phone (Remote Control); its answer. */
+  const run = async ($: Engine, command: string, args = '', kind: 'composer' | 'bridge' = 'composer') =>
+    String((await $.command.run({ command, args, origin: { kind } } as never)).text)
+  /** Reads Leitstand's state from another plugin: /zustand answers with the values the tests look at. */
+  const STATE_READER = {
+    name: 'state-reader',
+    register(on: On) {
+      // A module names each value it reads: these are the ones the tests here look at.
+      on('command.run', { command: 'zustand' }, async $ => {
+        const read: Record<string, { value?: unknown }> = {
+          glanceEnabled: (await $.state.get({ plugin: 'leitstand', key: 'glanceEnabled' } as never)) as { value?: unknown },
+          detailLevel: (await $.state.get({ plugin: 'leitstand', key: 'detailLevel' } as never)) as { value?: unknown },
+          workMode: (await $.state.get({ plugin: 'leitstand', key: 'workMode' } as never)) as { value?: unknown },
+          masksPrivate: (await $.state.get({ plugin: 'leitstand', key: 'masksPrivate' } as never)) as { value?: unknown },
+          isGuarded: (await $.state.get({ plugin: 'leitstand', key: 'isGuarded' } as never)) as { value?: unknown },
+          isNoticing: (await $.state.get({ plugin: 'leitstand', key: 'isNoticing' } as never)) as { value?: unknown },
+          showsOthers: (await $.state.get({ plugin: 'leitstand', key: 'showsOthers' } as never)) as { value?: unknown },
+          isCalm: (await $.state.get({ plugin: 'leitstand', key: 'isCalm' } as never)) as { value?: unknown },
+          approvePlan: (await $.state.get({ plugin: 'leitstand', key: 'approvePlan' } as never)) as { value?: unknown },
+          shipsOnGithub: (await $.state.get({ plugin: 'leitstand', key: 'shipsOnGithub' } as never)) as { value?: unknown },
+          soundMode: (await $.state.get({ plugin: 'leitstand', key: 'soundMode' } as never)) as { value?: unknown },
+          adhdMode: (await $.state.get({ plugin: 'leitstand', key: 'adhdMode' } as never)) as { value?: unknown },
+        }
+        return { text: JSON.stringify(Object.fromEntries(Object.entries(read).map(([key, one]) => [key, one.value ?? null]))) }
+      })
+    },
+  }
+  const READS = { plugins: [STATE_READER] }
+  const stateOf = async ($: Engine, key: string): Promise<unknown> =>
+    (JSON.parse(String((await $.command.run({ command: 'zustand', args: '' } as never)).text)) as Record<string, unknown>)[key]
+  /** Real time for what a command started without waiting for it: a skill, a message, a pane. */
+  const settle = async (clock?: { advance: (ms: number) => Promise<unknown> }) => {
+    // What a command sets off starts on the clock, once its answer is given.
+    await clock?.advance(1)
+    const { setTimeout: later } = globalThis as unknown as { setTimeout: (done: () => void, ms: number) => unknown }
+    await new Promise<void>(done => later(done, 20))
+  }
+
+  test('jeder Befehl ist registriert, mit Beschreibung und sofort (immediate) wie ein Druck, und erklärt sich mit hilfe', READS, async ($, on) => {
+    world(on)
+    on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+    on('tool.register', () => ({ value: undefined }) as never)
+    const registered: Spec[] = []
+    on('command.register', (_, e) => {
+      registered.push(e as unknown as Spec)
+      return { value: undefined } as never
+    })
+    await $.session.start(START)
+
+    const names = LEITSTAND_BEFEHLE.map(one => one.name)
+    expect(names).toHaveLength(51)
+    expect(new Set(names).size).toBe(names.length)
+    const short = registered.find(one => one.name === 'leitstand')
+    expect(short).toBeDefined()
+    for (const one of LEITSTAND_BEFEHLE) {
+      expect(one.name.startsWith('leitstand-')).toBe(true)
+      const spec = registered.find(r => r.name === one.name)
+      expect(spec?.description).toBe(one.description)
+      expect(one.description.length).toBeGreaterThan(5)
+      expect(spec?.argumentHint).toBe(one.argumentHint)
+      expect(spec?.immediate).toBe(true)
+      for (const ask of ['hilfe', '?', ' Hilfe ']) {
+        const help = await run($, one.name, ask)
+        expect(help.startsWith(`/${one.name}: ${one.description}\n`)).toBe(true)
+        for (const part of ['\nWas: ', '\nKnopf: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand-']) expect(help).toContain(part)
+        if (one.gilt !== 'einmal') expect(help).toContain('nur in diesem Chat')
+      }
+    }
+    expect(registered.find(one => one.name === 'leitstand-verlauf-zeigen')?.argumentHint).toBe('[gestern|JJJJ-MM-TT]')
+    expect(registered.find(one => one.name === 'leitstand-ausfragen')?.argumentHint).toBe('[Thema]')
+    for (const name of ['leitstand-geheimnisse-sichern', 'leitstand-neuer-chat', 'leitstand-abschliessen']) {
+      expect(registered.find(one => one.name === name)?.argumentHint).toBe('[ja]')
+    }
+    // Asking for help changes nothing.
+    expect(await stateOf($, 'glanceEnabled')).toBe(true)
+    expect(await stateOf($, 'masksPrivate')).toBe(true)
+    expect(await stateOf($, 'isGuarded')).toBe(true)
+  })
+
+  test('leitstand-hilfe listet alle Befehle nach Gruppen, je eine Zeile', async ($, on) => {
+    world(on)
+    const lines = (await run($, 'leitstand-hilfe')).split('\n')
+    for (const one of LEITSTAND_BEFEHLE) {
+      const own = lines.filter(line => line.startsWith(`/${one.name}:`) || line.startsWith(`/${one.name} [`))
+      expect(own).toEqual([`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''}: ${one.description}`])
+    }
+    for (const gruppe of new Set(LEITSTAND_BEFEHLE.map(one => one.gruppe))) expect(lines).toContain(gruppe)
+  })
+
+  test('jeder Schalter wirkt wie sein Knopf, nur in diesem Chat, und die Antwort nennt den neuen Zustand', READS, async ($, on) => {
+    const { store, session } = resumeWorld(on)
+    session.id = 'chat-1'
+    await $.session.start(START)
+    // Command, state, its value after, the chat's own setting, its value.
+    const cases: [string, string, unknown, string, unknown][] = [
+      ['leitstand-aus', 'glanceEnabled', false, 'enabled', false],
+      ['leitstand-an', 'glanceEnabled', true, 'enabled', true],
+      ['leitstand-ansicht-ausfuehrlich', 'detailLevel', 'detailed', 'detail', 'detailed'],
+      ['leitstand-ansicht-minimal', 'detailLevel', 'minimal', 'detail', 'minimal'],
+      ['leitstand-ansicht-einfach', 'detailLevel', 'simple', 'detail', 'simple'],
+      ['leitstand-arbeitsmodus-gruppenarbeit', 'workMode', 'dynamisch', 'workMode', 'dynamisch'],
+      ['leitstand-arbeitsmodus-auto', 'workMode', 'auto', 'workMode', 'auto'],
+      ['leitstand-verdecken-aus', 'masksPrivate', false, 'mask', false],
+      ['leitstand-verdecken-an', 'masksPrivate', true, 'mask', true],
+      ['leitstand-passwortschutz-aus', 'isGuarded', false, 'guard', false],
+      ['leitstand-passwortschutz-an', 'isGuarded', true, 'guard', true],
+      ['leitstand-benachrichtigungen-an', 'isNoticing', true, 'notice', true],
+      ['leitstand-benachrichtigungen-aus', 'isNoticing', false, 'notice', false],
+      ['leitstand-andere-chats-aus', 'showsOthers', false, 'others', false],
+      ['leitstand-andere-chats-an', 'showsOthers', true, 'others', true],
+      ['leitstand-ruhemodus-an', 'isCalm', true, 'calm', true],
+      ['leitstand-ruhemodus-aus', 'isCalm', false, 'calm', false],
+      ['leitstand-plan-freigeben-an', 'approvePlan', true, 'approve', true],
+      ['leitstand-plan-freigeben-aus', 'approvePlan', false, 'approve', false],
+      ['leitstand-github-abschluss-an', 'shipsOnGithub', true, 'ship', true],
+      ['leitstand-github-abschluss-aus', 'shipsOnGithub', false, 'ship', false],
+      ['leitstand-ton-signalton', 'soundMode', 'chime', 'sound', 'chime'],
+      ['leitstand-ton-stimme', 'soundMode', 'voice', 'sound', 'voice'],
+      ['leitstand-ton-aus', 'soundMode', 'off', 'sound', 'off'],
+    ]
+    for (const [command, key, value, field, saved] of cases) {
+      expect(await run($, command)).toMatch(/ jetzt .+ \(nur in diesem Chat\)\.$/)
+      expect(await stateOf($, key)).toEqual(value)
+      expect((store.get('settings:chat-1') as { values: Record<string, unknown> }).values[field]).toEqual(saved)
+    }
+    expect(await run($, 'leitstand-verdecken-aus')).toBe('Verdecken ist jetzt aus (nur in diesem Chat).')
+    await run($, 'leitstand-ruhemodus-an')
+
+    // Another chat starts with the defaults from the config menu; the first one, opened again, has its own.
+    session.id = 'chat-2'
+    await $.session.start(START)
+    expect(await stateOf($, 'masksPrivate')).toBe(true)
+    expect(await stateOf($, 'isCalm')).toBe(false)
+    expect(store.has('settings:chat-2')).toBe(false)
+    session.id = 'chat-1'
+    await $.session.start(START)
+    expect(await stateOf($, 'masksPrivate')).toBe(false)
+    expect(await stateOf($, 'isCalm')).toBe(true)
+
+    // Zurücksetzen as its button: this chat's own values go.
+    expect(await run($, 'leitstand-zuruecksetzen')).toBe('Alle Leitstand-Einstellungen stehen wieder auf dem Standard (nur in diesem Chat).')
+    expect(store.has('settings:chat-1')).toBe(false)
+    expect(await stateOf($, 'masksPrivate')).toBe(true)
+  })
+
+  test('in der Gruppenarbeit bleibt Plan zuerst freigeben an, wie am Knopf, und die Antwort sagt es', READS, async ($, on) => {
+    const { store, session } = resumeWorld(on)
+    session.id = 'chat-1'
+    await $.session.start(START)
+    await run($, 'leitstand-arbeitsmodus-gruppenarbeit')
+    for (const command of ['leitstand-plan-freigeben-aus', 'leitstand-plan-freigeben-an']) {
+      expect(await run($, command)).toBe('In der Gruppenarbeit wartet jeder Plan auf deine Freigabe: Plan zuerst freigeben ist dort immer an.')
+    }
+    expect(await stateOf($, 'approvePlan')).toBe(false)
+    expect((store.get('settings:chat-1') as { values: Record<string, unknown> }).values).toEqual({ workMode: 'dynamisch' })
+  })
+
+  test('ADHS an und aus wirken wie 🧠, ausdrücklich: ein zweites an sagt, dass er schon an ist', READS, async ($, on) => {
+    const clock = world(on)
+    const runs: string[] = []
+    const sent: string[] = []
+    on('command.list', () => ({ value: [{ name: 'i-have-adhd:i-have-adhd', description: 'ADHS', source: 'plugin' }] }) as never)
+    on('command.run', (_, e) => {
+      runs.push(e.command)
+      return { text: '' }
+    })
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      return { text: e.text }
+    })
+    expect(await run($, 'leitstand-adhs-aus')).toBe('Der ADHS-Modus ist schon aus.')
+    expect(await run($, 'leitstand-adhs-an')).toBe('Der ADHS-Modus geht an (nur in diesem Chat): Claude antwortet mit dem nächsten Schritt zuerst.')
+    await settle(clock)
+    expect(runs).toEqual(['i-have-adhd:i-have-adhd'])
+    expect(await stateOf($, 'adhdMode')).toBe(true)
+    expect(await run($, 'leitstand-adhs-an')).toBe('Der ADHS-Modus ist schon an.')
+    expect(runs).toHaveLength(1)
+    expect(await run($, 'leitstand-adhs-aus')).toBe('Der ADHS-Modus geht aus (nur in diesem Chat).')
+    await settle(clock)
+    expect(await stateOf($, 'adhdMode')).toBe(false)
+    expect(sent).toEqual(['stop adhd mode'])
+  })
+
+  test('Remote Control an und aus wie 🛜; ohne Remote Control sagt der Befehl, dass es hier nicht geht', async ($, on) => {
+    world(on)
+    let app: 'on' | 'off' | null = null
+    on('command.list', () => ({ value: [] }) as never)
+    on('mcp.call', (_, e) => {
+      if (app === null) throw new Error(`MCP server ${e.server} is not connected`)
+      if (e.tool === 'set_remote_control') app = e.args.enabled === true ? 'on' : 'off'
+      return { value: { content: [{ type: 'text', text: JSON.stringify({ remoteControlState: app }) }], isError: false } } as never
+    })
+    expect(await run($, 'leitstand-fernsteuerung-an')).toBe('Remote Control ist hier nicht verfügbar.')
+    app = 'off'
+    expect(await run($, 'leitstand-fernsteuerung-aus')).toBe('Remote Control ist schon aus.')
+    expect(await run($, 'leitstand-fernsteuerung-an')).toBe('Remote Control ist jetzt an (nur in diesem Chat).')
+    expect(app).toBe('on')
+    expect(await run($, 'leitstand-fernsteuerung-an')).toBe('Remote Control ist schon an.')
+    expect(await run($, 'leitstand-fernsteuerung-aus')).toBe('Remote Control ist jetzt aus (nur in diesem Chat).')
+    expect(app).toBe('off')
+  })
+
+  test('Neuer Chat: ohne ja passiert nichts, mit ja schreibt Claude die Notiz, leert den Chat und schickt sie', async ($, on) => {
+    const clock = world(on)
+    const NOTE = 'Fortsetzung aus einem früheren Chat. So ist der Stand: Das Menü ist repariert.'
+    const forks: string[] = []
+    const runs: string[] = []
+    const sent: string[] = []
+    on('model.fork', (_, e) => {
+      forks.push(String((e as { prompt: string }).prompt))
+      return { value: { isAnswered: true, text: NOTE, usage: {} } } as never
+    })
+    on('command.run', (_, e) => {
+      runs.push(e.command)
+      return { text: '' }
+    })
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      return { text: e.text }
+    })
+    for (const args of ['', 'vielleicht']) {
+      const asked = await run($, 'leitstand-neuer-chat', args)
+      expect(asked.startsWith('Würde eine Übergabenotiz schreiben')).toBe(true)
+      expect(asked.endsWith('\nZum Ausführen: /leitstand-neuer-chat ja')).toBe(true)
+    }
+    await settle(clock)
+    expect(forks).toEqual([])
+    expect(runs).toEqual([])
+    expect(sent).toEqual([])
+
+    expect(await run($, 'leitstand-neuer-chat', 'ja')).toBe('Starte einen neuen Chat mit Übergabenotiz…')
+    await settle(clock)
+    expect(forks).toHaveLength(1)
+    expect(runs).toEqual(['clear'])
+    expect(sent).toEqual([NOTE])
+  })
+
+  test('Abschließen: ohne ja passiert nichts, mit ja geht der Auftrag wie mit Push an GitHub', async ($, on) => {
+    const { sent, clock } = await shipWorld($, on, 'git@github.com:me/site.git\n')
+    // As Push, once the job is done.
+    await finish($)
+    const asked = await run($, 'leitstand-abschliessen')
+    expect(asked.endsWith('\nZum Ausführen: /leitstand-abschliessen ja')).toBe(true)
+    await settle(clock)
+    expect(sent).toEqual([])
+    expect(await run($, 'leitstand-abschliessen', 'ja')).toBe('Liefere auf GitHub aus…')
+    await settle(clock)
+    await run($, 'leitstand-hilfe')
+    await settle(clock)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('Liefere sie auf GitHub aus')
+  })
+
+  test('Abschließen gibt es nur in einem GitHub-Projekt, wie den Knopf Push', async ($, on) => {
+    const { sent, clock } = await shipWorld($, on, '')
+    expect(await run($, 'leitstand-abschliessen', 'ja')).toBe('Dieses Projekt liegt nicht auf GitHub, darum gibt es hier keinen Push.')
+    await settle(clock)
+    expect(sent).toEqual([])
+  })
+
+  test('vom Handy bringt ein Fenster-Befehl den Inhalt als Text; am Computer geht das Fenster nach der Antwort auf', async ($, on) => {
+    world(on)
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(String((e as { id?: string }).id))
+      return { value: { isPlaced: true } } as never
+    })
+    expect(await run($, 'leitstand-plan-zeigen', '', 'bridge')).toBe('Noch kein Plan. Bitte Claude um etwas, dann erscheint hier sein Plan.')
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+    await callTool($, { tool: PROGRESS, task: 'Lies die Notizen', percent: 100, summary: 'Die Notizen gelesen' })
+
+    const phone = await run($, 'leitstand-plan-zeigen', '', 'bridge')
+    expect(phone.split('\n').slice(1)).toEqual(['1 von 2 Schritten fertig.', '', '✓ Lies die Notizen', '   Die Notizen gelesen', '▶ Baue die Tabelle'])
+    expect(await run($, 'leitstand-plan-zeigen')).toBe('Der Plan ist in der Seitenleiste.')
+    await settle()
+    expect(opened).toEqual(['leitstand-plan', 'leitstand-plan'])
+    expect(await run($, 'leitstand-einstellungen-zeigen', '', 'bridge')).toContain('auf dem Handy sind Fenster nicht zu sehen')
+    expect(await run($, 'leitstand-einstellungen-zeigen')).toBe('Die Einstellungen sind in der Seitenleiste.')
+    await settle()
+    expect(opened.at(-1)).toBe('leitstand-settings')
+  })
+
+  test('Tagesbericht, Wochenbericht und Deine Woche stehen als Text in der Antwort, kopiert wie am Knopf', async ($, on) => {
+    world(on)
+    const copied: string[] = []
+    on('session.cwd', () => ({ value: '/work/landing-site' }) as never)
+    on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+    on('ui.copy', (_, e) => {
+      copied.push(String((e as { text: string }).text))
+      return { value: { isCopied: true } } as never
+    })
+    const day = await run($, 'leitstand-tagesbericht')
+    expect(day.startsWith('Tagesbericht · landing-site · ')).toBe(true)
+    expect(day).toContain('An diesem Tag wurde keine geplante Arbeit erfasst.')
+    const week = await run($, 'leitstand-wochenbericht', '', 'bridge')
+    expect(week.startsWith('Wochenbericht · landing-site · ')).toBe(true)
+    const mine = await run($, 'leitstand-meine-woche')
+    expect(mine.startsWith('Deine Woche mit Claude · ')).toBe(true)
+    expect(copied).toEqual([day, week, mine])
+  })
+
+  test('der Verlauf vom Handy listet die Aufgaben; ein falsches Datum sagt, wie es geht', async ($, on) => {
+    world(on)
+    on('session.cwd', () => ({ value: '/work/landing-site' }) as never)
+    on('ui.open', () => ({ value: { isPlaced: true } }) as never)
+    expect(await run($, 'leitstand-verlauf-zeigen', 'morgen')).toBe(
+      'Versuch /leitstand-verlauf-zeigen, /leitstand-verlauf-zeigen gestern oder /leitstand-verlauf-zeigen 2026-10-06.',
+    )
+    expect(await run($, 'leitstand-verlauf-zeigen', 'gestern', 'bridge')).toMatch(/^Verlauf für \d\d\.\d\d\.\d{4}: 0 Aufgaben\.$/)
+    expect(await run($, 'leitstand-verlauf-zeigen')).toMatch(/: 0 Aufgaben\. Er ist in der Seitenleiste\.$/)
+  })
+
+  test('Plan starten ohne wartenden Plan sagt das; ein Fehler kommt als schlichter Satz', async ($, on) => {
+    world(on)
+    on('session.cwd', () => {
+      throw new Error('kein Ordner')
+    })
+    expect(await run($, 'leitstand-plan-starten')).toBe('Gerade wartet kein Plan auf Start.')
+    expect(await run($, 'leitstand-pause')).toBe('Gerade läuft nichts, das sich anhalten ließe.')
+    expect(await run($, 'leitstand-verlauf-zeigen')).toBe('Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Knopf im Leitstand.')
+  })
+
+  test('der Vorsatz-Hook hängt die Herkunft auch an die Antwort eines neuen Befehls', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on)
+    on('ui.toast', () => ({ value: undefined }) as never)
+    const sitzung = mock.session(on)
+    const text = await run($, 'leitstand-ruhemodus-an')
+    expect(text).toBe('Der Ruhemodus ist jetzt an (nur in diesem Chat).')
+    await append($, `<local-command-stdout>leitstand: ${text}</local-command-stdout>`)
+    expect(rows(sitzung)).toEqual([`<local-command-stdout>${text} (gemeldet vom Mod Leitstand)</local-command-stdout>`])
+    // A help of several lines gets it on a line of its own.
+    const help = await run($, 'leitstand-pause', 'hilfe')
+    await append($, `<local-command-stdout>leitstand: ${help}</local-command-stdout>`)
+    expect(rows(sitzung)[1]).toBe(`<local-command-stdout>${help}\n(gemeldet vom Mod Leitstand)</local-command-stdout>`)
+  })
+})

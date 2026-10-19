@@ -14,6 +14,17 @@ Vorhandene Instanz umstellen (alte Mods raus, aktuelle rein): Prompt in [UMSTIEG
 
 In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/statistik`, `/warmhalten`, `/zusammenfassung`, `/replay`, `/reflect`, `/better`). Nach `~/.claude/commands/` kopiert, kennt die App diese Befehle schon in der ersten Nachricht einer Sitzung.
 
+## Befehle für jeden Knopf
+
+Alles, was sich per Knopf schalten oder auslösen lässt, geht auch per Befehl, damit es auch vom Handy aus
+geht. Die Namen folgen dem Muster `/<mod>-<funktion>[-<wert>]`, zum Beispiel `/leitstand-arbeitsmodus-gruppenarbeit`,
+`/leitstand-verdecken-an`, `/statistik-warmhalten-aus`, `/autopilot-an`, `/reflect-speichern-global 2`. Jeder Mod hat
+`/<mod>-hilfe` mit allen Befehlen, und jeder Befehl erklärt sich mit `hilfe` dahinter (`/leitstand-verdecken-an hilfe`).
+Befehle, die wie ein doppelter Knopfdruck etwas Größeres auslösen (`/leitstand-neuer-chat`, `/leitstand-abschliessen`,
+`/leitstand-geheimnisse-sichern`), wollen ein `ja` dahinter. Die alten Kurzformen (`/leitstand …`, `/better`, `/reflect …`,
+`/autopilot`, `/warmhalten`) gehen weiter. In `commands/` liegt für jeden Befehl eine kleine Datei, damit die Desktop-App
+ihn schon in der ersten Nachricht eines Chats kennt.
+
 ## Installiert install.sh
 
 | Mod | Quelle | Was er tut | Kostet Tokens |

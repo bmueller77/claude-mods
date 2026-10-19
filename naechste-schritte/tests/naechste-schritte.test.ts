@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { leseVorschlaege, passtInEineZeile } from '../hooks/register'
+import { BEFEHLE, GEMELDET, fehlerText, hilfeText, leseVorschlaege, passtInEineZeile } from '../hooks/register'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 160 } }
 const ANTWORT = 'Ich habe Tests fuer das Login-Formular geschrieben, sie laufen lokal durch.'
@@ -308,5 +308,138 @@ describe('naechste-schritte', () => {
         expect(leseVorschlaege(`${'Wort '.repeat(30)}\nkurz`)).toEqual(['kurz']) // zu lang: weg, nicht gekuerzt
         expect(passtInEineZeile(['a', 'b'], 60)).toBe(true)
         expect(passtInEineZeile(['a'.repeat(40), 'b'.repeat(40)], 80)).toBe(false)
+    })
+})
+
+// --- Die Einzelbefehle ---
+
+const NEUE = ['naechste-schritte-hilfe', 'naechste-schritte-zeigen', 'naechste-schritte-1', 'naechste-schritte-2', 'naechste-schritte-3']
+
+const befehl = async ($: any, name: string, args = '') => String((await $.command.run({ command: name, args })).text ?? '')
+
+/** Befehlsantworten, wie die Engine sie speichert; zurueck kommen die Zeilen, wie der Mod sie umschrieb. */
+async function gespeichert($: any, on: any, ...texte: string[]): Promise<string[]> {
+    const sitzung = mock.session(on)
+    for (const [n, t] of texte.entries()) {
+        await $.session.append({
+            message: { type: 'system', name: 'local_command', content: [{ type: 'text', text: t }] },
+            door: 'command',
+            origin: { kind: 'engine' },
+            uuid: `befehl-${n}`,
+        })
+    }
+    return sitzung.appended().map((z: any) => {
+        const b = z.message.content[0]
+        return typeof b?.text === 'string' ? b.text : ''
+    })
+}
+
+describe('naechste-schritte: Befehle', () => {
+    test('die Tabelle der Einzelbefehle ist vollstaendig', () => {
+        expect(BEFEHLE.map(b => b.name)).toEqual(NEUE)
+    })
+
+    for (const b of BEFEHLE) {
+        test(`/${b.name}: registriert, mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
+            const angemeldet: { name: string; description: string; argumentHint?: string; immediate?: boolean }[] = []
+            engine(on, () => MODELL)
+            on('command.register', (_$: any, e: any) => {
+                angemeldet.push(e)
+                return { value: { command: e.name } }
+            })
+            await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/arbeit' } as any)
+            const eintrag = angemeldet.find(a => a.name === b.name)
+            expect(eintrag?.description).toBe(b.description)
+            expect(b.description).toMatch(/[äöüÄÖÜß]/)
+            expect(eintrag?.argumentHint).toBe(b.argumentHint)
+            expect(eintrag?.immediate).toBe(true)
+            for (const arg of ['hilfe', '?', ' Hilfe ']) {
+                const t = await befehl($, b.name, arg)
+                expect(t).toBe(hilfeText(b))
+                for (const teil of [`/${b.name}: `, 'Knopf: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+                    expect(t).toContain(teil)
+                }
+            }
+        })
+    }
+
+    test('/naechste-schritte-hilfe listet alle Befehle des Mods mit einer Zeile', async ($, on) => {
+        engine(on, () => MODELL)
+        const zeilen = (await befehl($, 'naechste-schritte-hilfe')).split('\n')
+        for (const name of NEUE) {
+            expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
+        }
+        expect(zeilen).toHaveLength(NEUE.length + 1)
+    })
+
+    test('/naechste-schritte-zeigen nennt die Vorschlaege nummeriert und laesst sie stehen', async ($, on) => {
+        engine(on, () => MODELL)
+        expect(await befehl($, 'naechste-schritte-zeigen')).toBe('Gerade gibt es keine Vorschläge für den nächsten Schritt.')
+        await rundeFertig($)
+        expect(await befehl($, 'naechste-schritte-zeigen')).toBe(
+            'Als Nächstes:\n1. Fuehr die neuen Tests aus\n2. Mach dasselbe fuer die Einstellungen\n3. Oeffne einen Entwurf fuer den PR',
+        )
+        // Die Zeile des Befehls geht durch prompt.submit; die Vorschlaege bleiben trotzdem.
+        await $.prompt.submit({
+            text: '/naechste-schritte-zeigen',
+            command: { name: 'naechste-schritte-zeigen', args: '' },
+            wait: false,
+            origin: { kind: 'composer' },
+        } as any)
+        const ui = await band($)
+        expect(await ui.find({ type: 'Text', text: /^Fuehr die neuen Tests aus$/ })).toBeDefined()
+        await ui.unmount()
+    })
+
+    for (const n of [1, 2, 3]) {
+        test(`/naechste-schritte-${n} schickt Vorschlag ${n} als Nachricht der Person ab`, async ($, on) => {
+            const gesendet: { text: string; origin: unknown }[] = []
+            const uhr = mock.clock(on, { now: 1_000_000 })
+            engine(on, () => MODELL, [], gesendet)
+            await rundeFertig($)
+            const vorschlag = MODELL.split('\n')[n - 1]!
+            expect(await befehl($, `naechste-schritte-${n}`)).toBe(`Vorschlag ${n} ist abgeschickt: ${vorschlag}`)
+            // Abgeschickt wird erst nach der Antwort des Befehls.
+            expect(gesendet).toEqual([])
+            await uhr.advance(0)
+            await warte()
+            expect(gesendet.map(e => e.text)).toEqual([vorschlag])
+            expect(gesendet[0]?.origin).toMatchObject({ kind: 'plugin', asUser: true })
+        })
+    }
+
+    test('ohne Vorschlag schicken die Befehle nichts ab und sagen das', async ($, on) => {
+        const gesendet: { text: string; origin: unknown }[] = []
+        engine(on, () => 'Fuehr die neuen Tests aus\nMach dasselbe fuer die Einstellungen', [], gesendet)
+        expect(await befehl($, 'naechste-schritte-1')).toBe('Gerade gibt es keine Vorschläge, abgeschickt ist nichts.')
+        await rundeFertig($)
+        expect(await befehl($, 'naechste-schritte-3')).toBe('Gerade gibt es keinen 3. Vorschlag, nur 2; abgeschickt ist nichts.')
+        await warte()
+        expect(gesendet).toEqual([])
+    })
+
+    test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) => {
+        engine(on, () => MODELL)
+        // Ein kaputter Wert im Zustand: die Liste fehlt.
+        on('state.get', () => ({ value: { value: { turnId: 't1', eintraege: null }, version: 1 } }))
+        await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/arbeit' } as any)
+        expect(await befehl($, 'naechste-schritte-2')).toBe(fehlerText('naechste-schritte-2'))
+        expect(fehlerText('naechste-schritte-2')).toBe('/naechste-schritte-2 hat nicht geklappt. Versuch es gleich noch einmal.')
+    })
+
+    test('die gespeicherte Befehlsantwort nennt den Mod am Ende statt davor', async ($, on) => {
+        expect(
+            await gespeichert(
+                $,
+                on,
+                '<local-command-stdout>naechste-schritte: Vorschlag 1 ist abgeschickt: Mach weiter</local-command-stdout>',
+                '<local-command-stdout>statistik+naechste-schritte: Als Nächstes:\n1. A\n</local-command-stdout>',
+                '<local-command-stdout>statistik: Erledigt.</local-command-stdout>',
+            ),
+        ).toEqual([
+            `<local-command-stdout>Vorschlag 1 ist abgeschickt: Mach weiter ${GEMELDET}</local-command-stdout>`,
+            `<local-command-stdout>statistik: Als Nächstes:\n1. A\n${GEMELDET}\n</local-command-stdout>`,
+            '<local-command-stdout>statistik: Erledigt.</local-command-stdout>',
+        ])
     })
 })

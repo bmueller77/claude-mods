@@ -231,6 +231,9 @@ const zuletztBeschaeftigt = new Map<RenderSurface, boolean>()
  */
 let lauf: { takt: { cancel: () => void }; flaeche: RenderSurface } | null = null
 
+/** Auf welcher Flaeche die Leiste zuletzt gezeichnet wurde; ein getippter Befehl handelt mit ihrem Stand. */
+let zuletztFlaeche: RenderSurface | null = null
+
 // --- Kleine Helfer ---
 
 /** Tokens kurz: 1234 als "1,2k", 123456 als "123k". */
@@ -1385,6 +1388,225 @@ export function ohneVorsatz(text: string, name: string, gemeldet: string | null)
     return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
 }
 
+// --- Befehle mit Hilfe ---
+
+/** Warmhalten fuer `ms`, wie /warmhalten mit Dauer; zurueck kommt die Antwort. */
+async function warmFenster($: EngineInterface, ms: number): Promise<string> {
+    const jetzt = await $.clock.now()
+    await starteFenster($, ms)
+    return istKalt(jetzt)
+        ? `Warmhalten an für ${dauer(ms)}. Der Cache ist gerade kalt; gepingt wird ab der nächsten Antwort.`
+        : `Warmhalten an für ${dauer(ms)}. Kurz vor jedem Ablauf hält ein Ping den Cache warm.`
+}
+
+/** /statistik-warmhalten-an: ohne Angabe 6 h wie /warmhalten, sonst die Dauer. */
+async function warmhaltenAn($: EngineInterface, args: string): Promise<string> {
+    const wort = args.trim().toLowerCase()
+    const ms = wort === '' ? FENSTER_MS : leseDauer(wort)
+    if (ms == null) {
+        return '/statistik-warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.'
+    }
+    return warmFenster($, ms)
+}
+
+/** /statistik-warmhalten-immer: warm ohne Ende in diesem Chat. */
+async function warmhaltenImmer($: EngineInterface): Promise<string> {
+    const jetzt = await $.clock.now()
+    await starteImmer($)
+    return istKalt(jetzt)
+        ? 'Warmhalten an, ohne Ende in diesem Chat. Der Cache ist gerade kalt; gepingt wird ab der nächsten Antwort.'
+        : 'Warmhalten an, ohne Ende in diesem Chat.'
+}
+
+/** /statistik-warmhalten-aus: wie das Kreuz neben dem Schalter. */
+async function warmhaltenAus($: EngineInterface): Promise<string> {
+    await stoppe($, null)
+    return 'Warmhalten ist aus.'
+}
+
+/**
+ * Schwamm oder Pfeil als Befehl, ohne Countdown: Ein getippter Befehl ist kein Versehen.
+ *
+ * Laeuft gerade ein Countdown von einem Knopf, endet er, damit nichts zweimal geschieht.
+ * Flaeche und Arbeit kommen aus der letzten Zeichnung der Leiste, wie beim Ablauf des
+ * Countdowns; ohne Leiste wird /compact eingereiht. Die Aktion laeuft nach der Antwort.
+ */
+async function sofort($: EngineInterface, was: Countdown['was']): Promise<string> {
+    if (lauf) {
+        stoppeLauf()
+        await update($, countdown, () => null)
+    }
+    if ((await read($, eingereiht)) !== null) {
+        return 'Es wartet schon ein Verdichten; es läuft, sobald Claude fertig ist.'
+    }
+    const flaeche = zuletztFlaeche ?? 'desktop'
+    const istBeschaeftigt = zuletztBeschaeftigt.get(flaeche) ?? false
+    if (was === 'wischen') {
+        $.clock.after(0, () => void wische($, istBeschaeftigt, flaeche, false).catch(() => {}))
+        return 'Der Chat wird jetzt aufgeräumt.'
+    }
+    $.clock.after(0, () => void verdichte($, istBeschaeftigt, flaeche, false, 'compact').catch(() => {}))
+    return 'Der Kontext wird jetzt verdichtet.'
+}
+
+/** Wie 📊: /context nach der Antwort; vom Handy statt der Anzeige eine Zeile Text. */
+async function kontextBefehl($: EngineInterface, vomHandy: boolean): Promise<string> {
+    if (vomHandy) {
+        const k = await messeKontext($)
+        const zeile =
+            k && k.window > 0
+                ? `Kontext: ${kurz(k.tokens)} von ${kurz(k.window)} Tokens belegt (${Math.round((k.tokens / k.window) * 100)} %), verdichtet wird bei ${kurz(k.threshold)}.`
+                : 'Den Kontext konnte ich gerade nicht messen.'
+        return `${zeile} Die ausführliche Kontext-Anzeige gibt es nur am Rechner.`
+    }
+    $.clock.after(0, () => void zeigeKontext($).catch(() => {}))
+    return 'Die Kontext-Anzeige (/context) geht gleich auf.'
+}
+
+/** Ein Befehl des Mods mit allem, was seine Hilfe sagt. */
+export type Befehl = {
+    name: string
+    /** Die eine Zeile in der Befehlsliste. */
+    description: string
+    argumentHint?: string
+    /** Was er tut. */
+    was: string
+    /** Welchem Knopf er entspricht. */
+    knopf: string
+    /** Wo er gilt. */
+    gilt: string
+    argumente: string
+    beispiel: string
+}
+
+/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform. */
+const KURZFORMEN: readonly { name: string; description: string }[] = [
+    { name: 'statistik', description: 'Cache, Kontext, Kosten und Warmhalten im Überblick (Kurzform)' },
+    { name: 'warmhalten', description: 'Warmhalten mit Dauer, immer, aus oder status (Kurzform)' },
+]
+
+export const BEFEHLE: readonly Befehl[] = [
+    {
+        name: 'statistik-hilfe',
+        description: 'Alle Befehle der Statistik mit einer Zeile Erklärung (Statistik)',
+        was: 'Listet alle Befehle der Statistik mit einer Zeile Erklärung.',
+        knopf: 'keiner',
+        gilt: 'zeigt nur Text, ändert nichts',
+        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
+        beispiel: '/statistik-hilfe',
+    },
+    {
+        name: 'statistik-zeigen',
+        description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick, wie /statistik (Statistik)',
+        was: 'Zeigt Modell, Cache, Kontext, Kosten, Nutzungslimits und Warmhalten dieser Sitzung als Text, wie /statistik.',
+        knopf: 'keiner; dasselbe wie /statistik',
+        gilt: 'für diesen Chat; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/statistik-zeigen',
+    },
+    {
+        name: 'statistik-kontext-zeigen',
+        description: 'Den Kontext im Detail zeigen: /context, die Anzeige der App (Statistik)',
+        was: 'Öffnet die Kontext-Anzeige über /context, sobald die Sitzung still ist. Vom Handy kommt stattdessen eine Zeile mit belegtem Kontext und Schwelle.',
+        knopf: '📊 in der Statistik-Leiste',
+        gilt: 'für diesen Chat; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/statistik-kontext-zeigen',
+    },
+    {
+        name: 'statistik-warmhalten-an',
+        description: 'Prompt-Cache warm halten, ohne Angabe 6 h, sonst so lange wie angegeben (Statistik)',
+        argumentHint: '[Dauer, z. B. 3h oder 90m]',
+        was: 'Hält den Prompt-Cache warm: Kurz vor jedem Ablauf stellt ein Ping eine winzige Anfrage. Ohne Angabe 6 h wie /warmhalten, sonst die angegebene Dauer.',
+        knopf: '🔥 bzw. ❄️ in der Statistik-Leiste; der Knopf legt je Druck 3 h drauf',
+        gilt: 'nur in diesem Chat',
+        argumente: 'eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe 6 h',
+        beispiel: '/statistik-warmhalten-an 3h',
+    },
+    {
+        name: 'statistik-warmhalten-immer',
+        description: 'Prompt-Cache ohne Ende warm halten, bis dieser Chat endet (Statistik)',
+        was: 'Hält den Prompt-Cache ohne Ende warm, bis der Chat endet.',
+        knopf: '🔥 in der Statistik-Leiste, bei 12:00 noch einmal gedrückt',
+        gilt: 'nur in diesem Chat, bis er endet',
+        argumente: 'keine',
+        beispiel: '/statistik-warmhalten-immer',
+    },
+    {
+        name: 'statistik-warmhalten-aus',
+        description: 'Warmhalten des Prompt-Caches sofort ausschalten (Statistik)',
+        was: 'Schaltet das Warmhalten sofort aus, ob mit Frist oder ohne Ende.',
+        knopf: '✖️ neben dem Warmhalten-Schalter',
+        gilt: 'nur in diesem Chat',
+        argumente: 'keine',
+        beispiel: '/statistik-warmhalten-aus',
+    },
+    {
+        name: 'statistik-chat-aufraeumen',
+        description: 'Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown (Statistik)',
+        was: 'Räumt den Chat auf: mit dem Leitstand über /leitstand tidy (erst ein Sicherungspunkt der Arbeit, dann verdichten), sonst mit GlanceFlow über /glanceflow tidy, sonst ein schlichtes /compact. Sofort, ohne Countdown; ein laufender Countdown endet dabei.',
+        knopf: '🧽 neben der Chatlänge, aber ohne die zehn Sekunden Countdown',
+        gilt: 'für diesen Chat',
+        argumente: 'keine',
+        beispiel: '/statistik-chat-aufraeumen',
+    },
+    {
+        name: 'statistik-verdichten',
+        description: 'Den Kontext verdichten (/compact), sofort ohne Countdown (Statistik)',
+        was: 'Verdichtet den Kontext mit /compact, zwischen zwei Runden sofort, sonst sobald Claude fertig ist. Ohne Countdown; ein laufender Countdown endet dabei.',
+        knopf: '🔻 am Kontext, aber ohne die zehn Sekunden Countdown',
+        gilt: 'für diesen Chat',
+        argumente: 'keine',
+        beispiel: '/statistik-verdichten',
+    },
+]
+
+/** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
+export function istHilfe(args: string): boolean {
+    const a = args.trim().toLowerCase()
+    return a === 'hilfe' || a === '?'
+}
+
+/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+export function hilfeText(b: Befehl): string {
+    return [`/${b.name}: ${b.was}`, `Knopf: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+}
+
+/** Was ein Befehl sagt, wenn er scheitert. */
+export function fehlerText(name: string): string {
+    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+}
+
+/** Alle Befehle des Mods, je eine Zeile. */
+export function uebersicht(): string {
+    const zeilen = [...BEFEHLE.map(b => ({ name: b.name, description: b.description.replace(/ \(Statistik\)$/, '') })), ...KURZFORMEN]
+    return ['Befehle der Statistik (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
+}
+
+/** Was ein Befehl tut; zurueck kommt die Antwort. */
+async function wirke($: EngineInterface, name: string, args: string, vomHandy: boolean): Promise<string> {
+    switch (name) {
+        case 'statistik-hilfe':
+            return uebersicht()
+        case 'statistik-zeigen':
+            return karte(await $.clock.now(), await read($, cache), await read($, context), await read($, nutzung))
+        case 'statistik-kontext-zeigen':
+            return kontextBefehl($, vomHandy)
+        case 'statistik-warmhalten-an':
+            return warmhaltenAn($, args)
+        case 'statistik-warmhalten-immer':
+            return warmhaltenImmer($)
+        case 'statistik-warmhalten-aus':
+            return warmhaltenAus($)
+        case 'statistik-chat-aufraeumen':
+            return sofort($, 'wischen')
+        case 'statistik-verdichten':
+            return sofort($, 'compact')
+        default:
+            throw new Error(`kein Befehl ${name}`)
+    }
+}
+
 export const register: Register = (on, options) => {
     z.gewaehlt = String(options.cacheLaufzeit ?? 'auto')
 
@@ -1455,6 +1677,17 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
+        // Je Knopf ein eigener Befehl, dazu die Hilfe.
+        for (const b of BEFEHLE) {
+            await $.command
+                .register({
+                    name: b.name,
+                    description: b.description,
+                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
+                    immediate: true,
+                })
+                .catch(() => {})
+        }
 
         // Jede Minute neu zeichnen: die Uhr laeuft mit der Zeit ab, ohne Ereignis.
         $.clock.every(60_000, () => {
@@ -1707,6 +1940,22 @@ export const register: Register = (on, options) => {
         return { text: karte(jetzt, await read($, cache), await read($, context), await read($, nutzung)) }
     })
 
+    // Die Einzelbefehle: jeder versteht hilfe und ?, und ein Fehler wird ein schlichter Satz.
+    for (const b of BEFEHLE) {
+        on('command.run', { command: b.name }, async ($, e) => {
+            if (istHilfe(e.args)) {
+                return { text: hilfeText(b) }
+            }
+            try {
+                // Vom Handy (Remote Control) geht keine Anzeige auf.
+                const vomHandy = (e.origin as { kind?: string } | undefined)?.kind === 'bridge'
+                return { text: await wirke($, b.name, e.args, vomHandy) }
+            } catch {
+                return { text: fehlerText(b.name) }
+            }
+        }).catch(() => ({ text: fehlerText(b.name) }))
+    }
+
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
         if (e.props.hasSurvey) {
             return next(e)
@@ -1724,6 +1973,7 @@ export const register: Register = (on, options) => {
         const cd = lauf ? cdGelesen : null
         void (await read($, tick))
         zuletztBeschaeftigt.set(e.surface, e.props.isWorking)
+        zuletztFlaeche = e.surface
 
         const elemente = $.ui.resolve(e)
         const { Box, Button, Text } = elemente

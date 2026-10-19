@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 
-import { FERTIG, FRAGE_ABGELEHNT, GRUND_FERTIG, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, istFertig } from '../hooks/register'
+import { BEFEHLE, FERTIG, FRAGE_ABGELEHNT, GRUND_FERTIG, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, fehlerText, hilfeText, istFertig } from '../hooks/register'
 
 const BAND = { plugin: 'autopilot', component: 'AbovePrompt' } as const
 
@@ -1015,4 +1015,143 @@ test('die Antwort von /autopilot selbst bleibt ohne Herkunft', async ($, on) => 
     boden(on)
     const r = await $.command.run({ command: 'autopilot', args: 'aus' } as never)
     expect(r.text).toBe('Der Autopilot war nicht an.')
+})
+
+// --- Die Einzelbefehle ---
+
+const NEUE = ['autopilot-hilfe', 'autopilot-an', 'autopilot-aus', 'autopilot-fragen-zeigen', 'autopilot-bericht-weg']
+
+test('die Tabelle der Einzelbefehle ist vollstaendig', () => {
+    expect(BEFEHLE.map(b => b.name)).toEqual(NEUE)
+})
+
+for (const b of BEFEHLE) {
+    test(`/${b.name}: registriert, mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
+        const angemeldet: { name: string; description: string; argumentHint?: string; immediate?: boolean }[] = []
+        on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
+        on('command.register', (_$, e, _next) => {
+            angemeldet.push(e as never)
+            return { value: { command: e.name } }
+        })
+        await start($ as never)
+        const eintrag = angemeldet.find(a => a.name === b.name)
+        expect(eintrag?.description).toBe(b.description)
+        expect(b.description.length).toBeGreaterThan(20)
+        expect(b.description).toMatch(/[äöüÄÖÜß]|^[A-ZÄÖÜ]/)
+        expect(eintrag?.argumentHint).toBe(b.argumentHint)
+        expect(eintrag?.immediate).toBe(true)
+        for (const arg of ['hilfe', '?', ' Hilfe ']) {
+            const t = await befehl$($ as never, b.name, arg)
+            expect(t).toBe(hilfeText(b))
+            for (const teil of [`/${b.name}: `, 'Knopf: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+                expect(t).toContain(teil)
+            }
+        }
+    })
+}
+
+async function befehl$($: Test$, name: string, args = '') {
+    const r = await $.command.run({ command: name, args } as never)
+    return String(r.text ?? '')
+}
+
+test('/autopilot-hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzform eingeschlossen', async ($, on) => {
+    boden(on)
+    await start($ as never)
+    const t = await befehl$($ as never, 'autopilot-hilfe')
+    const zeilen = t.split('\n')
+    for (const b of BEFEHLE) {
+        expect(zeilen.filter(z => z.startsWith(`/${b.name}: `))).toHaveLength(1)
+    }
+    expect(zeilen.filter(z => z.startsWith('/autopilot: '))).toHaveLength(1)
+    expect(zeilen).toHaveLength(BEFEHLE.length + 2)
+})
+
+test('/autopilot-an und /autopilot-aus wirken wie /autopilot an und der Knopf Beenden', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    expect(await befehl$($ as never, 'autopilot-an')).toContain('Der Autopilot ist an')
+    expect(await befehl$($ as never, 'autopilot-an')).toBe('Der Autopilot läuft schon. /autopilot aus beendet ihn.')
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rückfragen weiter')
+    expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeDefined()
+
+    expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot ist aus: 0x angeschoben.')
+    const danach = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await leiste(danach as never)).toContain('vorbei, du hast ihn beendet')
+    expect(await danach.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
+    expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot war nicht an.')
+})
+
+test('/autopilot-an schiebt nach einer Runde gleich an, wie /autopilot an', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const eingang = boden(on)
+    await start($ as never)
+    await person($ as never, 'Bau das.')
+    await runde($ as never, 't1', 'Soll ich weitermachen?')
+    expect(await befehl$($ as never, 'autopilot-an')).toContain('Es macht jetzt gleich weiter.')
+    await clock.advance(1000)
+    expect(angeschoben(eingang)).toHaveLength(1)
+})
+
+test('/autopilot-fragen-zeigen nennt die selbst entschiedenen Fragen als Text, auch nach dem Ende', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    expect(await befehl$($ as never, 'autopilot-fragen-zeigen')).toContain('nicht an')
+    await befehl$($ as never, 'autopilot-an')
+    expect(await befehl$($ as never, 'autopilot-fragen-zeigen')).toBe('Claude hat bisher keine Frage selbst entschieden.')
+    const frage = (q: string) => ({ tool: 'AskUserQuestion', questions: [{ question: q, header: 'X', multiSelect: false, options: [] }] })
+    await $.tool.call(frage('Welche Datenbank?') as never)
+    expect(await befehl$($ as never, 'autopilot-fragen-zeigen')).toBe('Diese Frage hat Claude selbst entschieden:\n- Welche Datenbank?')
+    await $.tool.call(frage('Welcher Port?') as never)
+    await befehl$($ as never, 'autopilot-aus')
+    expect(await befehl$($ as never, 'autopilot-fragen-zeigen')).toBe(
+        'Diese 2 Fragen hat Claude selbst entschieden:\n- Welche Datenbank?\n- Welcher Port?',
+    )
+    // Nur Text: die Liste in der Leiste bleibt zu.
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await leiste(ui as never)).not.toContain('Welche Datenbank?')
+})
+
+test('/autopilot-bericht-weg raeumt den Bericht weg wie der Knopf Weg', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    boden(on)
+    await start($ as never)
+    expect(await befehl$($ as never, 'autopilot-bericht-weg')).toContain('keinen Bericht')
+    await befehl$($ as never, 'autopilot-an')
+    expect(await befehl$($ as never, 'autopilot-bericht-weg')).toContain('läuft noch')
+    await befehl$($ as never, 'autopilot-aus')
+    expect(await befehl$($ as never, 'autopilot-bericht-weg')).toBe('Der Bericht des Autopiloten ist weg.')
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).toBe('engine')
+
+    // Der Knopf: derselbe Zustand.
+    await befehl$($ as never, 'autopilot-an')
+    await befehl$($ as never, 'autopilot-aus')
+    const knopf = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await knopf.press({ key: 'ap-weg' })
+    expect(await leiste(knopf as never)).toBe('engine')
+})
+
+test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) => {
+    boden(on)
+    let kaputt = false
+    on('state.get', (_$, e, next) => {
+        if (kaputt) {
+            throw new Error('kaputt')
+        }
+        return next(e)
+    })
+    await start($ as never)
+    kaputt = true
+    expect(await befehl$($ as never, 'autopilot-an')).toBe(fehlerText('autopilot-an'))
+    expect(fehlerText('autopilot-an')).toBe('/autopilot-an hat nicht geklappt. Versuch es gleich noch einmal.')
+})
+
+test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', async ($, on) => {
+    expect(await gespeichert($, on, '<local-command-stdout>autopilot: Der Bericht des Autopiloten ist weg.</local-command-stdout>')).toEqual([
+        '<local-command-stdout>Der Bericht des Autopiloten ist weg. (gemeldet vom Mod Autopilot)</local-command-stdout>',
+    ])
 })

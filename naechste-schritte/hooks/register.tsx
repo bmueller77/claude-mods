@@ -35,6 +35,157 @@ const TRENNLINIE_SVG =
 // Beim Host gehalten, so ueberleben die Vorschlaege ein Neuladen des Moduls.
 const vorschlaege = atom({ plugin: 'naechste-schritte', key: 'vorschlaege' } as const, null as Vorschlaege | null)
 
+/** Wie die Engine eine Befehlsantwort beginnt: die Namen der Mods, die den Befehl hooken, mit + verbunden. */
+const VORSATZ = /^(<local-command-stdout>)([a-z0-9-]+(?:\+[a-z0-9-]+)*): /
+/** Steht statt des Vorsatzes am Ende einer Antwort von Naechste-Schritte. */
+export const GEMELDET = '(gemeldet vom Mod Nächste Schritte)'
+
+/**
+ * Die gespeicherte Zeile einer Befehlsantwort ohne `name` im Vorsatz; andere Namen bleiben stehen.
+ *
+ * Mit `gemeldet` steht am Ende, von wem die Antwort kommt: nach einer Zeile mit
+ * Leerzeichen, nach mehreren in einer eigenen letzten Zeile.
+ */
+export function ohneVorsatz(text: string, name: string, gemeldet: string | null): string {
+    const m = VORSATZ.exec(text)
+    const namen = m?.[2]?.split('+') ?? []
+    if (!m || !namen.includes(name)) {
+        return text
+    }
+    const rest = namen.filter(n => n !== name)
+    const kopf = (m[1] ?? '') + (rest.length > 0 ? `${rest.join('+')}: ` : '')
+    const rumpf = text.slice(m[0].length)
+    if (gemeldet === null) {
+        return kopf + rumpf
+    }
+    const ende = rumpf.lastIndexOf('</local-command-stdout>')
+    const innen = ende < 0 ? rumpf : rumpf.slice(0, ende)
+    const kern = innen.trimEnd()
+    const schluss = innen.slice(kern.length) + (ende < 0 ? '' : rumpf.slice(ende))
+    return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
+}
+
+// --- Befehle mit Hilfe ---
+
+/** Ein Befehl des Mods mit allem, was seine Hilfe sagt. */
+export type Befehl = {
+    name: string
+    /** Die eine Zeile in der Befehlsliste. */
+    description: string
+    argumentHint?: string
+    /** Was er tut. */
+    was: string
+    /** Welchem Knopf er entspricht. */
+    knopf: string
+    /** Wo er gilt. */
+    gilt: string
+    argumente: string
+    beispiel: string
+}
+
+/** Ein Befehl je Vorschlag: /naechste-schritte-1 bis -3. */
+function vorschlagBefehl(n: number): Befehl {
+    return {
+        name: `naechste-schritte-${n}`,
+        description: `Den ${n}. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken (Nächste Schritte)`,
+        was: `Schickt den ${n}. Vorschlag unter „Als Nächstes“ gleich als deine Nachricht ab. Gibt es ihn nicht, sagt der Befehl das und schickt nichts.`,
+        knopf: `${n}️⃣ in der App, im Terminal die Ziffer ${n} im leeren Eingabefeld; die holen den Vorschlag erst als Entwurf, der Befehl schickt ihn sofort ab`,
+        gilt: 'für die Vorschläge nach der letzten Antwort in diesem Chat',
+        argumente: 'keine',
+        beispiel: `/naechste-schritte-${n}`,
+    }
+}
+
+export const BEFEHLE: readonly Befehl[] = [
+    {
+        name: 'naechste-schritte-hilfe',
+        description: 'Alle Befehle von Nächste Schritte mit einer Zeile Erklärung (Nächste Schritte)',
+        was: 'Listet alle Befehle von Nächste Schritte mit einer Zeile Erklärung.',
+        knopf: 'keiner',
+        gilt: 'zeigt nur Text, ändert nichts',
+        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
+        beispiel: '/naechste-schritte-hilfe',
+    },
+    {
+        name: 'naechste-schritte-zeigen',
+        description: 'Die aktuellen Vorschläge für den nächsten Schritt nummeriert als Text (Nächste Schritte)',
+        was: 'Zeigt die Vorschläge nach der letzten Antwort nummeriert als Text, etwa wenn das Band über dem Eingabefeld nicht zu sehen ist.',
+        knopf: 'keiner; dieselben Vorschläge stehen unter „Als Nächstes“ über dem Eingabefeld',
+        gilt: 'für die Vorschläge nach der letzten Antwort in diesem Chat; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/naechste-schritte-zeigen',
+    },
+    vorschlagBefehl(1),
+    vorschlagBefehl(2),
+    vorschlagBefehl(3),
+]
+
+/** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
+export function istHilfe(args: string): boolean {
+    const a = args.trim().toLowerCase()
+    return a === 'hilfe' || a === '?'
+}
+
+/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+export function hilfeText(b: Befehl): string {
+    return [`/${b.name}: ${b.was}`, `Knopf: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+}
+
+/** Was ein Befehl sagt, wenn er scheitert. */
+export function fehlerText(name: string): string {
+    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+}
+
+/** Alle Befehle des Mods, je eine Zeile. */
+export function uebersicht(): string {
+    return [
+        'Befehle von Nächste Schritte (jeder versteht hilfe oder ? als Argument):',
+        ...BEFEHLE.map(b => `/${b.name}: ${b.description.replace(/ \(Nächste Schritte\)$/, '')}`),
+    ].join('\n')
+}
+
+/** Die Vorschlaege als nummerierte Liste. */
+async function zeigeVorschlaege($: EngineInterface): Promise<string> {
+    const v = await read($, vorschlaege)
+    if (!v || v.eintraege.length === 0) {
+        return 'Gerade gibt es keine Vorschläge für den nächsten Schritt.'
+    }
+    return ['Als Nächstes:', ...v.eintraege.map((t, i) => `${i + 1}. ${t}`)].join('\n')
+}
+
+/** Den Vorschlag `n` (ab 1) als Nachricht der Person abschicken. */
+async function schickeVorschlag($: EngineInterface, n: number): Promise<string> {
+    const v = await read($, vorschlaege)
+    if (!v || v.eintraege.length === 0) {
+        return 'Gerade gibt es keine Vorschläge, abgeschickt ist nichts.'
+    }
+    const wahl = v.eintraege[n - 1]
+    if (!wahl) {
+        return `Gerade gibt es keinen ${n}. Vorschlag, nur ${v.eintraege.length}; abgeschickt ist nichts.`
+    }
+    // Im Hintergrund, nach dem Befehl: Er antwortet sofort, die Nachricht geht raus, sobald die Sitzung frei ist.
+    $.clock.after(0, () => void $.prompt.submit({ text: wahl, asUser: true }).catch(() => {}))
+    return `Vorschlag ${n} ist abgeschickt: ${wahl}`
+}
+
+/** Was ein Befehl tut; zurueck kommt die Antwort. */
+async function wirke($: EngineInterface, name: string): Promise<string> {
+    switch (name) {
+        case 'naechste-schritte-hilfe':
+            return uebersicht()
+        case 'naechste-schritte-zeigen':
+            return zeigeVorschlaege($)
+        case 'naechste-schritte-1':
+            return schickeVorschlag($, 1)
+        case 'naechste-schritte-2':
+            return schickeVorschlag($, 2)
+        case 'naechste-schritte-3':
+            return schickeVorschlag($, 3)
+        default:
+            throw new Error(`kein Befehl ${name}`)
+    }
+}
+
 export const register: Register = on => {
     // Die Runde, fuer die ein Vorschlag noch gelten darf. Ein Abschicken oder eine neue Runde ruecken sie weiter.
     let aktuell = ''
@@ -42,7 +193,48 @@ export const register: Register = on => {
     // Eine Umfrage nimmt blanke Ziffern selbst entgegen: dann bleiben sie ihr.
     let hatUmfrage = false
 
+    on('session.start', async ($, e, next) => {
+        const r = await next(e)
+        // Je Knopf ein eigener Befehl, dazu die Hilfe.
+        for (const b of BEFEHLE) {
+            await $.command
+                .register({
+                    name: b.name,
+                    description: b.description,
+                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
+                    immediate: true,
+                })
+                .catch(() => {})
+        }
+        return r
+    })
+
+    // Die Engine setzt die Namen der Mods vor jede Befehlsantwort. Dieser Mod streicht in der
+    // gespeicherten Zeile seinen und sagt stattdessen am Ende, dass die Antwort von ihm kommt.
+    on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
+        const content = e.message.content.map(b => (b.type === 'text' && typeof b.text === 'string' ? { ...b, text: ohneVorsatz(b.text, 'naechste-schritte', GEMELDET) } : b))
+        return next({ ...e, message: { ...e.message, content } })
+    }).catch(($, e, next) => next(e))
+
+    // Die Einzelbefehle: jeder versteht hilfe und ?, und ein Fehler wird ein schlichter Satz.
+    for (const b of BEFEHLE) {
+        on('command.run', { command: b.name }, async ($, e) => {
+            if (istHilfe(e.args)) {
+                return { text: hilfeText(b) }
+            }
+            try {
+                return { text: await wirke($, b.name) }
+            } catch {
+                return { text: fehlerText(b.name) }
+            }
+        }).catch(() => ({ text: fehlerText(b.name) }))
+    }
+
     on('prompt.submit', async ($, e, next) => {
+        // Die eigenen Befehle lassen die Vorschlaege stehen: /naechste-schritte-zeigen soll sie nicht wegraeumen.
+        if (e.command?.name.startsWith('naechste-schritte')) {
+            return next(e)
+        }
         aktuell = `abgeschickt-${++abgeschickt}`
         await update($, vorschlaege, () => null)
         return next(e)

@@ -1,6 +1,6 @@
 {
   "name": "statistik",
-  "version": "0.15.4",
+  "version": "0.16.0",
   "description": "Statistik in einer Zeile über dem Eingabefeld: Nutzungslimits (SL, FL bei Fable, WL), Prompt-Cache und Kontext als Ringe, Kontext-Details über /context (die Anzeige der App), warm oder kalt, dazu die Knöpfe Warmhalten und Compact. Ersetzt cache-meter und cache-tax.",
   "author": {
     "name": "Björn Müller",

@@ -497,6 +497,188 @@ export function ohneVorsatz(text: string, name: string, gemeldet: string | null)
     return kopf + kern + (kern.includes('\n') ? '\n' : ' ') + gemeldet + schluss
 }
 
+/** Schaltet die Zusammenfassung in diesem Chat an oder aus und merkt es sich je Chat, wie /zusammenfassung. */
+async function setzeAus($: EngineInterface, aus: boolean): Promise<void> {
+    await update($, isAus, () => aus)
+    await $.store.set(SPEICHER_AUS + (await $.session.id()), { at: await $.clock.now(), aus })
+    if (aus) {
+        await update($, bericht, () => null)
+    }
+}
+
+/** Ob gerade etwas ueber dem Eingabefeld steht, das sich auf- und zuklappen laesst. */
+async function hatBlock($: EngineInterface): Promise<boolean> {
+    const b = await read($, bericht)
+    const hatBericht = b !== null && (b.schreibt || b.getan !== null || b.beachte !== null)
+    return hatBericht || (await read($, schritte)).length > 0
+}
+
+/** Wie der Chevron, aber in eine Richtung: auf (mit Erklaerung, wie beim Aufklappen) oder zu. */
+async function klappeNach($: EngineInterface, modell: string, offen: boolean): Promise<string> {
+    if (!(await hatBlock($))) {
+        return 'Gerade steht keine Zusammenfassung über dem Eingabefeld, die sich auf- oder zuklappen ließe.'
+    }
+    await update($, istOffen, () => offen)
+    if (!offen) {
+        return 'Die Zusammenfassung ist zugeklappt.'
+    }
+    const b = await read($, bericht)
+    if (b?.beachte && !b.erklaerung) {
+        // Die Erklaerung holt ein Modell; der Befehl wartet nicht darauf.
+        $.clock.after(0, () => void erklaere($, modell, b).catch(() => {}))
+        return 'Die Zusammenfassung ist aufgeklappt; die Erklärung zum Hinweis kommt gleich.'
+    }
+    return 'Die Zusammenfassung ist aufgeklappt.'
+}
+
+/** Die Schritte des Replays als Text, fuer das Handy, wo kein Fenster aufgeht. */
+export function replayAlsText(s: readonly Schritt[]): string {
+    const zeilen = [`Replay: ${aenderungenText(s)}.`]
+    s.forEach((schritt, k) => {
+        const { plus, minus } = zaehle(schritt.diff)
+        zeilen.push(`${k + 1}. ${schritt.datei} (${schritt.werkzeug}${schritt.notiz ? `, ${schritt.notiz}` : ''}) +${plus} −${minus}`)
+    })
+    return zeilen.join('\n')
+}
+
+/** Wie der Kreispfeil und /replay; vom Handy als Text, sonst erst die Antwort, dann das Fenster. */
+async function replayBefehl($: EngineInterface, vomHandy: boolean): Promise<string> {
+    const s = await read($, schritte)
+    if (s.length === 0) {
+        return 'Replay: keine Dateiänderungen in der letzten Runde.'
+    }
+    if (vomHandy) {
+        return `${replayAlsText(s)}\nDas Fenster mit den Diffs gibt es nur am Rechner.`
+    }
+    $.clock.after(0, () => void oeffneReplay($).catch(() => {}))
+    return `Replay: ${aenderungenText(s)}. Das Fenster geht gleich auf.`
+}
+
+// --- Befehle mit Hilfe ---
+
+/** Ein Befehl des Mods mit allem, was seine Hilfe sagt. */
+export type Befehl = {
+    name: string
+    /** Die eine Zeile in der Befehlsliste. */
+    description: string
+    argumentHint?: string
+    /** Was er tut. */
+    was: string
+    /** Welchem Knopf er entspricht. */
+    knopf: string
+    /** Wo er gilt. */
+    gilt: string
+    argumente: string
+    beispiel: string
+}
+
+/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform. */
+const KURZFORMEN: readonly { name: string; description: string }[] = [
+    { name: 'zusammenfassung', description: 'schaltet die Zusammenfassung in diesem Chat um (Kurzform)' },
+    { name: 'replay', description: 'zeigt die Dateiänderungen der letzten Runde Schritt für Schritt (Kurzform)' },
+]
+
+export const BEFEHLE: readonly Befehl[] = [
+    {
+        name: 'zusammenfassung-hilfe',
+        description: 'Alle Befehle der Zusammenfassung mit einer Zeile Erklärung (Zusammenfassung)',
+        was: 'Listet alle Befehle der Zusammenfassung mit einer Zeile Erklärung.',
+        knopf: 'keiner',
+        gilt: 'zeigt nur Text, ändert nichts',
+        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
+        beispiel: '/zusammenfassung-hilfe',
+    },
+    {
+        name: 'zusammenfassung-an',
+        description: 'Die Zusammenfassung nach jeder Arbeitsrunde in diesem Chat einschalten (Zusammenfassung)',
+        was: 'Schaltet die Zusammenfassung nach jeder Arbeitsrunde ein, wie /zusammenfassung, wenn sie aus ist.',
+        knopf: 'keiner; dasselbe wie /zusammenfassung',
+        gilt: 'nur in diesem Chat; der Standard für neue Chats steht in den Einstellungen des Mods',
+        argumente: 'keine',
+        beispiel: '/zusammenfassung-an',
+    },
+    {
+        name: 'zusammenfassung-aus',
+        description: 'Die Zusammenfassung in diesem Chat ausschalten; das Replay bleibt (Zusammenfassung)',
+        was: 'Schaltet die Zusammenfassung nach jeder Arbeitsrunde aus, wie /zusammenfassung, wenn sie an ist. Das Replay der Dateiänderungen bleibt.',
+        knopf: 'keiner; dasselbe wie /zusammenfassung',
+        gilt: 'nur in diesem Chat; der Standard für neue Chats steht in den Einstellungen des Mods',
+        argumente: 'keine',
+        beispiel: '/zusammenfassung-aus',
+    },
+    {
+        name: 'zusammenfassung-aufklappen',
+        description: 'Die Zusammenfassung aufklappen: ungekürzt, mit Erklärung zum Hinweis und Dateiliste (Zusammenfassung)',
+        was: 'Klappt die Zusammenfassung über dem Eingabefeld auf: beide Zeilen ungekürzt, die Erklärung zum Hinweis und die geänderten Dateien.',
+        knopf: `${SYMBOL_AUF} neben „Zusammenfassung“`,
+        gilt: 'in diesem Chat, bis die nächste Arbeitsrunde die Zusammenfassung ersetzt',
+        argumente: 'keine',
+        beispiel: '/zusammenfassung-aufklappen',
+    },
+    {
+        name: 'zusammenfassung-zuklappen',
+        description: 'Die aufgeklappte Zusammenfassung wieder zuklappen (Zusammenfassung)',
+        was: 'Klappt die Zusammenfassung über dem Eingabefeld wieder zu.',
+        knopf: `${SYMBOL_ZU} neben „Zusammenfassung“`,
+        gilt: 'in diesem Chat',
+        argumente: 'keine',
+        beispiel: '/zusammenfassung-zuklappen',
+    },
+    {
+        name: 'zusammenfassung-replay',
+        description: 'Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen (Zusammenfassung)',
+        was: 'Öffnet das Replay der Dateiänderungen der letzten Runde, wie /replay. Vom Handy kommt statt des Fensters eine Liste der Schritte als Text.',
+        knopf: `${SYMBOL_REPLAY} neben „Zusammenfassung“`,
+        gilt: 'für die letzte Arbeitsrunde in diesem Chat',
+        argumente: 'keine',
+        beispiel: '/zusammenfassung-replay',
+    },
+]
+
+/** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
+export function istHilfe(args: string): boolean {
+    const a = args.trim().toLowerCase()
+    return a === 'hilfe' || a === '?'
+}
+
+/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+export function hilfeText(b: Befehl): string {
+    return [`/${b.name}: ${b.was}`, `Knopf: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+}
+
+/** Was ein Befehl sagt, wenn er scheitert. */
+export function fehlerText(name: string): string {
+    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+}
+
+/** Alle Befehle des Mods, je eine Zeile. */
+export function uebersicht(): string {
+    const zeilen = [...BEFEHLE.map(b => ({ name: b.name, description: b.description.replace(/ \(Zusammenfassung\)$/, '') })), ...KURZFORMEN]
+    return ['Befehle der Zusammenfassung (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
+}
+
+/** Was ein Befehl tut; zurueck kommt die Antwort. */
+async function wirke($: EngineInterface, name: string, modell: string, vomHandy: boolean): Promise<string> {
+    switch (name) {
+        case 'zusammenfassung-hilfe':
+            return uebersicht()
+        case 'zusammenfassung-an':
+            await setzeAus($, false)
+            return 'Die Zusammenfassung ist in diesem Chat an.'
+        case 'zusammenfassung-aus':
+            await setzeAus($, true)
+            return 'Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.'
+        case 'zusammenfassung-aufklappen':
+            return klappeNach($, modell, true)
+        case 'zusammenfassung-zuklappen':
+            return klappeNach($, modell, false)
+        case 'zusammenfassung-replay':
+            return replayBefehl($, vomHandy)
+        default:
+            throw new Error(`kein Befehl ${name}`)
+    }
+}
+
 export const register: Register = (on, options) => {
     const modell = String(options.modell || 'haiku')
     const mindestMs = Math.max(0, Number(options.mindestSekunden ?? 60)) * 1000
@@ -525,6 +707,17 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
+        // Je Knopf ein eigener Befehl, dazu die Hilfe.
+        for (const b of BEFEHLE) {
+            await $.command
+                .register({
+                    name: b.name,
+                    description: b.description,
+                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
+                    immediate: true,
+                })
+                .catch(() => {})
+        }
         const sid = await $.session.id()
         const jetzt = await $.clock.now()
         const aus = await ladeAus($, sid, standardAus, jetzt)
@@ -541,11 +734,8 @@ export const register: Register = (on, options) => {
     }).catch(($, e, next) => next(e))
 
     on('command.run', { command: 'zusammenfassung' }, async $ => {
-        const aus = await update($, isAus, v => !v)
-        await $.store.set(SPEICHER_AUS + (await $.session.id()), { at: await $.clock.now(), aus })
-        if (aus) {
-            await update($, bericht, () => null)
-        }
+        const aus = !(await read($, isAus))
+        await setzeAus($, aus)
         return {
             text: aus
                 ? 'Die Zusammenfassung ist aus, das Replay bleibt. Derselbe Befehl schaltet sie wieder ein.'
@@ -560,6 +750,22 @@ export const register: Register = (on, options) => {
         }
         return { text: `Replay: ${aenderungenText(s)}` }
     })
+
+    // Die Einzelbefehle: jeder versteht hilfe und ?, und ein Fehler wird ein schlichter Satz.
+    for (const b of BEFEHLE) {
+        on('command.run', { command: b.name }, async ($, e) => {
+            if (istHilfe(e.args)) {
+                return { text: hilfeText(b) }
+            }
+            try {
+                // Vom Handy (Remote Control) geht kein Fenster auf.
+                const vomHandy = (e.origin as { kind?: string } | undefined)?.kind === 'bridge'
+                return { text: await wirke($, b.name, modell, vomHandy) }
+            } catch {
+                return { text: fehlerText(b.name) }
+            }
+        }).catch(() => ({ text: fehlerText(b.name) }))
+    }
 
     // Eine neue Runde beginnt die Aufzeichnung von vorn. Die Zusammenfassung der
     // letzten Arbeitsrunde bleibt stehen, bis eine neue Arbeitsrunde sie ersetzt.

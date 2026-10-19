@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
-import { aenderungenText, diff, kuerze, leseBericht, relPfad, zeilenUmbruch } from '../hooks/register'
+import { BEFEHLE, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, relPfad, zeilenUmbruch } from '../hooks/register'
 
 const BAND = { plugin: 'zusammenfassung', component: 'AbovePrompt' } as const
 
@@ -71,7 +71,11 @@ function boden(on: On, antworten: string[], chat = { id: 'chat-a' }) {
     on('turn.start', (_$, e, _next) => ({ turnId: e.turnId }))
     on('turn.complete', (_$, e, _next) => ({ text: e.answer, usage: e.usage }))
     on('tool.call', (_$, _e, _next) => ({ result: 'ok' }) as never)
-    on('command.register', (_$, e, _next) => ({ value: { command: e.name } }))
+    const angemeldet: { name: string; description: string; argumentHint?: string; immediate?: boolean }[] = []
+    on('command.register', (_$, e, _next) => {
+        angemeldet.push(e)
+        return { value: { command: e.name } }
+    })
     on('session.messages', (_$, _e, _next) => ({ value: VERLAUF }))
     const fenster: string[] = []
     on('ui.open', (_$, e, _next) => {
@@ -88,7 +92,7 @@ function boden(on: On, antworten: string[], chat = { id: 'chat-a' }) {
         const text = antworten[Math.min(fragen.length - 1, antworten.length - 1)] ?? 'NONE'
         return { value: { isAnswered: true, text, usage: USAGE } }
     })
-    return { fragen, fenster, chat }
+    return { fragen, fenster, chat, angemeldet }
 }
 
 type T$ = {
@@ -670,4 +674,198 @@ test('nach einer mehrzeiligen Antwort steht der Mod in einer eigenen Zeile', asy
 test('Zeilen ohne den eigenen Namen bleiben, wie sie sind', async ($, on) => {
     const zeilen = ['<local-command-stdout>leitstand: Erledigt.</local-command-stdout>', '<local-command-stdout>zusammenfassungx: Erledigt.</local-command-stdout>', '<local-command-stdout>Erledigt.</local-command-stdout>', 'Text ohne Rahmen']
     expect(await gespeichert($, on, ...zeilen)).toEqual(zeilen)
+})
+
+// --- Die Einzelbefehle ---
+
+const NEUE = [
+    'zusammenfassung-hilfe',
+    'zusammenfassung-an',
+    'zusammenfassung-aus',
+    'zusammenfassung-aufklappen',
+    'zusammenfassung-zuklappen',
+    'zusammenfassung-replay',
+]
+
+type B$ = { command: { run: (e: never) => Promise<{ text?: unknown }> } }
+
+async function befehl($: B$, name: string, args = '', origin?: { kind: string }) {
+    const r = await $.command.run({ command: name, args, ...(origin ? { origin } : {}) } as never)
+    return String(r.text ?? '')
+}
+
+test('die Tabelle der Einzelbefehle ist vollstaendig', () => {
+    expect(BEFEHLE.map(b => b.name)).toEqual(NEUE)
+})
+
+for (const b of BEFEHLE) {
+    test(`/${b.name}: registriert, mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
+        mock.clock(on, { now: 1_000_000 })
+        mock.store(on, {})
+        const { angemeldet } = boden(on, [ANTWORT_MODELL])
+        await start($ as never)
+        const eintrag = angemeldet.find(a => a.name === b.name)
+        expect(eintrag?.description).toBe(b.description)
+        expect(b.description).toMatch(/[äöüÄÖÜß]|^[A-ZÄÖÜ]/)
+        expect(eintrag?.argumentHint).toBe(b.argumentHint)
+        expect(eintrag?.immediate).toBe(true)
+        for (const arg of ['hilfe', '?', ' Hilfe ']) {
+            const t = await befehl($ as never, b.name, arg)
+            expect(t).toBe(hilfeText(b))
+            for (const teil of [`/${b.name}: `, 'Knopf: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+                expect(t).toContain(teil)
+            }
+        }
+    })
+}
+
+test('/zusammenfassung-hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzformen eingeschlossen', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    const zeilen = (await befehl($ as never, 'zusammenfassung-hilfe')).split('\n')
+    for (const name of [...NEUE, 'zusammenfassung', 'replay']) {
+        expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
+    }
+    expect(zeilen).toHaveLength(NEUE.length + 3)
+})
+
+test('/zusammenfassung-aus und -an schalten nur diesen Chat, wie /zusammenfassung; das Replay bleibt', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fragen, chat } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    expect(await befehl($ as never, 'zusammenfassung-aus')).toBe('Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.')
+    // Zweimal aus bleibt aus, anders als der Umschalter.
+    await befehl($ as never, 'zusammenfassung-aus')
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(0)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await ui.find({ type: 'Button', key: 'zf-replay' })).toBeDefined()
+
+    // Ein anderer Chat bleibt beim Standard.
+    chat.id = 'chat-b'
+    await start($ as never)
+    await runde($ as never, 't2', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+
+    // Zurueck in Chat A: aus; /zusammenfassung-an schaltet ihn ein, zweimal an bleibt an.
+    chat.id = 'chat-a'
+    await start($ as never)
+    await runde($ as never, 't3', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+    expect(await befehl($ as never, 'zusammenfassung-an')).toBe('Die Zusammenfassung ist in diesem Chat an.')
+    await befehl($ as never, 'zusammenfassung-an')
+    await runde($ as never, 't4', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(2)
+    // Der alte Umschalter sieht denselben Zustand.
+    expect(await befehl($ as never, 'zusammenfassung')).toContain('ist aus')
+})
+
+test('/zusammenfassung-aufklappen und -zuklappen wirken wie der Chevron', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fragen } = boden(on, [ANTWORT_MODELL, 'Ausfuehrlich: Im Test fehlt die Flaeche der App.'])
+    await start($ as never)
+    expect(await befehl($ as never, 'zusammenfassung-aufklappen')).toContain('keine Zusammenfassung')
+
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    expect(await befehl($ as never, 'zusammenfassung-aufklappen')).toBe(
+        'Die Zusammenfassung ist aufgeklappt; die Erklärung zum Hinweis kommt gleich.',
+    )
+    await clock.advance(0)
+    expect(fragen).toHaveLength(2)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    const text = await leiste(ui as never)
+    expect(text).toContain('Ausfuehrlich: Im Test fehlt die Flaeche der App.')
+    expect(text).toContain('src/leiste.ts  | +1 |   | −1')
+    expect((await ui.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏶')
+    // Noch einmal auf: nichts aendert sich, keine zweite Frage.
+    expect(await befehl($ as never, 'zusammenfassung-aufklappen')).toBe('Die Zusammenfassung ist aufgeklappt.')
+    await clock.advance(0)
+    expect(fragen).toHaveLength(2)
+
+    expect(await befehl($ as never, 'zusammenfassung-zuklappen')).toBe('Die Zusammenfassung ist zugeklappt.')
+    const zu = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(zu as never)).not.toContain('Ausfuehrlich')
+    expect((await zu.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏷')
+    // Der Chevron klappt danach wieder auf, wie gewohnt.
+    await zu.press({ key: 'zf-auf' })
+    expect((await zu.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏶')
+})
+
+test('/zusammenfassung-replay antwortet erst und oeffnet dann das Fenster, wie der Kreispfeil', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fenster } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    expect(await befehl($ as never, 'zusammenfassung-replay')).toBe('Replay: keine Dateiänderungen in der letzten Runde.')
+    await clock.advance(0)
+    expect(fenster).toEqual([])
+
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    expect(await befehl($ as never, 'zusammenfassung-replay')).toBe('Replay: 3 Änderungen in 2 Dateien. Das Fenster geht gleich auf.')
+    expect(fenster).toEqual([])
+    await clock.advance(0)
+    expect(fenster).toEqual(['zusammenfassung-replay'])
+    const seite = await $.ui.mount({ plugin: 'zusammenfassung', surface: 'desktop', component: 'Pane', requestId: 'zusammenfassung-replay', props: fensterProps() })
+    expect(await leiste(seite as never)).toContain('Schritt 1 von 3')
+})
+
+test('/zusammenfassung-replay vom Handy: die Schritte als Text, kein Fenster', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fenster } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    const t = await befehl($ as never, 'zusammenfassung-replay', '', { kind: 'bridge' })
+    expect(t).toBe(
+        [
+            'Replay: 3 Änderungen in 2 Dateien.',
+            '1. src/leiste.ts (Edit) +1 −1',
+            '2. src/leiste.test.ts (MultiEdit, Teil 1 von 2) +1 −0',
+            '3. src/leiste.test.ts (MultiEdit, Teil 2 von 2) +0 −1',
+            'Das Fenster mit den Diffs gibt es nur am Rechner.',
+        ].join('\n'),
+    )
+    await clock.advance(0)
+    expect(fenster).toEqual([])
+})
+
+test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    let kaputt = false
+    const speicher = new Map<string, unknown>()
+    on('store.get', (_$, e, _next) => ({ value: speicher.get(e.key) }) as never)
+    on('store.set', (_$, e, _next) => {
+        if (kaputt) {
+            throw new Error('kaputt')
+        }
+        speicher.set(e.key, e.value)
+        return { value: undefined } as never
+    })
+    on('store.delete', (_$, e, _next) => {
+        speicher.delete(e.key)
+        return { value: undefined } as never
+    })
+    on('store.keys', (_$, _e, _next) => ({ value: [...speicher.keys()] }) as never)
+    boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    kaputt = true
+    expect(await befehl($ as never, 'zusammenfassung-aus')).toBe(fehlerText('zusammenfassung-aus'))
+    expect(fehlerText('zusammenfassung-aus')).toBe('/zusammenfassung-aus hat nicht geklappt. Versuch es gleich noch einmal.')
+})
+
+test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', async ($, on) => {
+    expect(await gespeichert($, on, '<local-command-stdout>zusammenfassung: Die Zusammenfassung ist zugeklappt.</local-command-stdout>')).toEqual([
+        '<local-command-stdout>Die Zusammenfassung ist zugeklappt. (gemeldet vom Mod Zusammenfassung)</local-command-stdout>',
+    ])
 })

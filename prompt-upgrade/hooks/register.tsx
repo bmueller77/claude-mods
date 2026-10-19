@@ -12,10 +12,12 @@
 // und Ereignissen. Wird das Modul mitten in einem Modellaufruf neu geladen,
 // nimmt `session.start` den Schritt wieder auf.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptOrigin, Register, UiOpenResult, UiPressArgument } from 'claude-code'
+import type { CommandRunInput, EngineInterface, PromptOrigin, Register, UiOpenResult, UiPressArgument } from 'claude-code'
 
 import type { PromptUpgradeAblauf, PromptUpgradeAntwort, PromptUpgradeEintrag } from '../types'
 import { zeichne } from './ansicht'
+import { anmeldung, hilfeText, istHilfe, uebersicht } from './knopfbefehle'
+import type { Knopfbefehl } from './knopfbefehle'
 import type { Aktionen, Kit } from './ansicht'
 import {
     SYSTEM_FRAGEN,
@@ -547,18 +549,20 @@ async function erneut($: EngineInterface): Promise<void> {
     }
 }
 
-async function kopiere($: EngineInterface, e: UiPressArgument): Promise<void> {
+/** Kopiert den Entwurf; `surface` wie der Druck es sagt, beim Befehl die erste Oberflaeche. Zurueck: ob es ging. */
+async function kopiere($: EngineInterface, surface: UiPressArgument['surface'] | undefined): Promise<boolean> {
     const a = await read($, ablauf)
     if (!a || a.schritt !== 'pruefen') {
-        return
+        return false
     }
     let ok = false
     try {
-        ok = (await $.ui.copy({ text: a.entwurf, surface: e.surface })).isCopied
+        ok = (await $.ui.copy({ text: a.entwurf, surface })).isCopied
     } catch {
         ok = false
     }
     await aendere($, x => (x && x.id === a.id ? { ...x, kopiert: ok ? 'ok' : 'fehler' } : x))
+    return ok
 }
 
 async function starteAusEingabe($: EngineInterface, text: string): Promise<void> {
@@ -611,7 +615,7 @@ function aktionen($: EngineInterface): Aktionen {
         ausfuehren: text => los(fuehreAus($, text)),
         bearbeiten: () => los(aendere($, a => (a && a.schritt === 'pruefen' ? { ...a, bearbeiten: !a.bearbeiten } : a))),
         entwurf: text => los(aendere($, a => (a && a.schritt === 'pruefen' ? { ...a, entwurf: text, kopiert: null } : a))),
-        kopieren: e => los(kopiere($, e)),
+        kopieren: e => los(kopiere($, e.surface)),
         abbrechen: () => los(brichAb($)),
         erneut: () => los(erneut($)),
         originalSenden: () => los(sendeOriginal($)),
@@ -644,6 +648,236 @@ export function leseBefehl(args: string): Befehl {
         return { art: 'verlauf' }
     }
     return t === '' ? { art: 'leer' } : { art: 'prompt', text: t }
+}
+
+// --- Was /better und die Befehle gemeinsam tun ---
+
+/** Der Verlauf als Text; am Rechner oeffnet sich dahinter das Fenster mit der Liste. */
+async function zeigeDenVerlauf($: EngineInterface, amPlatz: boolean): Promise<string> {
+    const liste = await ladeVerlauf($)
+    await update($, verlauf, () => liste)
+    if (amPlatz) {
+        await update($, zeigeVerlauf, () => true)
+        void oeffneFenster($, null).catch(() => undefined)
+    }
+    return verlaufText(liste)
+}
+
+/** Ein neuer Durchlauf mit `text`, oder bei leerem Text das Feld zum Eintippen; das Fenster oeffnet sich dahinter. */
+async function starteMitFenster($: EngineInterface, text: string): Promise<string> {
+    if (text === '') {
+        stoppeAuftraege()
+        await update($, zeigeVerlauf, () => false)
+        await aendere($, () => neuerAblauf(neueId(), 'eingabe', ''))
+        void oeffneFenster($, null).catch(() => undefined)
+        return TEXT_EINGABE
+    }
+    try {
+        await starte($, text)
+    } catch (err) {
+        await zurueckInsFeld($, text, null)
+        throw err
+    }
+    void oeffneFenster($, text).catch(() => undefined)
+    return TEXT_OFFEN
+}
+
+// --- Je Knopf und Schalter ein Befehl; /better bleibt als Kurzform ---
+
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Gesendet wurde nichts; /prompt-upgrade-hilfe zeigt die Befehle.'
+export const TEXT_KEIN_DURCHLAUF = 'Gerade läuft kein Prompt-Upgrade; /prompt-upgrade-starten <Prompt> beginnt eins.'
+export const TEXT_HANDY_BEFEHLE =
+    'Prompt-Upgrade braucht das Seitenfenster am Rechner. Vom Handy aus gehen /prompt-upgrade-automatik-an, /prompt-upgrade-automatik-aus und /prompt-upgrade-verlauf. Gesendet wurde nichts.'
+
+const DURCHLAUF = 'der offene Durchlauf im Seitenfenster; ohne offenen Durchlauf sagt der Befehl das'
+
+/** Die Befehle in der Reihenfolge der Hilfe; die Wirkung steht in `befehlAus`. */
+export const BEFEHLE: readonly Knopfbefehl[] = [
+    {
+        name: 'prompt-upgrade-hilfe',
+        description: 'Listet alle Befehle von Prompt-Upgrade',
+        tut: 'Listet alle Befehle von Prompt-Upgrade mit je einer Zeile.',
+        knopf: 'keiner, nur Übersicht',
+        geltung: 'überall; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-hilfe',
+    },
+    {
+        name: 'prompt-upgrade-starten',
+        description: 'Verbessert einen Prompt im Seitenfenster, bevor er rausgeht (wie /better <Prompt>)',
+        argumentHint: '<Prompt>',
+        tut: 'Öffnet das Seitenfenster mit diesem Prompt: Rückfragen, Umschreiben, Prüfen, gesendet wird erst mit Ausführen. Ohne Prompt öffnet sich ein Feld zum Eintippen. Geht nur am Rechner.',
+        knopf: 'keiner; wie /better <Prompt>',
+        geltung: 'dieser Chat',
+        argumente: 'der Prompt, der verbessert werden soll; alles nach dem Befehl zählt als Prompt',
+        beispiel: '/prompt-upgrade-starten Mach die Login-Seite schneller',
+    },
+    {
+        name: 'prompt-upgrade-automatik-an',
+        description: 'Getippte Prompts erst ins Seitenfenster, nur in diesem Chat',
+        tut: 'Schaltet die Automatik ein: Am Rechner getippte Prompts gehen erst ins Seitenfenster; mit > am Anfang gehen sie direkt raus.',
+        knopf: 'keiner im Fenster; wie /better an und der Schalter „Automatik“ im Einstellungsmenü',
+        geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü',
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-automatik-an',
+    },
+    {
+        name: 'prompt-upgrade-automatik-aus',
+        description: 'Getippte Prompts gehen direkt raus, nur in diesem Chat',
+        tut: 'Schaltet die Automatik aus: Getippte Prompts gehen unverändert raus.',
+        knopf: 'keiner im Fenster; wie /better aus und der Schalter „Automatik“ im Einstellungsmenü',
+        geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü',
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-automatik-aus',
+    },
+    {
+        name: 'prompt-upgrade-verlauf',
+        description: 'Zeigt die letzten Upgrades als Text, am Rechner auch im Fenster',
+        tut: 'Gibt die letzten 20 Upgrades als Text aus, neueste zuerst; am Rechner öffnet sich dahinter das Fenster mit der Liste, wie /better verlauf.',
+        knopf: '„Verlauf“ im Seitenfenster',
+        geltung: 'alle Chats (ein gemeinsamer Verlauf)',
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-verlauf',
+    },
+    {
+        name: 'prompt-upgrade-jetzt-verbessern',
+        description: 'Überspringt die übrigen Rückfragen und verbessert jetzt',
+        tut: 'Überspringt die Rückfragen, die noch offen sind, und lässt den Prompt jetzt umschreiben.',
+        knopf: '„Rest überspringen, jetzt verbessern“ im Seitenfenster',
+        geltung: DURCHLAUF,
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-jetzt-verbessern',
+    },
+    {
+        name: 'prompt-upgrade-ausfuehren',
+        description: 'Schickt den verbesserten Prompt ab',
+        tut: 'Schickt den verbesserten Prompt ab, so wie er im Seitenfenster steht (auch bearbeitet), und schließt das Fenster.',
+        knopf: '„Ausführen“ im Seitenfenster',
+        geltung: DURCHLAUF,
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-ausfuehren',
+    },
+    {
+        name: 'prompt-upgrade-original-senden',
+        description: 'Schickt nach einem Fehler den Original-Prompt unverändert ab',
+        tut: 'Schickt den Original-Prompt unverändert ab, wenn das Upgrade gescheitert ist, und schließt das Fenster.',
+        knopf: '„Original senden“ auf der Fehlerkarte im Seitenfenster',
+        geltung: DURCHLAUF,
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-original-senden',
+    },
+    {
+        name: 'prompt-upgrade-kopieren',
+        description: 'Kopiert den verbesserten Prompt in die Zwischenablage',
+        tut: 'Kopiert den verbesserten Prompt in die Zwischenablage. Vom Handy aus kommt er als Text zum Kopieren.',
+        knopf: '„Kopieren“ im Seitenfenster',
+        geltung: DURCHLAUF,
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-kopieren',
+    },
+    {
+        name: 'prompt-upgrade-abbrechen',
+        description: 'Bricht ab, schließt das Fenster und legt den Prompt zurück ins Eingabefeld',
+        tut: 'Bricht den Durchlauf ab: Das Fenster geht zu, laufende Anfragen stoppen, der Original-Prompt steht wieder im Eingabefeld. Gesendet wird nichts.',
+        knopf: '„Abbrechen“ im Seitenfenster',
+        geltung: DURCHLAUF,
+        argumente: 'keine',
+        beispiel: '/prompt-upgrade-abbrechen',
+    },
+]
+
+async function befehlJetztVerbessern($: EngineInterface): Promise<string> {
+    const a = await read($, ablauf)
+    if (!a) {
+        return TEXT_KEIN_DURCHLAUF
+    }
+    if (a.schritt !== 'fragen') {
+        return 'Gerade stehen keine Rückfragen offen.'
+    }
+    void beantworte($, 'rest', { art: 'uebersprungen' }).catch(err => $.ui.log(`Prompt-Upgrade: ${fehlerText(err)}`, { to: 'debug' }))
+    return 'Die übrigen Rückfragen sind übersprungen; der Prompt wird jetzt verbessert.'
+}
+
+async function befehlAusfuehren($: EngineInterface): Promise<string> {
+    const a = await read($, ablauf)
+    if (!a) {
+        return TEXT_KEIN_DURCHLAUF
+    }
+    if (a.schritt !== 'pruefen') {
+        return 'Noch nichts zum Ausführen: Das Upgrade ist noch nicht fertig.'
+    }
+    if (a.entwurf.trim() === '') {
+        return 'Der Entwurf ist leer; gesendet wurde nichts.'
+    }
+    void fuehreAus($).catch(err => $.ui.log(`Prompt-Upgrade: ${fehlerText(err)}`, { to: 'debug' }))
+    return 'Der verbesserte Prompt geht raus; das Fenster schließt sich.'
+}
+
+async function befehlOriginalSenden($: EngineInterface): Promise<string> {
+    const a = await read($, ablauf)
+    if (!a) {
+        return TEXT_KEIN_DURCHLAUF
+    }
+    if (a.schritt !== 'fehler') {
+        return 'Original senden gibt es nur, wenn das Upgrade gescheitert ist; /prompt-upgrade-abbrechen legt den Prompt zurück ins Eingabefeld.'
+    }
+    void sendeOriginal($).catch(err => $.ui.log(`Prompt-Upgrade: ${fehlerText(err)}`, { to: 'debug' }))
+    return 'Der Original-Prompt geht unverändert raus; das Fenster schließt sich.'
+}
+
+async function befehlKopieren($: EngineInterface, amPlatz: boolean): Promise<string> {
+    const a = await read($, ablauf)
+    if (!a) {
+        return TEXT_KEIN_DURCHLAUF
+    }
+    if (a.schritt !== 'pruefen') {
+        return 'Noch nichts zum Kopieren: Das Upgrade ist noch nicht fertig.'
+    }
+    if (!amPlatz) {
+        return `Kopieren geht nur am Rechner. Hier ist das Upgrade zum Kopieren:\n\n${a.entwurf}`
+    }
+    return (await kopiere($, undefined)) ? 'Das Upgrade ist kopiert.' : 'Kopieren ging hier nicht.'
+}
+
+async function befehlAbbrechen($: EngineInterface): Promise<string> {
+    const a = await read($, ablauf)
+    if (!a) {
+        return TEXT_KEIN_DURCHLAUF
+    }
+    const zurueck = zuruecklegen(a)
+    await brichAb($)
+    return zurueck ? 'Abgebrochen: Das Fenster ist zu, dein Prompt steht wieder im Eingabefeld. Gesendet wurde nichts.' : 'Abgebrochen: Das Fenster ist zu. Gesendet wurde nichts.'
+}
+
+/** Die Wirkung der Befehle, je wie ihr Knopf; zurueck kommt die Antwort. */
+async function befehlAus($: EngineInterface, name: string, args: string, e: CommandRunInput): Promise<string> {
+    const amPlatz = amRechner(e.origin)
+    switch (name) {
+        case 'prompt-upgrade-hilfe':
+            return uebersicht('Prompt-Upgrade – die Befehle:', BEFEHLE)
+        case 'prompt-upgrade-starten':
+            return amPlatz ? starteMitFenster($, args) : TEXT_HANDY_BEFEHLE
+        case 'prompt-upgrade-automatik-an':
+            await setzeAutomatik($, true)
+            return TEXT_AN
+        case 'prompt-upgrade-automatik-aus':
+            await setzeAutomatik($, false)
+            return TEXT_AUS
+        case 'prompt-upgrade-verlauf':
+            return zeigeDenVerlauf($, amPlatz)
+        case 'prompt-upgrade-jetzt-verbessern':
+            return befehlJetztVerbessern($)
+        case 'prompt-upgrade-ausfuehren':
+            return befehlAusfuehren($)
+        case 'prompt-upgrade-original-senden':
+            return befehlOriginalSenden($)
+        case 'prompt-upgrade-kopieren':
+            return befehlKopieren($, amPlatz)
+        case 'prompt-upgrade-abbrechen':
+            return befehlAbbrechen($)
+        default:
+            return BEFEHL_FEHLER
+    }
 }
 
 const VORSATZ_NAME = 'prompt-upgrade'
@@ -690,6 +924,10 @@ export const register: Register = (on, options) => {
         } catch (err) {
             $.ui.log(`Prompt-Upgrade: /better ließ sich nicht anmelden: ${fehlerText(err)}`, { to: 'debug' })
         }
+        // Je Knopf und Schalter ein Befehl; einer, der nicht ankommt, hält die anderen nicht auf.
+        for (const k of BEFEHLE) {
+            await $.command.register(anmeldung(k)).catch(() => undefined)
+        }
         try {
             const liste = await ladeVerlauf($)
             await update($, verlauf, () => liste)
@@ -723,33 +961,26 @@ export const register: Register = (on, options) => {
         }
         const amPlatz = amRechner(e.origin)
         if (b.art === 'verlauf') {
-            const liste = await ladeVerlauf($)
-            await update($, verlauf, () => liste)
-            if (amPlatz) {
-                await update($, zeigeVerlauf, () => true)
-                void oeffneFenster($, null).catch(() => undefined)
-            }
-            return { text: verlaufText(liste) }
+            return { text: await zeigeDenVerlauf($, amPlatz) }
         }
         if (!amPlatz) {
             return { text: TEXT_HANDY }
         }
-        if (b.art === 'leer') {
-            stoppeAuftraege()
-            await update($, zeigeVerlauf, () => false)
-            await aendere($, () => neuerAblauf(neueId(), 'eingabe', ''))
-            void oeffneFenster($, null).catch(() => undefined)
-            return { text: TEXT_EINGABE }
-        }
-        try {
-            await starte($, b.text)
-        } catch (err) {
-            await zurueckInsFeld($, b.text, null)
-            throw err
-        }
-        void oeffneFenster($, b.text).catch(() => undefined)
-        return { text: TEXT_OFFEN }
+        return { text: await starteMitFenster($, b.art === 'leer' ? '' : b.text) }
     }).catch(() => ({ text: TEXT_FEHLER }))
+
+    for (const k of BEFEHLE) {
+        on('command.run', { command: k.name }, async ($, e) => {
+            try {
+                if (istHilfe(e.args ?? '')) {
+                    return { text: hilfeText(k) }
+                }
+                return { text: await befehlAus($, k.name, (e.args ?? '').trim(), e) }
+            } catch {
+                return { text: BEFEHL_FEHLER }
+            }
+        }).catch(() => ({ text: BEFEHL_FEHLER }))
+    }
 
     on('prompt.submit', async ($, e, next) => {
         // Billige Pruefungen zuerst: Handy, Plugins, Befehle gehen ohne Speicherzugriff durch.
