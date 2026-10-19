@@ -14,6 +14,8 @@ fail=0
 for p in $PLUGINS; do
   out=$(claude plugin install "$p@bjoern-mods" -y 2>&1 | tail -1)
   case "$out" in *Failed*|*✘*) echo "FEHLER $p: $out"; fail=1 ;; *) echo "ok     $p" ;; esac
+  # install überspringt schon Installiertes; update holt dann die neue Version.
+  claude plugin update "$p@bjoern-mods" 2>&1 | grep -q "updated from" && echo "neu    $p"
 done
 claude plugin enable cc-plugin-you-should-know@builtin 2>&1 | tail -1
 echo "Fertig. In laufenden Sitzungen /reload-plugins eingeben."

@@ -42,7 +42,9 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    Installierte Mods bleiben dabei installiert und holen Updates ab jetzt aus der neuen Quelle.
 4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
    leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, autopilot,
-   filetree, reflect, prompt-upgrade, modellwahl, i-have-adhd. Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
+   filetree, reflect, prompt-upgrade, modellwahl, i-have-adhd. Meldet install "already installed",
+   holt `claude plugin update <name>@bjoern-mods` die neue Version (install allein tut das nicht).
+   Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
    (install.sh im Repo tut dasselbe.)
 5. Nur in der Claude-Desktop-App: In ~/.claude/settings.json unter permissions.allow den Eintrag
    "mcp__ccd_session_mgmt__set_remote_control" ergänzen, vorhandene Einträge behalten. Sonst
