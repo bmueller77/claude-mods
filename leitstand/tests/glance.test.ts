@@ -406,6 +406,18 @@ test('a message with a password is held back once, then sent when sent again', a
   expect(entered).toBe(2)
 })
 
+test('Fortschritt ohne Schrittnamen gilt für den laufenden Schritt, nicht für einen neuen', async ($, on) => {
+  // Haiku ließ im Live-Test (2026-10-19) den Namen weg; daraus wurde ein Schritt "Arbeitet daran".
+  world(on)
+  await $.turn.start({ text: 'Wie spät ist es?', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Lies die Uhrzeit ab', 'Nenne die Uhrzeit'] } as never)
+  await callTool($, { tool: PROGRESS, percent: 100, summary: 'Hat die Uhrzeit abgelesen' } as never)
+  const shown = (await texts($, 'desktop')).join(' ')
+  expect(shown).not.toContain('Arbeitet daran')
+  expect(shown).toContain('1 von 2 fertig')
+  expect(shown).toContain('Hat die Uhrzeit abgelesen')
+})
+
 test('with the password guard off, a message with a password is sent straight away', async ($, on) => {
   world(on)
   let entered = 0

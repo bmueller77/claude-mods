@@ -56,6 +56,7 @@ import {
   activityTarget,
   apiErrorSentence,
   applyProgress,
+  progressName,
   befehlsHilfe,
   befehlsUeberblick,
   askedMergeSha,
@@ -3216,15 +3217,20 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     if (tool === PROGRESS_TOOL) {
       const input = e as unknown as { task?: unknown; percent?: unknown; summary?: unknown }
       const percent = Math.min(100, Math.max(0, Math.round(Number(input.percent) || 0)))
-      const name = cleanName(String(input.task ?? ''))
+      const rawName = String(input.task ?? '')
       const summary = percent === 100 && String(input.summary ?? '').trim() ? cleanName(input.summary, MAX_SUMMARY) : null
-      await change($, list => ({
-        ...list,
-        tasks: applyProgress(list.tasks, name, percent).map(one =>
-          summary !== null && one.name.toLowerCase() === name.toLowerCase() ? { ...one, summary } : one,
-        ),
-        activity: percent === 100 ? null : list.activity,
-      }))
+      await change($, list => {
+        // Without a step name the report is about the step under way, not a new "Arbeitet daran".
+        const name = progressName(list.tasks, rawName)
+
+        return {
+          ...list,
+          tasks: applyProgress(list.tasks, rawName, percent).map(one =>
+            summary !== null && one.name.toLowerCase() === name.toLowerCase() ? { ...one, summary } : one,
+          ),
+          activity: percent === 100 ? null : list.activity,
+        }
+      })
 
       return { result: `Fortschritt notiert: ${percent}%.` }
     }

@@ -1331,8 +1331,18 @@ export function settle(tasks: GlanceTask[]): GlanceTask[] {
 }
 
 /** Applies a progress report: earlier steps check off, 100 moves to the next. */
+/** The step a progress report means: the one it names, or without a name (a small model may leave it out) the one under way. */
+export function progressName(tasks: GlanceTask[], rawName: string): string {
+  if (String(rawName ?? '').trim() === '') {
+    const current = tasks.find(one => one.status === 'active') ?? tasks.find(one => one.status !== 'done')
+    if (current) return current.name
+  }
+
+  return cleanName(rawName)
+}
+
 export function applyProgress(tasks: GlanceTask[], rawName: string, rawPercent: number): GlanceTask[] {
-  const name = cleanName(rawName)
+  const name = progressName(tasks, rawName)
   const percent = Math.min(100, Math.max(0, Math.round(Number(rawPercent) || 0)))
   let list = [...tasks]
   let index = list.findIndex(one => one.name.toLowerCase() === name.toLowerCase())
