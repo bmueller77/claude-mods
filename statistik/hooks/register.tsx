@@ -456,15 +456,46 @@ export function restUhr(ms: number): string {
 const WOCHENTAG = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const WOCHENTAG_LANG = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag']
 
-/** Uhrzeit hh:mm in der Zeitzone des Rechners. */
-function uhrzeit(ms: number): string {
+const TAG_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/** Liest Zeiten in Berliner Zeit, auch auf Servern und in der Cloud, die auf UTC laufen. */
+const BERLIN = (() => {
+    try {
+        return new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Europe/Berlin',
+            weekday: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        })
+    } catch {
+        return null
+    }
+})()
+
+/** Wochentag (0 = Sonntag), Stunde und Minute in Berlin; ohne Zeitzonendaten die des Rechners. */
+function berlin(ms: number): { tag: number; stunde: number; minute: number } {
     const d = new Date(ms)
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+    if (BERLIN !== null) {
+        const teile: Record<string, string> = {}
+        for (const teil of BERLIN.formatToParts(d)) teile[teil.type] = teil.value
+        const tag = TAG_EN.indexOf(teile.weekday ?? '')
+        const stunde = Number(teile.hour)
+        const minute = Number(teile.minute)
+        if (tag >= 0 && Number.isFinite(stunde) && Number.isFinite(minute)) return { tag, stunde: stunde % 24, minute }
+    }
+    return { tag: d.getDay(), stunde: d.getHours(), minute: d.getMinutes() }
 }
 
-/** Wochentag und Uhrzeit: "Do 09:00". */
+/** Uhrzeit hh:mm in Berliner Zeit. */
+function uhrzeit(ms: number): string {
+    const { stunde, minute } = berlin(ms)
+    return `${String(stunde).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+/** Wochentag und Uhrzeit in Berliner Zeit: "Do 09:00". */
 export function wochentagZeit(ms: number): string {
-    return `${WOCHENTAG[new Date(ms).getDay()]} ${uhrzeit(ms)}`
+    return `${WOCHENTAG[berlin(ms).tag]} ${uhrzeit(ms)}`
 }
 
 /** Ob ein Zuruecksetzen mehr als 24 Stunden entfernt ist. */
@@ -859,7 +890,7 @@ function tippLimit(name: string, f: Fenster, jetzt: number, mitTag: boolean): st
         zeilen.push(
             '',
             mitTag || weitWeg(f.bis, jetzt)
-                ? `Zurückgesetzt am ${WOCHENTAG_LANG[new Date(f.bis).getDay()]} um ${uhrzeit(f.bis)} Uhr, in ${dauer(f.bis - jetzt)}.`
+                ? `Zurückgesetzt am ${WOCHENTAG_LANG[berlin(f.bis).tag]} um ${uhrzeit(f.bis)} Uhr, in ${dauer(f.bis - jetzt)}.`
                 : `Zurückgesetzt um ${uhrzeit(f.bis)} Uhr, in ${dauer(f.bis - jetzt)}.`,
         )
     }

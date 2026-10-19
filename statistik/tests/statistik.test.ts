@@ -1067,13 +1067,15 @@ test('die Leiste weicht einer Umfrage', async ($, on) => {
 
 // --- Nutzungszeile ---
 
-// Die Zeiten gelten in der Zeitzone des Rechners, wie die Anzeige selbst: am PC Berlin, in der Cloud UTC.
-/** Samstag, 17. Oktober 2026, 12:00 Uhr. */
-const JETZT = new Date(2026, 9, 17, 12, 0, 0).getTime()
-/** Donnerstag, 22. Oktober 2026, 09:00 Uhr. */
-const DONNERSTAG_9 = new Date(2026, 9, 22, 9, 0, 0).getTime()
-/** Montag, 19. Oktober 2026, 07:00 Uhr: 43 Stunden nach JETZT. */
-const MONTAG_7 = new Date(2026, 9, 19, 7, 0, 0).getTime()
+// Die Anzeige zeigt Berliner Zeit auf jedem Rechner, auch unter UTC.
+/** Samstag, 17. Oktober 2026, 12:00 Uhr in Berlin. */
+const JETZT = Date.UTC(2026, 9, 17, 10, 0, 0)
+/** Donnerstag, 22. Oktober 2026, 09:00 Uhr in Berlin. */
+const DONNERSTAG_9 = Date.UTC(2026, 9, 22, 7, 0, 0)
+/** Montag, 19. Oktober 2026, 07:00 Uhr in Berlin: 43 Stunden nach JETZT. */
+const MONTAG_7 = Date.UTC(2026, 9, 19, 5, 0, 0)
+/** Sonntag, 1. November 2026, 23:30 Uhr in Berlin, schon Winterzeit: Montag 00:30 in UTC wäre falsch. */
+const SONNTAG_WINTER = Date.UTC(2026, 10, 1, 22, 30, 0)
 
 const LIMITS: Limit[] = [
     { kind: 'five_hour', percentUsed: 23, resetsAt: new Date(JETZT + (2 * 60 + 41) * MIN).toISOString() },
@@ -1093,6 +1095,7 @@ test('Restzeit, Wochentag und das Lesen des Fable-Fensters', () => {
     expect(restUhr(43 * 60 * MIN)).toBe('43:00')
     expect(restUhr(-5)).toBe('00:00')
     expect(wochentagZeit(DONNERSTAG_9)).toBe('Do 09:00')
+    expect(wochentagZeit(SONNTAG_WINTER)).toBe('So 23:30')
     expect(fableAus(ENDPUNKT_FABLE)).toEqual({ prozent: 48, bis: MONTAG_7 })
     expect(fableAus({ limits: [{ scope: { model: { display_name: 'Fable' } }, limit: { utilization: 12.34, resets_at: new Date(MONTAG_7).toISOString() } }] })).toEqual({
         prozent: 12.3,
