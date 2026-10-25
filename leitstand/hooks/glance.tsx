@@ -79,6 +79,7 @@ import {
   isLatinText,
   isMcpMergeAction,
   isStartWords,
+  startsAtOnce,
   offersChoice,
   saysDo,
   jobCost,
@@ -422,6 +423,14 @@ let isStalled = false
 let nightStart: { plan: string; since: number } | null = null
 let nightTimer: Timer | undefined
 let nightStartedPlan: string | null = null
+// Where the message that starts the next main turn came from (prompt.submit knows, turn.start does not).
+let promptKind: string | null = null
+// The running job came from a scheduled task (cron, routine, /loop): nobody is there to press Start, so its waiting
+// plan starts by itself after NIGHT_SHIFT_START_MS, as with Autopilot on.
+let isUnattendedJob = false
+// The job whose plan Claude laid out as reading only (nurLesen): it started without approval, and a tool that writes
+// files is refused for it until a plan of its own is approved.
+let readOnlyJob: string | null = null
 // The settings a new chat starts with, from the config menu (register sets them); and the settings work under way,
 // so the next waits for it.
 let defaults: ChatSettings = FACTORY_SETTINGS
@@ -1513,6 +1522,9 @@ const setWorkMode = async ($: $, mode: WorkMode) => {
 /** Ob gerade die Arbeitsweise Dynamisch gilt: nur mit dem Leitstand an. */
 const isDynamic = async ($: $): Promise<boolean> => (await read($, enabledAtom)) && (await read($, workModeAtom)) === 'dynamisch'
 
+/** No terminal, app or phone draws this session (a plain claude -p run): nobody could press Start. */
+const hasNoSurface = async ($: $): Promise<boolean> => (await $.session.surfaces().catch(() => ['?'])).length === 0
+
 /** Legt die Arbeiter der Arbeitsweise Dynamisch an; in Auto bietet agent.offer sie nicht an. */
 const registerTiers = async ($: $) => {
   for (const tier of TIERS) {
@@ -1623,6 +1635,8 @@ const NIGHT_SHIFT_STATE = { plugin: 'autopilot', key: 'schicht' } as const
 const OLD_NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
 // The key Autopilot draws its line under, in the band above the prompt; it keeps it fixed for the mods that move it.
 const AUTOPILOT_LINE = 'autopilot'
+// The key of Modellwahl's line: its proposal with Übernehmen and Nein, drawn while one waits.
+const MODEL_CHOICE_LINE = 'modellwahl'
 
 /**
  * Whether Autopilot is on, as it holds it: while there is a run, be it running, finished or halted, since /autopilot
@@ -1851,12 +1865,16 @@ const grillMe = async ($: $) => {
   $.ui.toast('grill-me steht im Eingabefeld: Schreib dein Thema dazu und drück Enter.')
 }
 
+/** Whether a plan laid out now has to wait for Start: Approve the plan first on, or Gruppenarbeit, and not approved yet. */
+const needsApproval = async ($: $): Promise<boolean> =>
+  ((await read($, approveAtom)) || (await isDynamic($))) && (await read($, checklistAtom))?.approval !== 'approved'
+
 /**
  * With Approve the plan first on, or in Gruppenarbeit, a new plan waits for Start or a change; true when it now waits.
  * A plan made in a turn the person started with a go-ahead is approved by it and does not wait.
  */
 const holdForApproval = async ($: $): Promise<boolean> => {
-  if (!((await read($, approveAtom)) || (await isDynamic($))) || (await read($, checklistAtom))?.approval === 'approved') {
+  if (!(await needsApproval($))) {
     return false
   }
   if (isApprovingTurn) {
@@ -1946,7 +1964,8 @@ const armNightStart = async ($: $): Promise<string | null> => {
   const isOn = await isNightShiftOn($)
   const at = await now($)
   // Nothing is awaited from here on, so two checks at once agree.
-  if (!isOn || plan === nightStartedPlan) {
+  // A job from a scheduled task starts by itself too: nobody is there to press Start.
+  if (!(isOn || isUnattendedJob) || plan === nightStartedPlan) {
     stopNightStart()
     return null
   }
@@ -1984,9 +2003,13 @@ const nightStartSeconds = (list: GlanceChecklist, at: number): number | null => 
   return left > 0 ? Math.ceil(left / CALM_TICK_MS) * (CALM_TICK_MS / 1000) : null
 }
 
-/** What Claude reads about a waiting plan while Autopilot is on: it starts without the person. Empty otherwise. */
+/** What Claude reads about a waiting plan that starts without the person: Autopilot on, or a scheduled task. Empty otherwise. */
 const nightStartNote = async ($: $) =>
-  (await isNightShiftOn($)) ? ` Der Autopilot startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.` : ''
+  (await isNightShiftOn($))
+    ? ` Der Autopilot startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.`
+    : isUnattendedJob
+      ? ` Der Auftrag kam aus einer geplanten Aufgabe, niemand sieht zu: Der Leitstand startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.`
+      : ''
 
 /** Picks Simple, Details, Minimal or Off directly, as the settings panel does. */
 const setView = async ($: $, view: 'simple' | 'detailed' | 'minimal' | 'off') => {
@@ -2595,6 +2618,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             items: { type: 'string', enum: ['S', 'M', 'L'] },
             description: 'Eine Größe pro Schritt, in Reihenfolge: S klein, M mittel, L groß.',
           },
+          nurLesen: {
+            type: 'boolean',
+            description:
+              'true, wenn der Plan nur sucht, liest, analysiert, recherchiert, überlegt oder im Chat antwortet und nichts anlegt, ' +
+              'ändert, löscht oder verschickt. Dann braucht er keine Freigabe; ein Tool, das Dateien schreibt, ist für ihn gesperrt.',
+          },
         },
         required: ['steps'],
       },
@@ -2878,6 +2907,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   // ADHD mode follows what is sent, the button's own words included: the skill's call turns it on, "stop adhd mode" or
   // "normal mode" off. A message held back changes nothing.
   on('prompt.submit', async ($, e, next) => {
+    if (!e.isMeta && !e.command && !e.turnId) promptKind = e.origin.kind
     const says = e.command ? (isAdhdCommand(e.command.name) ? true : null) : e.isMeta ? null : adhdSays(e.text)
     const send = async (sent: typeof e = e) => {
       const result = await next(sent)
@@ -3112,7 +3142,16 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         hasAskedLast = await askedInTranscript($, e.text)
       }
       const isAnswering = current?.approval === 'waiting' || hasAskedLast
-      isApprovingTurn = !text.startsWith('/') && (text === START_TEXT || isStartWords(text) || (isAnswering && saysDo(text)))
+      isApprovingTurn =
+        !text.startsWith('/') && (text === START_TEXT || isStartWords(text) || startsAtOnce(text) || (isAnswering && saysDo(text)))
+      // Who sent the message: a scheduled task has nobody to press Start, so its plan starts by itself after 30 s;
+      // a run without any surface (claude -p) would end before then, so its plan does not wait at all.
+      if (text) {
+        const kind = promptKind
+        promptKind = null
+        isUnattendedJob = kind === 'scheduled-trigger'
+        if (kind === 'sdk' && !text.startsWith('/') && (await hasNoSurface($))) isApprovingTurn = true
+      }
     }
     if (current !== null && current.approval === 'waiting' && isMainTurn && isApprovingTurn) {
       // Start, or "go ahead" typed: the plan is approved and the same job goes on. The go-ahead is used up on it.
@@ -3165,15 +3204,19 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const isNewFile = filePath !== '' && tool === 'Write' && !(await $.fs.exists(filePath).catch(() => true))
 
     if (tool === PLAN_TOOL) {
-      const input = e as unknown as { steps?: unknown; sizes?: unknown }
+      const input = e as unknown as { steps?: unknown; sizes?: unknown; nurLesen?: unknown }
       const steps = (Array.isArray(input.steps) ? input.steps : []).map(one => cleanName(one)).slice(0, 8)
       const sizes = Array.isArray(input.sizes) ? input.sizes : []
+      const isReadOnly = input.nurLesen === true
       if (steps.length === 0) {
         return { deny: 'plan_steps braucht 2 bis 8 Schrittnamen.' }
       }
       const tasks = settle(steps.map((name, index) => task(name, 'upcoming', `plan#${index}`, sizeOf(sizes[index]))))
       const started = await now($)
       const known = await read($, checklistAtom)
+      // A plan that ran without approval as reading only does not carry that over to one that changes things.
+      const wasReadOnly = known !== null && readOnlyJob === known.jobId
+      if (wasReadOnly && !isReadOnly) readOnlyJob = null
       const paceMs = known === null ? await learnPace($) : known.paceMs
       await update($, checklistAtom, (list): GlanceChecklist => ({
         paceMs: list?.paceMs ?? paceMs,
@@ -3183,7 +3226,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         extraCachedTokens: list?.extraCachedTokens ?? 0,
         stopKind: null,
         activity: null,
-        approval: planApproval(list, steps),
+        approval: wasReadOnly && !isReadOnly ? 'none' : planApproval(list, steps),
         costAtStart: list?.costAtStart ?? null,
         title: list?.title ?? 'Arbeitet daran',
         startedAt: list?.startedAt ?? started,
@@ -3199,6 +3242,17 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       }))
       syncTicker($, await read($, checklistAtom))
       saveSoon($)
+      // Searching, reading, thinking or an answer in the chat needs no approval: such a plan starts at once.
+      if (isReadOnly && !isApprovingTurn && (await needsApproval($))) {
+        readOnlyJob = (await read($, checklistAtom))?.jobId ?? null
+        await change($, list => ({ ...list, approval: 'approved' }))
+        await armNightStart($)
+        return {
+          result:
+            `${steps.length} Schritte geplant, nur lesen: Der Plan startet ohne Freigabe. Anlegen, ändern, löschen oder verschicken ` +
+            'gehört nicht dazu; brauchst du das, leg mit plan_steps einen neuen Plan ohne nurLesen an, der auf die Freigabe wartet.',
+        }
+      }
       if (await holdForApproval($)) {
         return {
           result:
@@ -3233,6 +3287,15 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       })
 
       return { result: `Fortschritt notiert: ${percent}%.` }
+    }
+
+    // A plan that started without approval as reading only writes no files, and neither do its helpers.
+    if (FILE_TOOLS[tool] && readOnlyJob !== null && readOnlyJob === (await read($, checklistAtom))?.jobId) {
+      return {
+        deny:
+          'Dieser Plan ist als nur lesen angemeldet und lief ohne Freigabe los. Zum Anlegen oder Ändern leg mit plan_steps ' +
+          'einen neuen Plan ohne nurLesen an; er wartet auf die Freigabe der Person.',
+      }
     }
 
     // Ship it merges only the head commit the person approved, never past branch protection; helpers too.
@@ -4452,7 +4515,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const isMinimal = isEnabled && detail === 'minimal'
     // Autopilot's line stands at the very top, over the band, wherever it comes in what is beneath (another mod may have
     // built around it). Taken out whole before any buttons are lifted, so its Beenden stays beside its words.
-    const { rest: underneath, taken: autopilotLine } = takeOut(beneath, AUTOPILOT_LINE)
+    const { rest: withoutAutopilot, taken: autopilotLine } = takeOut(beneath, AUTOPILOT_LINE)
+    // Modellwahl's proposal comes out the same way and stands under it, with its Übernehmen and Nein beside its words.
+    const { rest: underneath, taken: modelChoiceLine } = takeOut(withoutAutopilot, MODEL_CHOICE_LINE)
     // Another mod's buttons (Replay, say) sit with Leitstand's own actions at the bottom right, in every state of the
     // band; anything else it draws stays under it.
     const lifted = vector && isEnabled ? liftButtons(underneath) : { buttons: [], rest: underneath }
@@ -4463,6 +4528,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const withBeneath = (tree: RenderElement): RenderElement => (
       <Box flexDirection="column">
         {autopilotLine as RenderElement | null}
+        {modelChoiceLine as RenderElement | null}
         {rule}
         {tree}
         {kept}
@@ -4560,7 +4626,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // With Autopilot on, a waiting plan starts by itself: beside Start, dim, how long until then. The terminal reads
     // Autopilot only while a plan waits, so its writes redraw nothing else there.
     const nightStartIn =
-      !isCompacting && list0?.approval === 'waiting' && (vector ? nightShift : await isNightShiftOn($)) ? nightStartSeconds(list0, current) : null
+      !isCompacting && list0?.approval === 'waiting' && (isUnattendedJob || (vector ? nightShift : await isNightShiftOn($)))
+        ? nightStartSeconds(list0, current)
+        : null
     const nightStartHint = nightStartIn !== null && (
       <Text key="night-start" dimColor wrap="truncate-end">
         {`startet in ${nightStartIn} s`}

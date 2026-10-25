@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 
@@ -8681,4 +8681,155 @@ test('days and times count in Berlin on every machine, summer and winter time al
   expect(shiftDay('2026-03-30', -1)).toBe('2026-03-29')
   expect(dayFromArgument('gestern', Date.UTC(2026, 2, 29, 22, 30))).toBe('2026-03-29')
   expect(resetTime(new Date(Date.UTC(2026, 10, 5, 8, 0)).toISOString(), Date.UTC(2026, 10, 1, 12, 0))).toBe('am Do um 09:00')
+})
+
+test('startsAtOnce: nur "Starte sofort" am Anfang der Nachricht', () => {
+  expect(startsAtOnce('Starte sofort: Schreib die Übergabe')).toBe(true)
+  expect(startsAtOnce('  starte bitte sofort')).toBe(true)
+  expect(startsAtOnce('STARTE SOFORT.')).toBe(true)
+  expect(startsAtOnce('Bitte starte sofort')).toBe(false)
+  expect(startsAtOnce('Starte sofortige Prüfung')).toBe(false)
+})
+
+test('"Starte sofort" vorn: in der Gruppenarbeit wartet der Plan nicht, auch mit "bevor" im Satz', async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  await $.turn.start({ text: 'Starte sofort: Schreib eine Übergabe für die nächste Instanz, bevor der Server neu startet.', turnId: 't1' })
+  const planned = await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })
+  expect(String(planned.result)).toContain('Der erste hat begonnen')
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+})
+
+test('Auftrag aus einer geplanten Aufgabe: der Plan wartet, startet nach 30 s von selbst, und Claude weiß es', async ($, on) => {
+  const clock = world(on)
+  const sent: string[] = []
+  on('prompt.submit', (_, e) => {
+    sent.push(e.text)
+    return { text: e.text }
+  })
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  const auftrag = 'Schreib eine Übergabe für die nächste Instanz.'
+  await $.prompt.submit({ text: auftrag, wait: false, origin: { kind: 'scheduled-trigger' } } as never)
+  await $.turn.start({ text: auftrag, turnId: 't1' })
+  const planned = await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })
+  expect(String(planned.result)).toContain(
+    'Der Auftrag kam aus einer geplanten Aufgabe, niemand sieht zu: Der Leitstand startet den Plan in 30 Sekunden von selbst.',
+  )
+  await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  for (const surface of SURFACES) expect((await texts($, surface)).join('\n')).toContain('startet in 30 s')
+  await clock.advance(29_000)
+  expect(sent.filter(one => one === START_TEXT)).toHaveLength(0)
+  await clock.advance(1000)
+  expect(sent.filter(one => one === START_TEXT)).toHaveLength(1)
+  await $.turn.start({ text: START_TEXT, turnId: 't2' })
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+  await clock.advance(60_000)
+  expect(sent.filter(one => one === START_TEXT)).toHaveLength(1)
+})
+
+test('derselbe Auftrag von der Person: der Plan wartet auch nach 60 s auf Start', async ($, on) => {
+  const clock = world(on)
+  const sent: string[] = []
+  on('prompt.submit', (_, e) => {
+    sent.push(e.text)
+    return { text: e.text }
+  })
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  const auftrag = 'Schreib eine Übergabe für die nächste Instanz.'
+  await $.prompt.submit({ text: auftrag, wait: false, origin: { kind: 'composer' } } as never)
+  await $.turn.start({ text: auftrag, turnId: 't1' })
+  const planned = await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })
+  expect(String(planned.result)).not.toContain('geplanten Aufgabe')
+  await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await clock.advance(60_000)
+  expect(sent.filter(one => one === START_TEXT)).toHaveLength(0)
+})
+
+test('claude -p ohne Oberfläche: der Plan wartet nicht; mit einer Oberfläche (App) wartet er', async ($, on) => {
+  world(on)
+  let surfaces: string[] = []
+  on('session.surfaces', () => ({ value: surfaces }) as never)
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  await $.prompt.submit({ text: 'Schreib die Übergabe.', wait: false, origin: { kind: 'sdk' } } as never)
+  await $.turn.start({ text: 'Schreib die Übergabe.', turnId: 't1' })
+  expect(String((await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })).result)).toContain('Der erste hat begonnen')
+  await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+
+  surfaces = ['desktop']
+  await $.prompt.submit({ text: 'Baue die Preisseite.', wait: false, origin: { kind: 'sdk' } } as never)
+  await $.turn.start({ text: 'Baue die Preisseite.', turnId: 't2' })
+  expect(String((await callTool($, { tool: PLAN, steps: ['Plane die Seite', 'Prüfe sie'] })).result)).toContain('warte auf ihre Antwort')
+})
+
+test('nurLesen: der Plan startet ohne Freigabe, schreibt aber keine Dateien; ein Plan zum Ändern wartet wieder', async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  await $.turn.start({ text: 'Mach einen Plan, wie wir die Preisseite umbauen', turnId: 't1' })
+  const read = await callTool($, { tool: PLAN, steps: ['Lies die Preisseite', 'Schreib den Plan in den Chat'], nurLesen: true })
+  expect(String(read.result)).toContain('nur lesen: Der Plan startet ohne Freigabe')
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+  expect((await callTool($, { tool: 'Read', file_path: '/work/preise.html' })).deny).toBeUndefined()
+  expect((await callTool($, { tool: 'Edit', file_path: '/work/preise.html', old_string: 'a', new_string: 'b' })).deny).toContain('nur lesen')
+  expect((await callTool($, { tool: 'Write', file_path: '/work/neu.html', content: 'x' })).deny).toContain('nur lesen')
+
+  // Dieselben Schritte ohne nurLesen sind ein Plan zum Ändern: er wartet auf Start.
+  const change = await callTool($, { tool: PLAN, steps: ['Lies die Preisseite', 'Schreib den Plan in den Chat'] })
+  expect(String(change.result)).toContain('warte auf ihre Antwort')
+  await $.turn.start({ text: 'los', turnId: 't2' })
+  expect((await callTool($, { tool: 'Edit', file_path: '/work/preise.html', old_string: 'a', new_string: 'b' })).deny).toBeUndefined()
+})
+
+test('nurLesen im Auto-Modus ohne Plan-Freigabe ändert nichts: nichts wartet, nichts ist gesperrt', async ($, on) => {
+  world(on)
+  await $.turn.start({ text: 'Was steht in der Preisseite?', turnId: 't1' })
+  const read = await callTool($, { tool: PLAN, steps: ['Lies die Preisseite', 'Antworte im Chat'], nurLesen: true })
+  expect(String(read.result)).toContain('Der erste hat begonnen')
+  expect((await callTool($, { tool: 'Edit', file_path: '/work/preise.html', old_string: 'a', new_string: 'b' })).deny).toBeUndefined()
+})
+
+/** Modellwahl as it draws its proposal: a keyed line with its words and its two buttons, over what is beneath. */
+const FAKE_MODELLWAHL = {
+  name: 'modellwahl',
+  register(on: On) {
+    on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+      const beneath = await next(e)
+      const { Box, Text, Button } = $.ui.resolve(e)
+      const look = (variant: 'primary' | 'secondary') => (e.surface === 'terminal' ? { plain: true } : { variant })
+      return h(
+        Box,
+        { flexDirection: 'column' },
+        h(
+          Box,
+          { key: 'modellwahl', flexDirection: 'row', gap: 1 },
+          h(Text, {}, 'Modellwahl schlägt Haiku · niedrig vor · gilt in 12 s'),
+          h(Button, { key: 'modellwahl-ja', label: 'Übernehmen', ...look('primary'), onPress: () => undefined }),
+          h(Button, { key: 'modellwahl-nein', label: 'Nein', ...look('secondary'), onPress: () => undefined }),
+        ),
+        beneath,
+      ) as never
+    })
+  },
+}
+
+test('die Zeile der Modellwahl steht oben im Band; ihre Knöpfe bleiben bei ihr', { plugins: [FAKE_MODELLWAHL] }, async ($, on) => {
+  world(on)
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Text', props: {}, children: ['A card from another mod'] }) as never)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  for (const surface of SURFACES) {
+    const shown = await texts($, surface)
+    const at = (words: string) => shown.findIndex(one => one.includes(words))
+    expect(at('Modellwahl schlägt')).toBe(0)
+    expect(at('Modellwahl schlägt')).toBeLessThan(at('Write it'))
+    expect(at('Write it')).toBeLessThan(at('A card from another mod'))
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const boxes = await ui.findAll({ type: 'Box' })
+    const line = JSON.stringify(boxes.find(one => one.props.key === 'modellwahl') ?? null)
+    const actions = JSON.stringify(boxes.find(one => one.props.key === 'actions') ?? null)
+    await ui.unmount()
+    expect(line).toContain('Übernehmen')
+    expect(line).toContain('Nein')
+    expect(actions).not.toContain('Übernehmen')
+  }
 })

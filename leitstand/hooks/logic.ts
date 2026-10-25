@@ -471,6 +471,14 @@ export function isStartWords(text: string): boolean {
   )
 }
 
+/**
+ * "Starte sofort" at the head of a message: the plan Claude makes for it needs no approval, whatever follows ("Starte
+ * sofort: Schreib die Übergabe, bevor der Server neu startet"). Typed by the person or put there by a cron job.
+ */
+export function startsAtOnce(text: string): boolean {
+  return /^\s*starte\s+(?:bitte\s+)?sofort(?![\p{L}\p{N}])/iu.test(text)
+}
+
 // Filler words that may open a clause before a go-ahead: "also: leg los", "ja, dann fang bitte an".
 const LEAD_IN = String.raw`(?:(?:also|dann|jetzt|nun|gut|super|prima|okay|ok|ja|und|einfach|bitte)\s*,?\s+)*`
 // A German go-ahead at the start of a sentence or clause; a letter or digit after it makes it another word.
