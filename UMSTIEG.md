@@ -75,7 +75,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 | autopilot | `/autopilot`: Claude arbeitet ohne Rückfragen weiter, mit Übergabe am Ende (früher Nachtschicht) |
 | filetree | Dateibaum als Seitenfenster mit Git-Status, deutsche Fassung |
 | reflect | lernt aus Korrekturen und fragt: Regel für alle Projekte, dieses Projekt oder nur diesen Chat; `/reflect` kritisiert die bisherige Arbeit; Knopf 🪞 im Leitstand |
-| modellwahl | wählt einmal je Aufgabe Modell und Aufwand, automatisch zu Beginn eines neuen Chats oder per `/modellwahl` |
+| modellwahl | schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch zu Beginn eines neuen Chats oder per `/modellwahl`; am Rechner gilt der Vorschlag nach 15 s, vom Handy auf ja |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
 | i-have-adhd | ADHS-Modus, Knopf 🧠 im Leitstand |
 
@@ -101,7 +101,9 @@ deshalb gleiches Bild auf jeder Instanz.
 - Der Leitstand startet in der Arbeitsweise "Auto-Modus" ohne Plan-Freigabe. In der Gruppenarbeit
   nennt Claude den Plan im Chat und wartet auf "los" oder Start. Bei laufendem Autopilot startet
   ein wartender Plan nach 30 Sekunden von selbst; solange Arbeiter im Hintergrund laufen, stößt
-  der Autopilot nicht an.
+  der Autopilot nicht an. Ohne Warten starten: ein Plan, der nur liest oder im Chat antwortet, ein
+  Prompt, der mit "Starte sofort" beginnt (so auch Cron-Aufträge per tmux), und `claude -p` ohne
+  Oberfläche. Ein Auftrag aus einer geplanten Aufgabe (`/schedule`, Routine) startet nach 30 Sekunden.
 - Android-App (Remote Control): Kein Mod hält etwas an, das dort nicht zu sehen ist. Passwörter in
   Nachrichten vom Handy werden entfernt statt die Nachricht anzuhalten; `/better` und das
   Seitenfenster von Reflect gehen nur am Rechner, `/reflect zeigen` und `/reflect regeln` auch

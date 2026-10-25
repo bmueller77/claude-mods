@@ -93,7 +93,22 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Desktop-App: Ihre Modellauswahl folgt einem `/model` oder `/effort` eines Mods nicht ("for this
   session only"), im Test blieb sie auf Opus · Extra hoch. Danach galt die Modellwahl als von Hand
   zurückgezogen. Seit modellwahl 0.1.1 stellt der Mod deshalb nur noch je Anfrage über `turn.step` um;
-  was gerade antwortet, zeigen die Statuszeile und `/modellwahl-zeigen`.
+  was gerade antwortet, zeigen die Statuszeile und `/modellwahl-zeigen`. Auch das Werkzeug der App
+  (`set_session_model`) lehnt die eigene Sitzung ab ("a session must not silently re-price its own turns").
+- Modellwahl seit 0.2.0 (Björns Wunsch): Sie schlägt vor. Am Rechner gilt der Vorschlag nach 15 s von
+  selbst, für jedes Modell; die Zeile im Band (Schlüssel `modellwahl`) hat Übernehmen und Nein, der
+  Leitstand holt sie nach oben wie die Autopilot-Zeile. Vom Handy (`bridge`) gilt er nie von selbst, nur
+  auf `ja`, `ok`, `Okay` oder `/modellwahl ja`; die Nachricht geht trotzdem an Claude. Die erste
+  Nachricht eines neuen Chats wartet nicht, sie läuft mit dem Modell aus dem Menü los.
+- Leitstand seit 0.54.0, Gruppenarbeit und "Plan zuerst freigeben": Ein Prompt, der mit "Starte sofort"
+  beginnt, braucht keine Freigabe (Triggerwort, auch für Cron per tmux; zählt auch mit "bevor" oder
+  "nicht" im Satz). Herkunft `scheduled-trigger` (`/schedule`, Routine, `/loop`) startet nach 30 s wie
+  beim Autopiloten; `sdk` ohne Oberfläche (`claude -p`) startet sofort, sonst endete der Lauf vor dem
+  Start. `plan_steps` hat `nurLesen`: solche Pläne starten ohne Freigabe, Write/Edit/MultiEdit/
+  NotebookEdit sind für sie gesperrt (Bash nicht, bekannte Lücke).
+- Computersteuerung: Das Fenster der Claude-App selbst darf sie nicht bedienen (`request_access` für
+  "Claude" wird grundsätzlich abgelehnt). Live-Tests im Band macht Björn; ohne Fenster prüft Claude mit
+  `claude -p` und liest den Verlauf unter `~/.claude/projects/<ordner>/<sitzung>.jsonl`.
 
 ## Offen (Stand 2026-10-19, nach dem Live-Test am PC)
 
@@ -105,10 +120,11 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    fälschlich zurück und verglich danach mit dem alten Modell, sodass `/modellwahl <große Aufgabe>`
    "bleibt bei Opus" sagte statt nachzufragen (0.1.1). Der Leitstand machte aus einem Fortschritt
    ohne Schrittnamen (Haiku ließ ihn weg) einen neuen Schritt "Arbeitet daran" (0.53.2).
-   Nach Update und Neustart nachprüfen: Modellwahl im neuen Chat (`/modellwahl-zeigen` nach der
-   ersten Runde "Zurückgezogen: nein"; Rückfrage mit `/modellwahl <große Aufgabe>`, dann
-   `/modellwahl ja`; Rückzug bei Umstellung von Hand in der App). Nicht ausdrücklich bestätigt:
-   Abbrechen in Prompt Upgrade legt den Text zurück ins Feld.
+   Nachprüfung 0.1.1 am 2026-10-25 bestanden: "Zurückgezogen: nein" nach der ersten Runde,
+   Rückfrage vor Opus, `/modellwahl ja`. Nicht gemacht: Rückzug bei Umstellung von Hand in der App.
+   Nicht ausdrücklich bestätigt: Abbrechen in Prompt Upgrade legt den Text zurück ins Feld.
+   Live-Test ausstehend für modellwahl 0.2.0 (Band mit Countdown, Übernehmen/Nein, Handy mit ja/ok)
+   und leitstand 0.54.0 ("Starte sofort", geplante Aufgabe nach 30 s, `nurLesen`).
 2. Leitstand: Im Test-Chat (Haiku) stand das Band Minuten nach Rundenende noch auf "Arbeitet" mit
    "Nutzt eine verbundene App". Im Nachbau zeigt es nach Rundenende richtig "Braucht dich". Ursache
    offen (Helfer als laufend gezählt? `turn.complete` nicht angekommen?); beobachten.
