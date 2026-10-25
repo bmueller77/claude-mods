@@ -1,12 +1,12 @@
-import type { EngineInterface, Register, SessionMessage } from 'claude-code'
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, Register, RenderNode, SessionMessage } from 'claude-code'
 
-import type { Aufwand, AutoSchalter, Einschaetzung, Kalibrierung, Wahl } from '../types'
+import type { Aufwand, AutoSchalter, Einschaetzung, Kalibrierung, Vorschlag, Wahl } from '../types'
 import {
     AUFWAENDE,
     GEMELDET,
     LEERE_KALIBRIERUNG,
     MODELLE,
-    NACHFRAGEN,
     SYSTEM,
     baueAnfrage,
     dauerText,
@@ -25,12 +25,14 @@ import {
 // Modellwahl: einmal je Aufgabe Modell und Aufwand fuer den Chat waehlen.
 //
 // Gewaehlt wird bei der ersten echten Nachricht eines neuen Chats oder mit
-// /modellwahl. Angewendet wird nur ueber turn.step, Schritt fuer Schritt der
-// Hauptschleife (Subagenten bleiben, wie sie sind). Ein eigenes /model oder
-// /effort schickt der Mod nicht: Die Desktop-App behaelt ihre Auswahl und stellt
-// die Sitzung darauf zurueck, und das sah aus wie eine Umstellung der Person
-// (Live-Test 2026-10-19). Stellt die Person selbst um, zieht sich der Mod fuer
-// diesen Chat zurueck.
+// /modellwahl. Gewaehlt heisst seit 0.2.0 vorgeschlagen: Am Rechner gilt der
+// Vorschlag nach 15 Sekunden von selbst, das Band zeigt ihn mit Übernehmen und
+// Nein; vom Handy gilt er erst auf ja oder ok, nichts wartet und nichts haelt an.
+// Angewendet wird nur ueber turn.step, Schritt fuer Schritt der Hauptschleife
+// (Subagenten bleiben, wie sie sind). Ein eigenes /model oder /effort schickt der
+// Mod nicht: Die Desktop-App behaelt ihre Auswahl und stellt die Sitzung darauf
+// zurueck, und das sah aus wie eine Umstellung der Person (Live-Test 2026-10-19).
+// Stellt die Person selbst um, zieht sich der Mod fuer diesen Chat zurueck.
 
 /** Schluessel im Speicher. */
 const SPEICHER_WAHL = 'wahl:'
@@ -44,11 +46,23 @@ const AUFRAEUMEN_ABSTAND_MS = 24 * 60 * 60_000
 
 /** So lange wartet die erste Nachricht hoechstens auf die Einschaetzung. */
 export const EINSCHAETZUNG_MS = 5000
-/** So lange gilt ein Vorschlag von /modellwahl. */
+/** So lange wartet ein Vorschlag vom Handy auf ja. */
 export const VORSCHLAG_MS = 10 * 60_000
+/** Nach so langer Zeit ohne Reaktion gilt ein Vorschlag am Rechner von selbst. */
+export const UEBERNAHME_MS = 15_000
 
 /** Woher eine Nachricht kommen muss, damit sie gewaehlt wird: Rechner, App, Handy. */
 const ECHTE_HERKUNFT = new Set(['composer', 'sdk', 'bridge'])
+
+/** Eine Nachricht, die einen offenen Vorschlag annimmt: ja, ok, okay. */
+export const ZUSTIMMUNG = /^\s*(?:ja|ok|okay)\s*[.!]*\s*$/i
+
+/** Der offene Vorschlag, fuer das Band; die Logik liest `z.offen`, das immer gleich ist. */
+const vorschlagAtom = atom({ plugin: 'modellwahl', key: 'vorschlag' } as const, null as Vorschlag | null)
+/** Jede Sekunde eins weiter, solange ein Vorschlag laeuft: der Countdown im Band. */
+const taktAtom = atom({ plugin: 'modellwahl', key: 'takt' } as const, 0)
+/** Der Schluessel der Zeile im Band; der Leitstand holt sie darunter ganz nach oben. */
+export const ZEILE = 'modellwahl'
 
 /** Der Standardsatz, wenn ein Befehl scheitert. */
 export const BEFEHL_FEHLER = 'Modellwahl: Das hat nicht geklappt. Modell und Aufwand bleiben, wie sie sind.'
@@ -57,12 +71,25 @@ export const BEFEHL_FEHLER = 'Modellwahl: Das hat nicht geklappt. Modell und Auf
 export const BEFEHLE = [
     {
         name: 'modellwahl',
-        description: 'Modell und Aufwand für diesen Chat passend zur Aufgabe wählen; ja führt einen offenen Vorschlag aus (Modellwahl)',
-        argumentHint: '[Aufgabe | ja]',
+        description: 'Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft (Modellwahl)',
+        argumentHint: '[Aufgabe | ja | nein]',
         hilfe:
-            '/modellwahl wählt Modell und Aufwand für diesen Chat. Mit einer Aufgabe dahinter wird diese eingeschätzt, ohne die letzten Nachrichten. ' +
-            'Mitten im Chat fragt der Mod vor Opus oder Fable erst nach; /modellwahl ja führt den Vorschlag aus (gilt 10 Minuten). ' +
-            'Im leeren Chat ohne Aufgabe wählt er bei deiner nächsten Nachricht.',
+            '/modellwahl schlägt Modell und Aufwand für diesen Chat vor. Mit einer Aufgabe dahinter wird diese eingeschätzt, ohne die letzten Nachrichten. ' +
+            'Am Rechner gilt der Vorschlag nach 15 Sekunden von selbst, über der Eingabe stehen Übernehmen und Nein. ' +
+            'Vom Handy gilt er erst, wenn du ja, ok oder /modellwahl ja schickst (10 Minuten lang). /modellwahl nein verwirft ihn. ' +
+            'Im leeren Chat ohne Aufgabe schlägt er bei deiner nächsten Nachricht vor.',
+    },
+    {
+        name: 'modellwahl-uebernehmen',
+        description: 'Den offenen Vorschlag der Modellwahl sofort übernehmen (Modellwahl)',
+        argumentHint: '[hilfe]',
+        hilfe: '/modellwahl-uebernehmen übernimmt den offenen Vorschlag sofort, wie der Knopf Übernehmen über der Eingabe oder /modellwahl ja.',
+    },
+    {
+        name: 'modellwahl-ablehnen',
+        description: 'Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben (Modellwahl)',
+        argumentHint: '[hilfe]',
+        hilfe: '/modellwahl-ablehnen verwirft den offenen Vorschlag, wie der Knopf Nein über der Eingabe oder /modellwahl nein. Modell und Aufwand bleiben, wie sie sind.',
     },
     {
         name: 'modellwahl-zeigen',
@@ -94,9 +121,10 @@ type Befehl = (typeof BEFEHLE)[number]['name']
 
 /** Was /modellwahl-hilfe antwortet. */
 export const HILFE = [
-    'Modellwahl: Wählt einmal je Aufgabe Modell und Aufwand, automatisch bei der ersten Nachricht eines neuen Chats.',
-    '/modellwahl [Aufgabe]: jetzt wählen. Mitten im Chat fragt der Mod vor Opus oder Fable erst nach; /modellwahl ja führt aus.',
-    '/modellwahl-zeigen: aktuelle Wahl und Kalibrierung.',
+    'Modellwahl: Schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch bei der ersten Nachricht eines neuen Chats.',
+    'Am Rechner gilt der Vorschlag nach 15 Sekunden von selbst (Übernehmen und Nein über der Eingabe); vom Handy erst auf ja oder ok.',
+    '/modellwahl [Aufgabe]: jetzt vorschlagen. /modellwahl ja oder /modellwahl-uebernehmen übernimmt, /modellwahl nein oder /modellwahl-ablehnen verwirft.',
+    '/modellwahl-zeigen: aktuelle Wahl, offener Vorschlag und Kalibrierung.',
     '/modellwahl-auto-an, /modellwahl-auto-aus: Automatik nur für diesen Chat.',
     'Stellst du Modell oder Aufwand selbst um, zieht sich der Mod in diesem Chat zurück.',
 ].join('\n')
@@ -114,7 +142,10 @@ type Zustand = {
     wahl: Wahl | null
     /** Der Aufwand, den die Sitzung von sich aus schickt; `undefined` ohne Aufwand, null noch nicht gesehen. */
     basisAufwand: Aufwand | number | undefined | null
-    vorschlag: { wahl: Einschaetzung; at: number } | null
+    /** Der offene Vorschlag, wie in `$.state`; nur `setzeVorschlag` schreibt ihn. */
+    offen: Vorschlag | null
+    /** Der Takt des Countdowns, solange ein Vorschlag am Rechner laeuft. */
+    uhr: { cancel: () => void } | null
     /** Was die Hauptschleife von sich aus schickt: zuletzt gesehen oder seit einem Modellwechsel. */
     letztesModell: string | null
     letzterAufwand: Aufwand | number | undefined | null
@@ -134,7 +165,8 @@ const z: Zustand = {
     wartet: false,
     wahl: null,
     basisAufwand: null,
-    vorschlag: null,
+    offen: null,
+    uhr: null,
     letztesModell: null,
     letzterAufwand: null,
     auto: null,
@@ -179,10 +211,16 @@ async function speichereWahl($: EngineInterface): Promise<void> {
     }
 }
 
-/** Die Statuszeile: die Wahl, solange sie gilt; sonst nichts. */
+/** Die Statuszeile: ein offener Vorschlag, sonst die Wahl, solange sie gilt; sonst nichts. */
 function zeigeStatus($: EngineInterface): void {
     try {
-        $.ui.status(z.wahl && !z.wahl.zurueckgezogen ? `Modellwahl: ${wahlText(z.wahl)}` : undefined)
+        $.ui.status(
+            z.offen
+                ? `Modellwahl: Vorschlag ${wahlText(z.offen.wahl)}`
+                : z.wahl && !z.wahl.zurueckgezogen
+                  ? `Modellwahl: ${wahlText(z.wahl)}`
+                  : undefined,
+        )
     } catch {
         // Ohne Statuszeile geht es auch.
     }
@@ -202,8 +240,8 @@ async function sitzung($: EngineInterface): Promise<void> {
     // Eine gespeicherte Wahl gilt ueber turn.step weiter.
     z.wahl = istWahl(w) ? w : null
     z.basisAufwand = null
-    z.vorschlag = null
-    const a = (await $.store.get(SPEICHER_AUTO + id).catch(() => undefined)) as AutoSchalter | undefined
+    await setzeVorschlag($, null)
+    const a =(await $.store.get(SPEICHER_AUTO + id).catch(() => undefined)) as AutoSchalter | undefined
     if (a && typeof a.isOn === 'boolean') {
         z.auto = a.isOn
     } else if (z.autoUebertrag !== null) {
@@ -245,20 +283,90 @@ async function raeumeAuf($: EngineInterface): Promise<void> {
 async function setzeWahl($: EngineInterface, w: Einschaetzung): Promise<void> {
     z.wahl = { modell: w.modell, aufwand: w.aufwand, grund: w.grund, at: await $.clock.now(), zurueckgezogen: false }
     z.basisAufwand = null
-    z.vorschlag = null
     await speichereWahl($)
-    zeigeStatus($)
+    await setzeVorschlag($, null)
 }
 
-/** Die Person hat selbst umgestellt: nichts mehr ueberschreiben in diesem Chat. */
+/** Die Person hat selbst umgestellt: nichts mehr ueberschreiben in diesem Chat, auch kein offener Vorschlag. */
 async function zieheZurueck($: EngineInterface): Promise<void> {
+    await setzeVorschlag($, null)
     if (!z.wahl || z.wahl.zurueckgezogen) {
         return
     }
     z.wahl = { ...z.wahl, zurueckgezogen: true }
-    z.vorschlag = null
     await speichereWahl($)
     zeigeStatus($)
+}
+
+/**
+ * Den offenen Vorschlag setzen oder loeschen, an einer Stelle fuer Logik, Band und
+ * Statuszeile. Ein Vorschlag mit Frist bekommt einen Takt: jede Sekunde zeichnet
+ * das Band neu, nach Ablauf gilt der Vorschlag.
+ */
+async function setzeVorschlag($: EngineInterface, v: Vorschlag | null): Promise<void> {
+    z.uhr?.cancel()
+    z.uhr = null
+    z.offen = v
+    await update($, vorschlagAtom, () => v).catch(() => {})
+    if (v && v.bis !== null) {
+        const takt = $.clock.every(1000, () => void ticke($, v.at).catch(() => {}))
+        z.uhr = takt
+    }
+    zeigeStatus($)
+}
+
+/** Ein Schlag des Countdowns: neu zeichnen, nach Ablauf uebernehmen. */
+async function ticke($: EngineInterface, at: number): Promise<void> {
+    const v = z.offen
+    if (!v || v.at !== at || v.bis === null) {
+        return
+    }
+    if ((await $.clock.now()) >= v.bis) {
+        const w = await uebernehme($, at)
+        if (w) {
+            try {
+                $.ui.toast(`Modellwahl: ${wahlText(w)} übernommen.`)
+            } catch {
+                // Die Statuszeile sagt es auch.
+            }
+        }
+        return
+    }
+    await update($, taktAtom, n => n + 1).catch(() => {})
+}
+
+/** Einen Vorschlag machen: am Rechner mit Frist, vom Handy ohne (dort gilt er erst auf ja). */
+async function schlageVor($: EngineInterface, w: Einschaetzung, vomHandy: boolean): Promise<void> {
+    const jetzt = await $.clock.now()
+    await setzeVorschlag($, { wahl: w, at: jetzt, bis: vomHandy ? null : jetzt + UEBERNAHME_MS })
+}
+
+/** Ganze Sekunden bis zur Frist, nie unter null. */
+export const restSekunden = (bis: number, jetzt: number) => Math.max(0, Math.ceil((bis - jetzt) / 1000))
+
+/** Ob der offene Vorschlag noch gilt: einer vom Handy zehn Minuten lang. */
+function giltNoch(v: Vorschlag | null, jetzt: number): v is Vorschlag {
+    return v !== null && (v.bis !== null || jetzt - v.at <= VORSCHLAG_MS)
+}
+
+/** Den offenen Vorschlag uebernehmen (nur den mit dieser Kennung, wenn eine kommt); die Wahl, oder null. */
+async function uebernehme($: EngineInterface, at?: number): Promise<Einschaetzung | null> {
+    const v = z.offen
+    if (!v || (at !== undefined && v.at !== at) || !giltNoch(v, await $.clock.now())) {
+        return null
+    }
+    await setzeWahl($, v.wahl)
+    return v.wahl
+}
+
+/** Den offenen Vorschlag verwerfen (nur den mit dieser Kennung, wenn eine kommt); ob einer da war. */
+async function lehneAb($: EngineInterface, at?: number): Promise<boolean> {
+    const v = z.offen
+    if (!v || (at !== undefined && v.at !== at)) {
+        return false
+    }
+    await setzeVorschlag($, null)
+    return true
 }
 
 type Ergebnis = { ok: true; wahl: Einschaetzung } | { ok: false; grund: 'zeit' | 'fehler' | 'unlesbar' }
@@ -290,11 +398,21 @@ function ohneEinschaetzung(grund: 'zeit' | 'fehler' | 'unlesbar'): string {
     return `Modellwahl: keine Einschätzung (${warum}), Modell und Aufwand bleiben.`
 }
 
-/** Der Hinweis an Claude nach der automatischen Wahl. */
-export function hinweis(w: Einschaetzung): string {
+/** Der Hinweis an Claude nach dem automatischen Vorschlag. */
+export function hinweisVorschlag(w: Einschaetzung, vomHandy: boolean): string {
+    return vomHandy
+        ? `Der Mod Modellwahl schlägt für diesen Chat ${wahlText(w)} vor; das gilt erst, wenn die Person mit ja oder ok zustimmt. ` +
+              `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl schlägt ${wahlText(w)} vor, übernehmen mit ja oder ok.“ Danach antworte wie gewohnt.`
+        : `Der Mod Modellwahl schlägt für diesen Chat ${wahlText(w)} vor; ohne Einspruch gilt das nach 15 Sekunden. ` +
+              `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl schlägt ${wahlText(w)} vor.“ Danach antworte wie gewohnt.`
+}
+
+/** Der Hinweis an Claude, wenn ein ja oder ok den Vorschlag angenommen hat. */
+export function hinweisUebernommen(w: Einschaetzung): string {
     return (
-        `Der Mod Modellwahl hat für diesen Chat ${wahlText(w)} gewählt. ` +
-        `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl: ${wahlText(w)}.“ Danach antworte wie gewohnt.`
+        `Mit dieser Nachricht hat die Person den Vorschlag des Mods Modellwahl angenommen: ab jetzt ${wahlText(w)}. ` +
+        `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl: ${wahlText(w)} übernommen.“ ` +
+        'Galt das ja oder ok auch einer Frage von dir, antworte danach darauf wie gewohnt.'
     )
 }
 
@@ -324,8 +442,8 @@ async function aktuell($: EngineInterface): Promise<{ modell: string | null; auf
     return { modell, aufwand: z.letzterAufwand }
 }
 
-/** Der Rueckfrage-Text: Vorschlag, was das Neueinlesen kostet, wie ausfuehren. */
-async function vorschlagText($: EngineInterface, w: Einschaetzung, modellAendert: boolean): Promise<string> {
+/** Der Text des Vorschlags: was er waere, was das Neueinlesen kostet, wann und wie er gilt. */
+async function vorschlagText($: EngineInterface, w: Einschaetzung, modellAendert: boolean, vomHandy: boolean): Promise<string> {
     const teile = [`Modellwahl-Vorschlag: ${wahlText(w)}${w.grund ? ` – ${w.grund}` : ''}.`]
     if (modellAendert) {
         let tokens: number | null = null
@@ -348,58 +466,56 @@ async function vorschlagText($: EngineInterface, w: Einschaetzung, modellAendert
     } else {
         teile.push('Das Modell bleibt, der Kontext wird nicht neu gelesen.')
     }
-    teile.push('Ausführen: /modellwahl ja')
+    teile.push(
+        vomHandy
+            ? 'Übernehmen mit ja, ok oder /modellwahl ja (10 Minuten lang).'
+            : 'Gilt in 15 s, wenn du nichts tust; verwerfen mit Nein über der Eingabe oder /modellwahl nein.',
+    )
     return teile.join(' ')
 }
 
-/** /modellwahl [Aufgabe | ja]. */
-async function befehlWahl($: EngineInterface, args: string): Promise<string> {
+/** Die Wahl mit Grund, als Satzteil. */
+const mitGrund = (w: Einschaetzung) => `${wahlText(w)}${w.grund ? ` – ${w.grund}` : ''}`
+
+/** /modellwahl [Aufgabe | ja | nein], auch hinter /modellwahl-uebernehmen und /modellwahl-ablehnen. */
+async function befehlWahl($: EngineInterface, args: string, vomHandy: boolean): Promise<string> {
     await sitzung($)
     const a = args.trim()
-    const jetzt = await $.clock.now()
-    if (/^ja$/i.test(a)) {
-        const v = z.vorschlag
-        if (!v || jetzt - v.at > VORSCHLAG_MS) {
-            z.vorschlag = null
+    if (/^(?:ja|ok|okay)$/i.test(a)) {
+        const vorher = (await aktuell($)).modell
+        const w = await uebernehme($)
+        if (!w) {
+            await setzeVorschlag($, null)
             return 'Modellwahl: Kein offener Vorschlag. /modellwahl schlägt neu vor.'
         }
-        const vorher = (await aktuell($)).modell
-        await setzeWahl($, v.wahl)
-        return `Modellwahl: ${wahlText(v.wahl)}${v.wahl.grund ? ` – ${v.wahl.grund}` : ''}.${familieVon(vorher) !== v.wahl.modell ? ' Kontext wird einmal neu gelesen.' : ''}`
+        return `Modellwahl: ${mitGrund(w)}.${familieVon(vorher) !== w.modell ? ' Kontext wird einmal neu gelesen.' : ''}`
+    }
+    if (/^nein$/i.test(a)) {
+        return (await lehneAb($))
+            ? 'Modellwahl: Vorschlag verworfen. Modell und Aufwand bleiben, wie sie sind.'
+            : 'Modellwahl: Kein offener Vorschlag.'
     }
     const v = await verlauf($)
     const hatRunden = v.some(m => m.role === 'assistant')
-    if (!hatRunden) {
-        if (!a) {
-            z.wartet = true
-            return 'Modellwahl: Ich wähle bei deiner nächsten Nachricht.'
-        }
-        const r = await schaetze($, a, [])
-        if (!r.ok) {
-            return ohneEinschaetzung(r.grund)
-        }
-        await setzeWahl($, r.wahl)
-        z.neu = false
-        z.wartet = false
-        return `Modellwahl: ${wahlText(r.wahl)}${r.wahl.grund ? ` – ${r.wahl.grund}` : ''}.`
+    if (!hatRunden && !a) {
+        z.wartet = true
+        return 'Modellwahl: Ich schlage bei deiner nächsten Nachricht vor.'
     }
-    const r = await schaetze($, a, v)
+    const r = await schaetze($, a, hatRunden ? v : [])
     if (!r.ok) {
         return ohneEinschaetzung(r.grund)
     }
+    z.neu = false
+    z.wartet = false
     const jetztig = await aktuell($)
     const modellAendert = familieVon(jetztig.modell) !== r.wahl.modell
     const aufwandAendert = jetztig.aufwand !== r.wahl.aufwand
     if (!modellAendert && !aufwandAendert) {
-        z.vorschlag = null
+        await setzeVorschlag($, null)
         return `Modellwahl: bleibt bei ${wahlText(r.wahl)}.`
     }
-    if (NACHFRAGEN.includes(r.wahl.modell)) {
-        z.vorschlag = { wahl: r.wahl, at: jetzt }
-        return vorschlagText($, r.wahl, modellAendert)
-    }
-    await setzeWahl($, r.wahl)
-    return `Modellwahl: ${wahlText(r.wahl)}${r.wahl.grund ? ` – ${r.wahl.grund}` : ''}.${modellAendert ? ' Kontext wird einmal neu gelesen.' : ''}`
+    await schlageVor($, r.wahl, vomHandy)
+    return vorschlagText($, r.wahl, modellAendert, vomHandy)
 }
 
 /** /modellwahl-zeigen. */
@@ -414,8 +530,13 @@ async function befehlZeigen($: EngineInterface): Promise<string> {
     } else {
         zeilen.push('Modellwahl: In diesem Chat ist nichts gewählt.')
     }
-    if (z.vorschlag && jetzt - z.vorschlag.at <= VORSCHLAG_MS) {
-        zeilen.push(`Offener Vorschlag: ${wahlText(z.vorschlag.wahl)}, noch ${dauerText(VORSCHLAG_MS - (jetzt - z.vorschlag.at))}.`)
+    const v = z.offen
+    if (giltNoch(v, jetzt)) {
+        zeilen.push(
+            v.bis !== null
+                ? `Offener Vorschlag: ${wahlText(v.wahl)}, gilt in ${restSekunden(v.bis, jetzt)} s.`
+                : `Offener Vorschlag: ${wahlText(v.wahl)}, wartet auf ja, noch ${dauerText(VORSCHLAG_MS - (jetzt - v.at))}.`,
+        )
     }
     zeilen.push(
         z.auto === null
@@ -441,10 +562,14 @@ async function befehlAuto($: EngineInterface, an: boolean): Promise<string> {
     return `Modellwahl: Automatik in neuen Chats ${an ? 'an' : 'aus'}, nur für diesen Chat.`
 }
 
-async function wirke($: EngineInterface, name: Befehl, args: string): Promise<string> {
+async function wirke($: EngineInterface, name: Befehl, args: string, vomHandy: boolean): Promise<string> {
     switch (name) {
         case 'modellwahl':
-            return befehlWahl($, args)
+            return befehlWahl($, args, vomHandy)
+        case 'modellwahl-uebernehmen':
+            return befehlWahl($, 'ja', vomHandy)
+        case 'modellwahl-ablehnen':
+            return befehlWahl($, 'nein', vomHandy)
         case 'modellwahl-zeigen':
             return befehlZeigen($)
         case 'modellwahl-hilfe':
@@ -503,13 +628,21 @@ export const register: Register = (on, options) => {
         return next(e)
     }).catch(($, e, next) => next(e))
 
-    // Die erste echte Nachricht eines neuen Chats waehlt, hoechstens fuenf Sekunden lang.
+    // Ein ja oder ok nimmt einen offenen Vorschlag an. Die erste echte Nachricht eines neuen
+    // Chats schlaegt vor, hoechstens fuenf Sekunden lang; sie geht sofort weiter, nichts wartet.
     on('prompt.submit', async ($, e, next) => {
         const kind = (e.origin as { kind?: string } | undefined)?.kind ?? ''
         if (e.command || e.isMeta || e.turnId || !ECHTE_HERKUNFT.has(kind)) {
             return next(e)
         }
         await sitzung($)
+        if (z.offen && ZUSTIMMUNG.test(e.text)) {
+            const w = await uebernehme($)
+            if (w) {
+                // Die Nachricht geht trotzdem an Claude: sie kann auch einer Frage gegolten haben.
+                return next({ ...e, context: [...(e.context ?? []), hinweisUebernommen(w)] })
+            }
+        }
         const auto = z.auto ?? z.standardAuto
         const soll = z.wartet || (z.neu && auto && !z.wahl)
         z.neu = false
@@ -526,8 +659,9 @@ export const register: Register = (on, options) => {
             }
             return next({ ...e, context: [...(e.context ?? []), HINWEIS_OHNE] })
         }
-        await setzeWahl($, r.wahl)
-        return next({ ...e, context: [...(e.context ?? []), hinweis(r.wahl)] })
+        const vomHandy = kind === 'bridge'
+        await schlageVor($, r.wahl, vomHandy)
+        return next({ ...e, context: [...(e.context ?? []), hinweisVorschlag(r.wahl, vomHandy)] })
     }).catch(($, e, next) => next(e))
 
     on('turn.start', async ($, e, next) => {
@@ -546,6 +680,11 @@ export const register: Register = (on, options) => {
         try {
             z.letztesModell = e.model
             z.letzterAufwand = e.effort
+            // Ein abgelaufener Vorschlag gilt spaetestens hier, auch wenn sein Takt verloren ging.
+            const v = z.offen
+            if (v && v.bis !== null && (await $.clock.now()) >= v.bis) {
+                await uebernehme($, v.at)
+            }
             const w = z.wahl
             if (w && !w.zurueckgezogen) {
                 if (z.basisAufwand === null) {
@@ -594,12 +733,12 @@ export const register: Register = (on, options) => {
         if (e.to_model) {
             z.letztesModell = e.to_model
         }
-        const w = z.wahl
         // Die App schickt ihre Auswahl auch ohne Wechsel noch einmal: dasselbe Modell ist keine Entscheidung.
-        if (!w || w.zurueckgezogen || e.from_model === e.to_model) {
+        if (e.from_model === e.to_model) {
             return r
         }
         // 'auto' (Rueckfall) und 'resume' (Wiederherstellen) sind keine Entscheidung der Person.
+        // Ihre eigene verwirft auch einen offenen Vorschlag.
         if (e.source === 'sdk' || e.source === 'picker' || e.source === 'command') {
             await zieheZurueck($)
         }
@@ -615,13 +754,45 @@ export const register: Register = (on, options) => {
         return next({ ...e, message: { ...e.message, content } })
     }).catch(($, e, next) => next(e))
 
+    // Über der Eingabe, solange ein Vorschlag wartet: was er wäre, wann er gilt, Übernehmen und Nein.
+    // Das Band zeichnen nur Terminal und Desktop-App; auf dem Handy wartet nichts darauf.
+    on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+        const darunter = await next(e)
+        if (e.props.hasSurvey || e.surface === 'mobile') {
+            return darunter
+        }
+        const v = await read($, vorschlagAtom)
+        // Einer aus einem frueheren Laden hat keinen Takt mehr: er gilt als verworfen.
+        if (!v || z.offen?.at !== v.at) {
+            return darunter
+        }
+        void (await read($, taktAtom))
+        const jetzt = await $.clock.now()
+        const { Box, Text, Button } = $.ui.resolve(e)
+        const wann = v.bis !== null ? `gilt in ${restSekunden(v.bis, jetzt)} s` : 'wartet auf dein ja'
+        const knopf = (key: string, label: string, istHaupt: boolean, onPress: () => void) =>
+            e.surface === 'terminal'
+                ? h(Button, { key, plain: true, label: `[${label}]`, onPress })
+                : h(Button, { key, label, variant: istHaupt ? 'primary' : 'secondary', onPress })
+        // Unter dem Schluessel "modellwahl" holt der Leitstand die Zeile ganz nach oben, mit ihren Knoepfen.
+        const zeile = h(
+            Box,
+            { key: ZEILE, flexDirection: 'row', alignItems: 'center', gap: 1 },
+            h(Text, { wrap: 'truncate-end' }, `Modellwahl schlägt ${wahlText(v.wahl)} vor · ${wann}`),
+            knopf('modellwahl-ja', 'Übernehmen', true, () => void uebernehme($, v.at).catch(() => {})),
+            knopf('modellwahl-nein', 'Nein', false, () => void lehneAb($, v.at).catch(() => {})),
+        )
+        return h(Box, { flexDirection: 'column' }, zeile, darunter) as RenderNode as never
+    })
+
     for (const b of BEFEHLE) {
         on('command.run', { command: b.name }, async ($, e) => {
             if (istHilfe(e.args)) {
                 return { text: b.hilfe }
             }
             try {
-                return { text: await wirke($, b.name, String(e.args ?? '')) }
+                const vomHandy = (e.origin as { kind?: string } | undefined)?.kind === 'bridge'
+                return { text: await wirke($, b.name, String(e.args ?? ''), vomHandy) }
             } catch {
                 return { text: BEFEHL_FEHLER }
             }
@@ -636,8 +807,7 @@ async function nachClear($: EngineInterface): Promise<void> {
     }
     z.sid = null
     z.wahl = null
-    z.vorschlag = null
     z.wartet = false
     z.basisAufwand = null
-    zeigeStatus($)
+    await setzeVorschlag($, null)
 }

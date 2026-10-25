@@ -20,9 +20,6 @@ export const AUFWAENDE: Record<Aufwand, string> = {
     max: 'maximal',
 }
 
-/** Ab diesen Modellen fragt `/modellwahl` mitten im Chat erst nach. */
-export const NACHFRAGEN: readonly Modell[] = ['opus', 'fable']
-
 /** "Opus · hoch". */
 export function wahlText(w: { modell: Modell; aufwand: Aufwand }): string {
     return `${MODELLE[w.modell].name} · ${AUFWAENDE[w.aufwand]}`

@@ -1,8 +1,9 @@
 /**
- * Was die Modellwahl in `$.store` ablegt.
+ * Was die Modellwahl in `$.store` ablegt, und ihr Zustand in `$.state`.
  *
  * Die Wahl liegt je Sitzungs-ID, damit ein fortgesetzter Chat sie behaelt; die
- * Kalibrierung gilt fuer alle Chats.
+ * Kalibrierung gilt fuer alle Chats. Der offene Vorschlag liegt in `$.state`,
+ * damit das Band neu zeichnet, sobald er sich aendert.
  */
 
 /** Die Modelle, zwischen denen gewaehlt wird, vom guenstigsten an. */
@@ -25,6 +26,26 @@ export type Wahl = Einschaetzung & {
     at: number
     /** True, sobald die Person Modell oder Aufwand selbst umgestellt hat: dann stellt der Mod nichts mehr um. */
     zurueckgezogen: boolean
+}
+
+/** Ein Vorschlag, der noch wartet: am Rechner gilt er nach 15 s von selbst, vom Handy erst auf ja. */
+export type Vorschlag = {
+    wahl: Einschaetzung
+    /** Wann vorgeschlagen wurde; zugleich die Kennung des Vorschlags. */
+    at: number
+    /** Wann er von selbst gilt; null, wenn er auf ja wartet (vom Handy). */
+    bis: number | null
+}
+
+declare module 'claude-code' {
+    interface PluginState {
+        modellwahl: {
+            /** Der offene Vorschlag; null, wenn keiner wartet. Nach einem Neuladen gilt er als verworfen. */
+            vorschlag: Vorschlag | null
+            /** Zaehlt jede Sekunde hoch, solange ein Vorschlag laeuft, damit der Countdown weiterlaeuft. */
+            takt: number
+        }
+    }
 }
 
 /** Unter `auto:<Sitzungs-ID>`: die automatische Wahl, fuer diesen Chat an- oder abgeschaltet. */
