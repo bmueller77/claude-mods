@@ -2,6 +2,9 @@ import type { GlanceChatSettings, GlanceChecklist, GlanceHelper, GlanceHistoryVi
 import { SIZE_WEIGHT, teamReport, weekSummary } from './history'
 import { inBerlin } from './berlin'
 import { maskPrivate } from './privacy'
+import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE } from './autopilot/befehle'
+import { FILETREE_ALTE, FILETREE_BEFEHLE } from './filetree/befehle'
+import { REFLECT_ALTE, REFLECT_BEFEHLE } from './reflect/befehle'
 
 export const PLUGIN = 'leitstand'
 
@@ -1621,8 +1624,8 @@ const befehl = (
 const JA = { argumentHint: '[ja]', argumente: 'ja führt aus. Ohne ja sagt der Befehl nur, was passieren würde.' }
 const ja = (name: string) => ({ ...JA, beispiel: `/${name} ja` })
 
-/** Alle eigenen Befehle des Leitstands, in der Reihenfolge der Übersicht. /leitstand bleibt daneben als Kurzform. */
-export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
+/** Die Befehle des Leitstands selbst, in der Reihenfolge der Übersicht. /leitstand bleibt daneben als Kurzform. */
+const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Allgemein', 'leitstand:hilfe', 'Alle Leitstand-Befehle im Überblick', 'Listet alle Leitstand-Befehle auf, nach Gruppen, je mit einer Zeile.', 'Keiner; die Knöpfe stehen im Leitstand über dem Eingabefeld.', 'einmal'),
   befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand über dem Eingabefeld ein.', 'Einstellungen › Ansicht (Einfach, Ausführlich oder Minimal)', 'einstellung'),
   befehl('Allgemein', 'leitstand:aus', 'Leitstand ausschalten', 'Schaltet den Leitstand aus; alle Werkzeug-Details sind dann wieder zu sehen.', 'Einstellungen › Ansicht › Aus', 'einstellung'),
@@ -1639,7 +1642,6 @@ export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Auftrag', 'leitstand:pause', 'Claude anhalten', 'Hält Claude mitten im Auftrag an; mit /leitstand:weiter geht es dort weiter.', 'Pause', 'einmal'),
   befehl('Auftrag', 'leitstand:weiter', 'Claude weitermachen lassen', 'Claude macht dort weiter, wo es aufgehört hat.', 'Weiter', 'einmal'),
   befehl('Auftrag', 'leitstand:plan-zeigen', 'Den ganzen Plan zeigen', 'Zeigt den Plan mit allen Schritten; auf dem Handy als Text.', 'Plan', 'einmal'),
-  befehl('Auftrag', 'leitstand:letzter-stand-zeigen', 'Den letzten Sicherungspunkt zeigen', 'Zeigt den Sicherungspunkt, den Claude vor dem letzten Aufräumen gespeichert hat; auf dem Handy als Text.', 'Letzter Stand (Einstellungen › Chat aufräumen)', 'einmal'),
   befehl('Auftrag', 'leitstand:neuer-chat', 'Neuer Chat mit Übergabenotiz (mit ja)', 'Claude schreibt eine Übergabenotiz, leert diesen Chat und schickt die Notiz als erste Nachricht in den neuen.', 'Neuer Chat (zweimal drücken)', 'einmal', ja('leitstand:neuer-chat')),
   befehl('Auftrag', 'leitstand:abschliessen', 'Auf GitHub abschließen: Commit, Pull Request, Merge (mit ja)', 'Claude räumt die Änderungen auf, committet, öffnet einen Pull Request und mergt nach deiner Freigabe.', 'Push (zweimal drücken)', 'einmal', ja('leitstand:abschliessen')),
 
@@ -1658,9 +1660,7 @@ export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
     beispiel: '/leitstand:ausfragen Umzug der Datenbank',
   }),
   befehl('Helfer', 'leitstand:sauberer-code', 'Code prüfen mit clean-code', 'Startet den Skill clean-code: Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', '🧹', 'einmal'),
-  befehl('Helfer', 'leitstand:reflexion', 'Reflect starten', 'Startet den Befehl des Mods Reflect.', '🪞', 'einmal'),
   befehl('Helfer', 'leitstand:vermenschlichen', 'Letzte Antwort natürlicher umschreiben', 'Claude überarbeitet seine letzte Antwort, damit sie nicht nach KI klingt.', '🧍', 'einmal'),
-  befehl('Helfer', 'leitstand:dateibaum', 'Filetree öffnen', 'Öffnet die Seitenleiste des Mods Filetree.', '🌳', 'einmal'),
   befehl('Helfer', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Claude antwortet mit dem nächsten Schritt zuerst, in nummerierten Schritten und ohne Umwege.', '📖 (steht dann auf 📝)', 'chat'),
   befehl('Helfer', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt.', '📝 (steht dann auf 📖)', 'chat'),
   befehl('Helfer', 'leitstand:fernsteuerung-an', 'Remote Control einschalten', 'Schaltet Remote Control ein, damit du den Chat vom Handy aus steuern kannst.', '🛜', 'chat'),
@@ -1670,7 +1670,7 @@ export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Schutz', 'leitstand:verdecken-aus', 'Verdecken ausschalten', 'Alles erscheint wieder so, wie es im Chat steht.', '🔒 oder Einstellungen › Verdecken', 'einstellung'),
   befehl('Schutz', 'leitstand:passwortschutz-an', 'Passwortschutz einschalten', 'Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten, bis du sie noch mal sendest.', 'Einstellungen › Passwortschutz', 'einstellung'),
   befehl('Schutz', 'leitstand:passwortschutz-aus', 'Passwortschutz ausschalten', 'Jede Nachricht wird so gesendet, wie du sie schreibst.', 'Einstellungen › Passwortschutz', 'einstellung'),
-  befehl('Schutz', 'leitstand:geheimnisse-sichern', 'Passwörter aus dem Chat in die .env verschieben (mit ja)', 'Verschiebt Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner und räumt den Chat auf; danach kennt Claude nur noch Platzhalter.', '🛡️ (zweimal drücken)', 'einmal', ja('leitstand:geheimnisse-sichern')),
+  befehl('Schutz', 'leitstand:geheimnisse-sichern', 'Passwörter aus dem Chat in die .env verschieben (mit ja)', 'Verschiebt Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner und verdichtet den Chat; danach kennt Claude nur noch Platzhalter.', '🛡️ (zweimal drücken)', 'einmal', ja('leitstand:geheimnisse-sichern')),
 
   befehl('Einstellungen', 'leitstand:einstellungen-zeigen', 'Die Leitstand-Einstellungen öffnen', 'Öffnet die Einstellungen des Leitstands in der Seitenleiste.', '⚙ Einstellungen', 'einmal'),
   befehl('Einstellungen', 'leitstand:ton-aus', 'Töne ausschalten', 'Kein Ton, wenn Claude dich braucht, festhängt oder fertig ist.', 'Einstellungen › Töne › Aus', 'einstellung'),
@@ -1687,12 +1687,20 @@ export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Einstellungen', 'leitstand:plan-freigeben-aus', 'Plan zuerst freigeben: aus', 'Claude legt direkt los, sobald der Plan steht. In der Gruppenarbeit geht das nicht.', 'Einstellungen › Plan zuerst freigeben', 'einstellung'),
   befehl('Einstellungen', 'leitstand:github-abschluss-an', 'Auf GitHub abschließen: an', 'Ein fertiger Auftrag in einem GitHub-Projekt bietet den Knopf Push an.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
   befehl('Einstellungen', 'leitstand:github-abschluss-aus', 'Auf GitHub abschließen: aus', 'Fertige Aufträge bleiben auf ihrem Branch.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:jetzt-aufraeumen', 'Den Chat jetzt aufräumen', 'Speichert einen Sicherungspunkt und räumt dann den Chat auf, damit wieder Platz ist.', 'Einstellungen › Chat aufräumen › Jetzt aufräumen', 'einmal'),
   befehl('Einstellungen', 'leitstand:zuruecksetzen', 'Einstellungen auf den Standard zurücksetzen', 'Setzt alle Leitstand-Einstellungen dieses Chats auf den Standard aus dem Einstellungsmenü zurück.', 'Einstellungen › Auf Standard zurücksetzen', 'chat'),
 ]
 
-/** Die Namen aller eigenen Befehle. */
-export const LEITSTAND_BEFEHL_NAMEN: readonly string[] = LEITSTAND_BEFEHLE.map(one => one.name)
+/** Die Befehle der Teile, die bis 2026-10-26 eigene Mods waren: Selbstkritik und Regeln, Dateien, Autopilot. */
+export const TEIL_BEFEHLE: readonly LeitstandBefehl[] = [...REFLECT_BEFEHLE, ...FILETREE_BEFEHLE, ...AUTOPILOT_BEFEHLE]
+
+/** Alle Befehle des Leitstands, in der Reihenfolge der Übersicht: die der Teile hinter den Helfern. */
+export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = (() => {
+  const nachHelfern = EIGENE_BEFEHLE.findLastIndex(one => one.gruppe === 'Helfer') + 1
+  return [...EIGENE_BEFEHLE.slice(0, nachHelfern), ...TEIL_BEFEHLE, ...EIGENE_BEFEHLE.slice(nachHelfern)]
+})()
+
+/** Die Namen der Befehle, die der Leitstand selbst beantwortet; die der Teile beantworten die Teile. */
+export const LEITSTAND_BEFEHL_NAMEN: readonly string[] = EIGENE_BEFEHLE.map(one => one.name)
 
 /**
  * Befehle ohne Kurzform: an, aus und hilfe sagen allein nicht, welcher Mod gemeint ist, und /vermenschlichen ist schon
@@ -1712,23 +1720,42 @@ export const LEITSTAND_KURZFORMEN: ReadonlyMap<string, string> = new Map(
   }),
 )
 
+/** Die Kurzformen der Befehle, die der Leitstand selbst beantwortet. */
+export const EIGENE_KURZFORMEN: readonly string[] = [...LEITSTAND_KURZFORMEN].filter(([, name]) => LEITSTAND_BEFEHL_NAMEN.includes(name)).map(([kurz]) => kurz)
+
 /** Der volle Name eines Befehls, auch wenn er als Kurzform kam. */
 export const vollerBefehl = (name: string): string => LEITSTAND_KURZFORMEN.get(name) ?? name
+
+/**
+ * Umgezogen am 2026-10-26: Reflexion und Dateibaum heißen jetzt Selbstkritik und Dateien (Teile des Leitstands), das
+ * Aufräumen mit Sicherungspunkt gehört zur Statistik. Je alter Name (ohne leitstand:) der volle neue.
+ */
+const UMGEZOGEN: Readonly<Record<string, string>> = {
+  reflexion: 'leitstand:selbstkritik',
+  dateibaum: 'leitstand:dateien',
+  'jetzt-aufraeumen': 'statistik:chat-aufraeumen',
+  'letzter-stand-zeigen': 'statistik:letzter-stand-zeigen',
+}
 
 /** Umbenannt am 2026-10-26: der ADHS-Modus heißt Kurzantworten. */
 const UMBENANNT: Readonly<Record<string, string>> = { 'adhs-an': 'kurzantworten-an', 'adhs-aus': 'kurzantworten-aus' }
 
 /**
- * Die alten Namen bis leitstand 0.55: /leitstand-pause und /adhs-an. Sie stehen nicht mehr im Menü; wer einen tippt
- * (eine alte Datei in ~/.claude/commands), erfährt den neuen. Jeder mit dem vollen neuen Namen.
+ * Die alten Namen bis leitstand 0.55: /leitstand-pause und /adhs-an, dazu die der Teile aus ihrer Zeit als eigene
+ * Mods. Sie stehen nicht mehr im Menü; wer einen tippt (eine alte Datei in ~/.claude/commands), erfährt den neuen.
+ * Jeder mit dem vollen neuen Namen. Ein alter Name, der heute eine Kurzform ist (/autopilot-an), läuft als Befehl.
  */
 export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map([
-  ...LEITSTAND_BEFEHLE.map(one => {
+  ...[...Object.entries(REFLECT_ALTE), ...Object.entries(FILETREE_ALTE), ...Object.entries(AUTOPILOT_ALTE)].filter(
+    ([alt]) => !LEITSTAND_KURZFORMEN.has(alt) && !LEITSTAND_BEFEHLE.some(one => one.name === alt),
+  ),
+  ...EIGENE_BEFEHLE.map(one => {
     const rest = one.name.slice('leitstand:'.length)
     const alt = Object.entries(UMBENANNT).find(([, jetzt]) => jetzt === rest)?.[0] ?? rest
     return [`leitstand-${alt}`, one.name] as const
   }),
   ...Object.entries(UMBENANNT).map(([alt, jetzt]) => [alt, `leitstand:${jetzt}`] as const),
+  ...Object.entries(UMGEZOGEN).flatMap(([alt, jetzt]) => [[`leitstand:${alt}`, jetzt], [`leitstand-${alt}`, jetzt], [alt, jetzt]] as const),
 ])
 
 /** Was ein alter Name antwortet: wie der Befehl jetzt heißt. */

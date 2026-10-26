@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, TEIL_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 
@@ -1877,7 +1877,7 @@ test('in the Desktop app no mark says again what the words beside it say, in the
   expect(alts).toEqual(['Hinweis'])
 })
 
-test("in the Desktop app a panel's marks say neither its title nor the words beside them: Settings, Where we left off, an empty Plan", async ($, on) => {
+test("in the Desktop app a panel's marks say neither its title nor the words beside them: Settings and an empty Plan", async ($, on) => {
   world(on)
   const read = async (requestId: string, title: string) => {
     const ui = await $.ui.mount({ ...PANE, requestId, props: { ...PANE.props, title }, surface: 'desktop' } as never)
@@ -1891,12 +1891,6 @@ test("in the Desktop app a panel's marks say neither its title nor the words bes
   const settings = await read('leitstand-settings', 'Leitstand-Einstellungen')
   expect(settings.echoes).toEqual([])
   expect(settings.alts.length > 0 && settings.alts.every(alt => alt === 'Einstellung')).toBe(true)
-
-  // With no checkpoint yet the words say so; the mark says Notice, not Checkpoint again.
-  const recap = await read('leitstand-recap', 'Letzter Stand')
-  expect(recap.echoes).toEqual([])
-  expect(recap.titled).toEqual([])
-  expect(recap.alts).toEqual(['Hinweis'])
 
   // An empty Plan: the panel's title says Plan, the words say there is none yet.
   const plan = await read('leitstand-plan', 'Plan')
@@ -4014,58 +4008,6 @@ test("in details, a job shows what it cost, and the history keeps it", async ($,
   expect(pane).toContain('0,42 $')
 })
 
-/** Jetzt aufräumen in the settings: the same tidy-up /leitstand tidy starts for the Statistik mod's sponge. */
-async function tidyFromSettings($: Engine) {
-  const panel = await $.ui.mount({
-    plugin: 'leitstand',
-    component: 'Pane',
-    requestId: 'leitstand-settings',
-    surface: 'terminal',
-    props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
-  } as never)
-  await panel.press({ key: 'tidy-now' })
-  await panel.unmount()
-}
-
-/** Tidy it up as the settings and the Statistik mod's sponge do; the test says what compaction and /compact do. */
-async function tidyWorld($: Engine, on: On, compactCommand: () => void) {
-  mock.clock(on, { now: 1_000_000 })
-  mock.store(on)
-  const toasts: string[] = []
-  on('ui.toast', (_, e) => {
-    toasts.push(String((e as { text: string }).text))
-    return { value: undefined } as never
-  })
-  on('ui.log', () => ({ value: undefined }) as never)
-  on('session.measure', (_, e) => ({ changed: e.changed }))
-  on('session.compact', () => {
-    throw new Error('not now')
-  })
-  const commands: string[] = []
-  on('command.run', (_, e) => {
-    commands.push(e.command)
-    if (e.command === 'compact') compactCommand()
-    return { text: '' }
-  })
-  await $.session.measure({ context: { window: 200_000, tokens: 160_000, percent: 80 }, rateLimits: [], changed: ['context'] } as never)
-  await tidyFromSettings($)
-  return { toasts, commands }
-}
-
-test('Tidy it up falls back to /compact when the engine refuses to compact', async ($, on) => {
-  const { toasts, commands } = await tidyWorld($, on, () => undefined)
-  expect(commands).toContain('compact')
-  expect(toasts.join('\n')).not.toContain('ließ sich nicht aufräumen')
-})
-
-test('when /compact fails too, Tidy it up says why', async ($, on) => {
-  const { toasts } = await tidyWorld($, on, () => {
-    throw new Error('a turn is running')
-  })
-  // The engine's reason shows in brackets, so the next report says what went wrong.
-  expect(toasts.join('\n')).toMatch(/Der Chat ließ sich nicht aufräumen \(.+\)\. Schreib \/compact, um es noch mal zu versuchen\./)
-})
-
 test("once, Leitstand brings over Glance's history, not its settings; another mod's store is left alone", async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const store = new Map<string, unknown>()
@@ -5186,8 +5128,8 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   expect(shown).toContain('Keine Töne')
   expect(shown).toContain('Balken und Kreisel bewegen sich')
   expect(shown).not.toContain('● 50%')
-  expect(shown).toContain('Jetzt aufräumen')
-  expect(shown).toContain('Wie voll der Chat ist, zeigt der Statistik-Mod')
+  // Tidying up with a checkpoint is the Statistik mod's now.
+  expect(shown).not.toContain('Jetzt aufräumen')
   expect(shown).toContain('Auf GitHub abschließen')
   expect(shown).toContain('Fertige Aufträge bleiben auf ihrem Branch')
 
@@ -5214,7 +5156,7 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   expect(opened).toHaveLength(2)
 })
 
-test('the band never shows how full the chat is, and /leitstand tidy at says where that went', async ($, on) => {
+test('the band never shows how full the chat is, and /leitstand tidy says tidying up is the Statistik mod\'s', async ($, on) => {
   world(on)
   on('session.measure', (_, e) => ({ changed: e.changed }))
   const full = async (percent: number) => {
@@ -5227,79 +5169,15 @@ test('the band never shows how full the chat is, and /leitstand tidy at says whe
     expect(shown).not.toMatch(/aufräumen/i)
   }
   const moved = await $.command.run({ command: 'leitstand', args: 'tidy at 60' } as never)
-  expect(moved.text).toContain('Wie voll der Chat ist, zeigt jetzt der Statistik-Mod')
-  const off = await $.command.run({ command: 'leitstand', args: 'tidy off' } as never)
-  expect(off.text).toContain('Statistik-Mod')
+  expect(moved.text).toContain('/statistik:chat-aufraeumen')
+  const now = await $.command.run({ command: 'leitstand', args: 'tidy' } as never)
+  expect(now.text).toContain('gehört jetzt zur Statistik')
 })
 
-test('/leitstand checkpoint says plainly when there is none yet', async ($, on) => {
+test('/leitstand checkpoint says where the checkpoint went', async ($, on) => {
   world(on)
   const result = await $.command.run({ command: 'leitstand', args: 'checkpoint' } as never)
-  expect(result.text).toContain('In diesem Chat gibt es noch keinen Sicherungspunkt')
-})
-
-test('Tidy it up saves a checkpoint first, compacts keeping it, and Claude reads it afterwards', async ($, on) => {
-  mock.clock(on, { now: 1_000_000 })
-  mock.store(on)
-  const toasts: string[] = []
-  on('ui.toast', (_, e) => {
-    toasts.push(String((e as { text: string }).text))
-    return { value: undefined } as never
-  })
-  on('session.id', () => ({ value: 'chat-1' }) as never)
-  on('session.measure', (_, e) => ({ changed: e.changed }))
-  const opened: string[] = []
-  on('ui.open', (_, e) => {
-    opened.push(e.id)
-    return { value: { isPlaced: true } } as never
-  })
-  const forked: string[] = []
-  on('model.fork', (_, e) => {
-    forked.push(e.prompt)
-    return { value: { isAnswered: true, text: 'Sicherungspunkt: the pricing page is done; next, the contact form.', usage: {} } } as never
-  })
-  let instructions = ''
-  on('session.compact', (_, e) => {
-    instructions = String((e as { instructions?: string }).instructions ?? '')
-    return { messages: [{ role: 'user', text: 'Summary of the chat so far.', toolUses: [] }] } as never
-  })
-  on('prompt.compose', () => ({ sections: [] }) as never)
-
-  await $.session.measure({ context: { window: 200_000, tokens: 110_000, percent: 55 }, rateLimits: [], changed: ['context'] } as never)
-  await tidyFromSettings($)
-
-  expect(forked[0]).toContain('Schreib einen Sicherungspunkt')
-  expect(forked[0]).toContain('Beginne genau mit: "Sicherungspunkt:"')
-  expect(instructions).toContain('Sicherungspunkt: the pricing page is done; next, the contact form.')
-  let band = (await texts($, 'terminal')).join('\n')
-  expect(band).toContain('Chat aufgeräumt. Claude hat einen Sicherungspunkt der Arbeit behalten.')
-  expect(band).toContain('Letzter Stand')
-  // In the Desktop app its buttons sit with the other actions at the bottom right, not in the note's row.
-  const desk = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  const deskBoxes = await desk.findAll({ type: 'Box' })
-  await desk.unmount()
-  expect(JSON.stringify(deskBoxes.find(one => one.props.key === 'actions') ?? null)).toContain('Letzter Stand')
-  expect(JSON.stringify(deskBoxes.find(one => one.props.key === 'recap') ?? null)).not.toContain('Letzter Stand')
-  // Its mark says Notice: the words say the chat was tidied up.
-  expect(echoes(deskBoxes)).toEqual([])
-
-  // Where we left off opens the checkpoint in a side panel, and the note on the band goes.
-  const card = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  await card.press({ key: 'recap' })
-  await card.unmount()
-  expect(opened).toEqual(['leitstand-recap'])
-  band = (await texts($, 'terminal')).join('\n')
-  expect(band).not.toContain('Chat aufgeräumt')
-  const recap = await $.ui.mount({ plugin: 'leitstand', component: 'Pane', requestId: 'leitstand-recap', surface: 'terminal', props: { title: 'Letzter Stand', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } } as never)
-  const recapText = (await recap.findAll({ type: 'Text' })).map(one => one.text).join('\n')
-  await recap.unmount()
-  expect(recapText).toContain('the pricing page is done; next, the contact form.')
-  expect(recapText).not.toContain('Sicherungspunkt:')
-  expect(recapText).toMatch(/Gespeichert um \d\d:\d\d/)
-
-  const composed = await $.prompt.compose({ model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5', surfaces: ['terminal'], tools: [], outputStyle: null, traits: [], sections: [] } as never)
-  const checkpoint = (composed as unknown as { sections: { id: string; text: string }[] }).sections.find(one => one.id === 'leitstand:checkpoint')
-  expect(checkpoint?.text).toContain('the pricing page is done')
+  expect(result.text).toContain('/statistik:letzter-stand-zeigen')
 })
 
 test("two chats saving jobs the same day keep both; the day's old shared key moves into the chat's own once", async ($, on) => {
@@ -5638,7 +5516,7 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const skill = (name: string) => ({ name, description: name, source: 'plugin' })
 
-  test('in der App stehen hinter Grill mich Vermenschlichen, ADHS, Filetree, Autopilot, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
+  test('in der App stehen hinter Grill mich Vermenschlichen, Kurzantworten, Dateien, Autopilot, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
     await skillWorld($, on)
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
@@ -5646,7 +5524,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const order = ['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4D6}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
+    for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4D6}', '\u{1F4C2}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
     // Review and Usage are gone.
     for (const key of ['review', 'usage']) expect(row).not.toContain(`"key":"${key}"`)
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
@@ -5669,7 +5547,7 @@ describe('Arbeitsweise und Grill mich', () => {
     return left.map(kid => (kid.type === 'Text' ? `${kid.props.dimColor === true ? 'dim' : ''}${(kid.children ?? []).join('')}` : String(kid.props.key)))
   }
 
-  test('in der App trennen Striche die Gruppen unten links: hinter ADHS, hinter Filetree und vor Plan, im Terminal keine', async ($, on) => {
+  test('in der App trennen Striche die Gruppen unten links: hinter Kurzantworten, hinter Dateien und vor Plan, im Terminal keine', async ($, on) => {
     await skillWorld($, on)
     expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
 
@@ -5693,7 +5571,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(row.indexOf('adhd')).toBeLessThan(row.indexOf('dim|'))
   })
 
-  test('Filetree (🌳) steht hinter 📖 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
+  test('Dateien (📂) steht hinter 📖 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     const at = row.indexOf('filetree')
@@ -5701,7 +5579,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'filetree')
     await ui.unmount()
-    expect(button?.props.label).toBe('\u{1F333}')
+    expect(button?.props.label).toBe('\u{1F4C2}')
     expect(button?.props.variant).toBe('secondary')
   })
 
@@ -5717,7 +5595,13 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(state.toasts).toContain('clean-code ist in dieser Sitzung nicht verfügbar.')
   })
 
-  test('ein Druck auf 🪞 direkt hinter 🧹 startet den Befehl reflect; fehlt der Mod, sagt der Leitstand das', async ($, on) => {
+  test('ein Druck auf 🪞 direkt hinter 🧹 startet die Selbstkritik sofort, ohne Befehl und ohne Prompt', async ($, on) => {
+    // Beneath the plugins, before the test first calls $.
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(String((e as unknown as { id: string }).id))
+      return { value: { isPlaced: true } } as never
+    })
     const { state, press } = await skillWorld($, on)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'reflect')
@@ -5727,43 +5611,29 @@ describe('Arbeitsweise und Grill mich', () => {
     const row = await leftRow($)
     expect(row.indexOf('reflect')).toBe(row.indexOf('cleancode') + 1)
 
-    state.commands = [skill('reflect')]
-    await press('reflect')
-    expect(state.runs).toEqual([{ command: 'reflect', args: undefined }])
-    state.runs.length = 0
-    state.commands = []
-    await press('reflect')
-    expect(state.runs).toEqual([])
-    expect(state.toasts).toContain('Reflect ist in dieser Sitzung nicht verfügbar.')
-  })
-
-  test('der Druck auf 🪞 wartet nicht, bis reflect gelaufen ist', async ($, on) => {
-    const { state, press } = await skillWorld($, on)
-    state.commands = [skill('reflect')]
+    // The Selbstkritik part (once the Reflect mod) answers the press itself: no command, nothing in the prompt.
     state.runHangs = true
     expect(await pressBack(press, 'reflect')).toBe('back')
-    expect(state.runs).toEqual([{ command: 'reflect', args: undefined }])
-  })
-
-  test('ein Druck auf 🌳 startet den Befehl filetree; fehlt er, sagt der Leitstand das', async ($, on) => {
-    const { state, press } = await skillWorld($, on)
-    state.commands = [skill('filetree')]
-    await press('filetree')
-    expect(state.runs).toEqual([{ command: 'filetree', args: undefined }])
-
-    // The plugin's command by its full name counts too.
-    state.runs.length = 0
-    state.commands = [skill('filetree:filetree')]
-    await press('filetree')
-    expect(state.runs.map(one => one.command)).toEqual(['filetree:filetree'])
-
-    // Not there: a toast, nothing in the prompt.
-    state.runs.length = 0
-    state.commands = []
-    await press('filetree')
     expect(state.runs).toEqual([])
     expect(state.filled).toEqual([])
-    expect(state.toasts).toContain('Filetree ist in dieser Sitzung nicht verfügbar.')
+    // Its pane opens with the run in it.
+    expect(opened).toContain('leitstand-selbstkritik')
+  })
+
+  test('ein Druck auf 📂 öffnet das Fenster Dateien sofort, ohne Befehl', async ($, on) => {
+    const opened: { id: string; title: string }[] = []
+    on('ui.open', (_, e) => {
+      const { id, title } = e as unknown as { id: string; title: string }
+      opened.push({ id, title })
+      return { value: { isPlaced: true } } as never
+    })
+    const { state, press } = await skillWorld($, on)
+    state.runHangs = true
+    expect(await pressBack(press, 'filetree')).toBe('back')
+    expect(state.runs).toEqual([])
+    expect(state.filled).toEqual([])
+    expect(opened.map(one => one.id)).toEqual(['leitstand-dateien'])
+    expect(opened[0]?.title.startsWith('Dateien')).toBe(true)
   })
 
   /** The ADHD button's variant in the app, and what is sent as a prompt, with its origin; the chat can start again. */
@@ -5863,118 +5733,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await label()).toBe('\u{1F4D6}')
   })
 
-  test('Autopilot startet seinen Befehl; fehlt er, sagt der Leitstand das', async ($, on) => {
-    const { state, press } = await skillWorld($, on)
-    state.commands = [skill('autopilot')]
-    await press('nightshift')
-    // Off, so the press says on: a bare /autopilot that came through late could switch the wrong way.
-    expect(state.runs).toEqual([{ command: 'autopilot', args: 'an' }])
-
-    // Another plugin's copy counts too.
-    state.runs.length = 0
-    state.commands = [skill('autopilot-mod:autopilot')]
-    await press('nightshift')
-    expect(state.runs.map(one => one.command)).toEqual(['autopilot-mod:autopilot'])
-
-    // Only the old Nachtschicht there: its command runs. Both there: Autopilot's.
-    state.runs.length = 0
-    state.commands = [skill('nachtschicht')]
-    await press('nightshift')
-    state.commands = [skill('nachtschicht'), skill('autopilot')]
-    await press('nightshift')
-    expect(state.runs.map(one => one.command)).toEqual(['nachtschicht', 'autopilot'])
-
-    // A name without a prefix the session does not list: a toast, nothing in the prompt.
-    state.runs.length = 0
-    state.commands = []
-    await press('nightshift')
-    expect(state.runs).toEqual([])
-    expect(state.filled).toEqual([])
-    expect(state.toasts).toContain('Autopilot ist in dieser Sitzung nicht verfügbar.')
-  })
-
-  /**
-   * The Autopilot mod as far as Leitstand sees it, written inline: it keeps its run in its own state, null when there
-   * is none. /autopilot with no argument ends a run that is there, else starts one; `an` and `aus` say which. A turn
-   * that ends on its mark finishes the run and a refusal halts it, both keeping it; Esc ends it.
-   */
-  const FAKE_AUTOPILOT = {
-    name: 'autopilot',
-    register(on: On) {
-      type Shift = { seit: number; phase: 'laeuft' | 'fertig' | 'angehalten'; grund: string | null; geschoben: number; fragen: string[] }
-      // A hooks module spells $ at its call sites only, so each hook reads and writes the run itself.
-      const ref = { plugin: 'autopilot', key: 'schicht' } as const
-      on('command.run', { command: 'autopilot' }, async ($, e) => {
-        const arg = String(e.args ?? '').trim().toLowerCase()
-        const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
-        const wants = arg === 'an' ? true : arg === 'aus' ? false : shift === null
-        const changed: Shift | null = wants ? { seit: 0, geschoben: 0, fragen: [], ...shift, phase: 'laeuft', grund: null } : null
-        await $.state.set(ref as never, changed as never)
-        return { text: wants ? 'Der Autopilot ist an.' : shift ? 'Der Autopilot ist aus.' : 'Der Autopilot war nicht an.' }
-      })
-      on('turn.complete', async ($, e, next) => {
-        const answer = await next(e)
-        const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
-        if (shift === null || e.agentId) return answer
-        const changed: Shift | null =
-          e.reason === 'aborted'
-            ? null
-            : e.reason === 'refusal'
-              ? { ...shift, phase: 'angehalten', grund: 'Claude hat abgelehnt' }
-              : e.answer.trim().endsWith('AUTOPILOT-FERTIG')
-                ? { ...shift, phase: 'fertig', grund: 'Claude meldet fertig' }
-                : shift
-        if (changed !== shift) await $.state.set(ref as never, changed as never)
-        return answer
-      })
-    },
-  }
-  /**
-   * The same mod as it was called before 0.2, the Nachtschicht, for an instance not switched over yet: only its command
-   * and its shift, under its own name. A hooks module's state references are literals, so it has its own copy.
-   */
-  const FAKE_OLD_NIGHT_SHIFT = {
-    name: 'nachtschicht',
-    register(on: On) {
-      const ref = { plugin: 'nachtschicht', key: 'schicht' } as const
-      on('command.run', { command: 'nachtschicht' }, async ($, e) => {
-        const arg = String(e.args ?? '').trim().toLowerCase()
-        const shift = ((await $.state.get(ref as never)) as { value?: unknown }).value ?? null
-        const wants = arg === 'an' ? true : arg === 'aus' ? false : shift === null
-        const changed = wants ? { seit: 0, phase: 'laeuft', grund: null, geschoben: 0, fragen: [] } : null
-        await $.state.set(ref as never, changed as never)
-        return { text: wants ? 'Nachtschicht ist an.' : 'Nachtschicht ist aus.' }
-      })
-    },
-  }
-  const WITH_AUTOPILOT = { plugins: [FAKE_AUTOPILOT] }
-  /**
-   * Autopilot while Claude works: it pushes the next round as each one ends, so the session is never idle and a
-   * command Leitstand runs never comes through; here it never settles. As a round ends it reads Leitstand's wish to
-   * end it, as the real one does, and ends a run that began before the wish.
-   */
-  const FAKE_BUSY_AUTOPILOT = {
-    name: 'autopilot',
-    register(on: On) {
-      type Shift = { seit: number; phase: 'laeuft'; grund: null; geschoben: number; fragen: string[] }
-      const ref = { plugin: 'autopilot', key: 'schicht' } as const
-      on('command.run', { command: 'autopilot' }, async ($, e) => {
-        // Leitstand's run waits in the queue behind the rounds Autopilot keeps pushing.
-        if ((e.origin as { name?: string } | undefined)?.name === 'leitstand') return new Promise<never>(() => {})
-        const shift: Shift = { seit: await $.clock.now(), phase: 'laeuft', grund: null, geschoben: 0, fragen: [] }
-        await $.state.set(ref as never, (String(e.args ?? '').trim() === 'aus' ? null : shift) as never)
-        return { text: '' }
-      })
-      on('turn.complete', async ($, e, next) => {
-        const answer = await next(e)
-        const shift = ((await $.state.get(ref as never)) as { value?: Shift | null }).value ?? null
-        const wish = ((await $.state.get({ plugin: 'leitstand', key: 'autopilotStop' } as never)) as { value?: unknown }).value
-        if (shift !== null && typeof wish === 'number' && wish > shift.seit) await $.state.set(ref as never, null as never)
-        return answer
-      })
-    },
-  }
-  /** Reads Leitstand's wish to end Autopilot as Autopilot does, from another plugin: /wish answers with it. */
+  /** Reads Leitstand's wish to end Autopilot from another plugin: /wish answers with it. */
   const WISH_READER = {
     name: 'wish-reader',
     register(on: On) {
@@ -5997,63 +5756,41 @@ describe('Arbeitsweise und Grill mich', () => {
     await ui.unmount()
     return button?.props.variant
   }
-  /** /autopilot as typed, with its argument; or the old /nachtschicht. */
-  const typeNightShift = ($: Engine, args = '', command: 'autopilot' | 'nachtschicht' = 'autopilot') =>
-    $.command.run({ command, args } as never)
+  /** /autopilot as typed, with its argument. */
+  const typeNightShift = ($: Engine, args = '') => $.command.run({ command: 'autopilot', args } as never)
 
-  test('ohne den Mod Autopilot steht 🅰️ schlicht da, auch nach einem Druck', async ($, on) => {
+  test('der Autopilot steckt im Leitstand: ein Druck auf 🅰️ schaltet ihn sofort an, ohne Befehl, Prompt oder Wunsch', { plugins: [WISH_READER] }, async ($, on) => {
     const { state, press } = await skillWorld($, on)
+    state.runHangs = true
     expect(await nightShiftVariant($)).toBe('secondary')
-    // Listed, but nobody keeps a run: pressing changes nothing.
-    state.commands = [skill('autopilot')]
-    await press('nightshift')
-    expect(state.runs).toHaveLength(1)
-    expect(await nightShiftVariant($)).toBe('secondary')
-    // Not there at all.
-    state.commands = []
-    await press('nightshift')
-    expect(await nightShiftVariant($)).toBe('secondary')
+    expect(await pressBack(press, 'nightshift')).toBe('back')
+    expect(state.runs).toEqual([])
+    expect(state.filled).toEqual([])
+    expect(state.toasts.some(one => one.startsWith('Der Autopilot ist an'))).toBe(true)
+    expect(await wishOf($)).toBe('null')
+    expect(await nightShiftVariant($)).toBe('primary')
   })
 
-  test('Autopilot per Knopf: ein Druck schaltet ihn an und hebt 🅰️ hervor, der nächste aus', WITH_AUTOPILOT, async ($, on) => {
+  test('Autopilot per Knopf: ein Druck schaltet ihn an und hebt 🅰️ hervor, der nächste aus', async ($, on) => {
     const { state, press } = await skillWorld($, on)
-    state.commands = [skill('autopilot')]
     expect(await nightShiftVariant($)).toBe('secondary')
     await press('nightshift')
-    // Autopilot answered its command itself.
     expect(state.runs).toEqual([])
     expect(await nightShiftVariant($)).toBe('primary')
     await press('nightshift')
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Autopilot läuft: ein Druck auf 🅰️ kommt sofort zurück, legt den Wunsch zum Ausschalten ab und sagt es; 🅰️ bleibt hell bis zum Ende der Runde', { plugins: [FAKE_BUSY_AUTOPILOT, WISH_READER] }, async ($, on) => {
-    const { state, press, clock } = await skillWorld($, on)
-    state.commands = [skill('autopilot')]
+  test('Autopilot läuft: ein Druck auf 🅰️ kommt sofort zurück und beendet ihn', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
     await typeNightShift($, 'an')
     expect(await nightShiftVariant($)).toBe('primary')
-    await clock.advance(5000)
-    // Autopilot's command never comes through while it runs; the press does not wait for it.
     expect(await pressBack(press, 'nightshift')).toBe('back')
-    expect(state.toasts).toContain('Der Autopilot geht nach dieser Runde aus.')
-    expect(await wishOf($)).toBe('1005000')
-    // Lit while the run goes on; dark once Autopilot has ended it as the round ends.
-    expect(await nightShiftVariant($)).toBe('primary')
-    await $.turn.complete({ answer: 'Teil B steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as never)
+    expect(state.toasts.some(one => one.startsWith('Der Autopilot ist aus'))).toBe(true)
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Autopilot aus: 🅰️ startet ihn mit /autopilot an, ohne auf den Befehl zu warten, und legt keinen Wunsch ab', { plugins: [WISH_READER] }, async ($, on) => {
-    const { state, press } = await skillWorld($, on)
-    state.commands = [skill('autopilot')]
-    state.runHangs = true
-    expect(await pressBack(press, 'nightshift')).toBe('back')
-    expect(state.runs).toEqual([{ command: 'autopilot', args: 'an' }])
-    expect(state.toasts).not.toContain('Der Autopilot geht nach dieser Runde aus.')
-    expect(await wishOf($)).toBe('null')
-  })
-
-  test('Autopilot getippt: /autopilot, /autopilot an und aus schalten 🅰️ mit', WITH_AUTOPILOT, async ($, on) => {
+  test('Autopilot getippt: /autopilot, /autopilot an und aus schalten 🅰️ mit', async ($, on) => {
     await skillWorld($, on)
     await typeNightShift($)
     expect(await nightShiftVariant($)).toBe('primary')
@@ -6065,26 +5802,28 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Autopilot fertig oder angehalten: 🅰️ bleibt hervorgehoben, bis ein Druck ihn beendet; Esc beendet ihn', WITH_AUTOPILOT, async ($, on) => {
-    const { state, press } = await skillWorld($, on)
-    state.commands = [skill('autopilot')]
+  test('Autopilot fertig: mit der Marke geht 🅰️ aus; angehalten bleibt er hervorgehoben, bis ein Druck oder Esc ihn beendet', async ($, on) => {
+    const { press } = await skillWorld($, on)
     const end = (answer: string, reason: string) =>
       $.turn.complete({ answer, durationMs: 1, isAborted: reason === 'aborted', turnId: 't1', reason } as never)
 
-    await typeNightShift($)
+    await typeNightShift($, 'an')
     await end('Uebergabe: alles gebaut.\nAUTOPILOT-FERTIG', 'answer')
+    expect(await nightShiftVariant($)).toBe('secondary')
+
+    await typeNightShift($, 'an')
+    await end('', 'refusal')
     expect(await nightShiftVariant($)).toBe('primary')
     await press('nightshift')
     expect(await nightShiftVariant($)).toBe('secondary')
 
-    await typeNightShift($)
+    await typeNightShift($, 'an')
     await end('', 'refusal')
-    expect(await nightShiftVariant($)).toBe('primary')
     await end('', 'aborted')
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
-  test('Autopilot nach dem Neuladen: 🅰️ zeigt weiter, was der Autopilot hält', WITH_AUTOPILOT, async ($, on) => {
+  test('Autopilot nach dem Neuladen: 🅰️ zeigt weiter, was der Autopilot hält', async ($, on) => {
     on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
     on('process.run', () => ({ value: { exitCode: 2, stdout: '', stderr: '' } }) as never)
     on('tool.register', () => ({ value: undefined }) as never)
@@ -6095,32 +5834,6 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await nightShiftVariant($)).toBe('primary')
     await typeNightShift($, 'aus')
     await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
-    expect(await nightShiftVariant($)).toBe('secondary')
-  })
-
-  test('ohne Autopilot zeigt 🅰️ weiter, was die alte Nachtschicht hält, und ein Druck schaltet sie', { plugins: [FAKE_OLD_NIGHT_SHIFT] }, async ($, on) => {
-    const { state, press } = await skillWorld($, on)
-    state.commands = [skill('nachtschicht')]
-    expect(await nightShiftVariant($)).toBe('secondary')
-    await press('nightshift')
-    // The Nachtschicht answered its command itself.
-    expect(state.runs).toEqual([])
-    expect(await nightShiftVariant($)).toBe('primary')
-    await typeNightShift($, 'aus', 'nachtschicht')
-    expect(await nightShiftVariant($)).toBe('secondary')
-    await typeNightShift($, 'an', 'nachtschicht')
-    expect(await nightShiftVariant($)).toBe('primary')
-  })
-
-  test('hat der Autopilot schon geschrieben, zählt sein Wert, nicht mehr der der alten Nachtschicht', { plugins: [FAKE_AUTOPILOT, FAKE_OLD_NIGHT_SHIFT] }, async ($, on) => {
-    await skillWorld($, on)
-    await typeNightShift($, 'an', 'nachtschicht')
-    // Autopilot has written nothing yet: the Nachtschicht's run shows.
-    expect(await nightShiftVariant($)).toBe('primary')
-    await typeNightShift($, 'an')
-    expect(await nightShiftVariant($)).toBe('primary')
-    // Autopilot ended its run; the Nachtschicht's still says on, and no longer counts.
-    await typeNightShift($, 'aus')
     expect(await nightShiftVariant($)).toBe('secondary')
   })
 
@@ -6153,7 +5866,7 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const bash = ($: Engine) => callTool($, { tool: 'Bash', command: 'ls' })
 
-  test('Autopilot an: ein wartender Plan startet nach 30 s von selbst, genau einmal, und Claude weiß es', WITH_AUTOPILOT, async ($, on) => {
+  test('Autopilot an: ein wartender Plan startet nach 30 s von selbst, genau einmal, und Claude weiß es', async ($, on) => {
     const { clock, sent, planned } = await nightPlan($, on, true)
     expect(String(planned.result)).toContain(
       'warte auf ihre Antwort. Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ' +
@@ -6177,7 +5890,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS])
   })
 
-  test('Autopilot nach 25 s aus: der Plan wartet weiter; wieder an, zählt er volle 30 s', WITH_AUTOPILOT, async ($, on) => {
+  test('Autopilot nach 25 s aus: der Plan wartet weiter; wieder an, zählt er volle 30 s', async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     await clock.advance(25_000)
     await typeNightShift($, 'aus')
@@ -6193,7 +5906,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS])
   })
 
-  test('Plan in den 30 s mit Start freigegeben: der Autopilot schickt nichts dazu, auch vor seiner Runde nicht', WITH_AUTOPILOT, async ($, on) => {
+  test('Plan in den 30 s mit Start freigegeben: der Autopilot schickt nichts dazu, auch vor seiner Runde nicht', async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     await clock.advance(10_000)
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -6209,7 +5922,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS])
   })
 
-  test('ohne Autopilot wartet der Plan auch nach 60 s auf Start, ohne Hinweis, und Claude liest nichts von ihm', WITH_AUTOPILOT, async ($, on) => {
+  test('ohne Autopilot wartet der Plan auch nach 60 s auf Start, ohne Hinweis, und Claude liest nichts von ihm', async ($, on) => {
     const { clock, sent, planned } = await nightPlan($, on, false)
     expect(String(planned.result)).not.toContain('Autopilot')
     expect((await bash($)).deny).not.toContain('Autopilot')
@@ -6218,7 +5931,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([])
   })
 
-  test('derselbe Plan, noch einmal gemeldet, startet einmal; ein anderer Plan bekommt volle 30 s', WITH_AUTOPILOT, async ($, on) => {
+  test('derselbe Plan, noch einmal gemeldet, startet einmal; ein anderer Plan bekommt volle 30 s', async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     const same = ['Lies die Markennotizen', 'Baue die Preistabelle']
     // Laid out again while it counts: the count goes on.
@@ -6238,7 +5951,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(sent).toEqual([START_WORDS, START_WORDS])
   })
 
-  test('während der Chat verdichtet wird, startet der Autopilot den Plan nicht, gleich danach schon', WITH_AUTOPILOT, async ($, on) => {
+  test('während der Chat verdichtet wird, startet der Autopilot den Plan nicht, gleich danach schon', async ($, on) => {
     let isCompacting = false
     on('state.get', async (_, e, next) => {
       // The read comes back as { value: { value, version } }: the inner value is the one Leitstand reads.
@@ -6255,7 +5968,7 @@ describe('Arbeitsweise und Grill mich', () => {
   })
 
   for (const surface of SURFACES) {
-    test(`Autopilot an: neben Start steht gedimmt, in wie vielen Sekunden der Plan startet (${surface})`, WITH_AUTOPILOT, async ($, on) => {
+    test(`Autopilot an: neben Start steht gedimmt, in wie vielen Sekunden der Plan startet (${surface})`, async ($, on) => {
       const { clock } = await nightPlan($, on, true)
       expect(await nightHint($, surface)).toEqual(['startet in 30 s (gedimmt)'])
       // Right beside Start, as the row reads: in the app before it, Start staying last; on the terminal after it.
@@ -7067,17 +6780,12 @@ describe('Verdecken und Tresor', () => {
     expect(state.toasts).toContain(
       '3 Geheimnisse in die .env übernommen (DB_PASSWORD, GITHUB_TOKEN_2, KARTENNUMMER). Der Chat wird jetzt verdichtet; danach kennt Claude nur noch Platzhalter.',
     )
-    // The checkpoint and the compaction are told the placeholders, never the values.
-    expect(state.forks[0]).toContain('${GITHUB_TOKEN_2}')
+    // The compaction is told the placeholders, never the values; a checkpoint is the Statistik mod's, not the shield's.
+    expect(state.forks).toEqual([])
     expect(state.compacts).toHaveLength(1)
     for (const name of ['DB_PASSWORD', 'GITHUB_TOKEN_2', 'KARTENNUMMER']) expect(state.compacts[0]).toContain(`\${${name}}`)
-    const saved = JSON.stringify(state.store.get('checkpoint:chat-1'))
-    expect(saved).toContain('${DB_PASSWORD}')
-    expect(saved).toContain('${GITHUB_TOKEN_2}')
-    for (const value of ['letmein!', GITHUB, CARD]) {
-      expect(saved).not.toContain(value)
-      expect(state.compacts[0]).not.toContain(value)
-    }
+    expect(state.store.get('checkpoint:chat-1')).toBeUndefined()
+    for (const value of ['letmein!', GITHUB, CARD]) expect(state.compacts[0]).not.toContain(value)
   })
 
   test('🛡️ ersetzt die Werte auch in dem, was die Verdichtung hinterlässt; eine andere Verdichtung bleibt, wie sie ist', async ($, on) => {
@@ -7120,9 +6828,7 @@ describe('Verdecken und Tresor', () => {
     state.refusesCompact = false
     const result = await $.session.compact({ trigger: 'manual', instructions: 'x', messages: [{ role: 'user', text: 'Hallo', toolUses: [] }] } as never)
     expect(result).toEqual({ messages: leftOver })
-    // Nor does a plain tidy-up change it.
-    await tidyFromSettings($)
-    expect(state.compacts).toHaveLength(2)
+    expect(state.compacts).toHaveLength(1)
     expect(await $.session.compact({ trigger: 'manual', instructions: 'x', messages: [{ role: 'user', text: 'Hallo', toolUses: [] }] } as never)).toEqual({ messages: leftOver })
   })
 
@@ -8163,44 +7869,6 @@ describe('Einstellungen je Chat', () => {
     expect(store.has('settings:chat-older')).toBe(true)
   })
 
-  test('der Letzte Stand gehört zum Chat: Aufräumen in einem anderen Chat lässt ihn stehen', VIEW_SIMPLE, async ($, on) => {
-    const { store, session } = resumeWorld(on, { 'checkpoint:chat-1': { at: 900_000, note: 'Sicherungspunkt: Preisseite' } })
-    on('model.fork', () => ({ value: { isAnswered: true, text: 'Sicherungspunkt: Fußzeile', usage: {} } }) as never)
-    on('session.compact', () => {
-      throw new Error('not now')
-    })
-    on('command.run', () => ({ text: '' }))
-    on('ui.log', () => ({ value: undefined }) as never)
-    await openChat($, session, 'chat-1')
-    expect(await settingsTexts($)).toContain('Letzter Stand')
-
-    await openChat($, session, 'chat-2')
-    expect(await settingsTexts($)).not.toContain('Letzter Stand')
-    await settingsPress($, 'tidy-now')
-    expect((store.get('checkpoint:chat-2') as { note: string }).note).toBe('Sicherungspunkt: Fußzeile')
-    expect((store.get('checkpoint:chat-1') as { note: string }).note).toBe('Sicherungspunkt: Preisseite')
-    expect(store.has('lastCheckpoint')).toBe(false)
-
-    await openChat($, session, 'chat-1')
-    // Its own checkpoint, saved at 900_000, not the one chat-2 saved at 1_000_000.
-    // 900_000 is 00:15 UTC on 1 January 1970, 01:15 in Berlin.
-    const time = '01:15'
-    expect(await settingsTexts($)).toContain(`Letzter Sicherungspunkt um ${time} gespeichert.`)
-  })
-
-  test('der Letzte Stand von vor dem Umbau kommt zum Chat, dem er gehört, und nur zu ihm', VIEW_SIMPLE, async ($, on) => {
-    const old = { sessionId: 'chat-1', at: 900_000, note: 'Sicherungspunkt: Preisseite' }
-    const { store, session } = resumeWorld(on, { lastCheckpoint: old })
-    await openChat($, session, 'chat-2')
-    expect(await settingsTexts($)).not.toContain('Letzter Stand')
-    expect(store.has('checkpoint:chat-2')).toBe(false)
-
-    await openChat($, session, 'chat-1')
-    expect(await settingsTexts($)).toContain('Letzter Stand')
-    expect(store.get('checkpoint:chat-1')).toEqual({ at: 900_000, note: 'Sicherungspunkt: Preisseite' })
-    expect(store.get('lastCheckpoint')).toEqual(old)
-  })
-
   test('in der Gruppenarbeit steht Plan zuerst freigeben fest auf An; ein Druck ändert und speichert nichts', VIEW_SIMPLE, async ($, on) => {
     const { store, session } = resumeWorld(on)
     await openChat($, session, 'chat-1')
@@ -8391,7 +8059,8 @@ describe('Eigene Befehle /leitstand-…', () => {
     await $.session.start(START)
 
     const names = LEITSTAND_BEFEHLE.map(one => one.name)
-    expect(names).toHaveLength(51)
+    // Die des Leitstands selbst und die seiner Teile (Selbstkritik und Regeln, Dateien, Autopilot), jeder mit Kurzform.
+    expect(names).toHaveLength(47 + TEIL_BEFEHLE.length)
     expect(new Set(names).size).toBe(names.length)
     const short = registered.find(one => one.name === 'leitstand')
     expect(short).toBeDefined()
@@ -8408,7 +8077,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       }
     }
     // Short forms without leitstand: in front: the same command, the menu names the mod.
-    expect(LEITSTAND_KURZFORMEN.size).toBe(47)
+    expect(LEITSTAND_KURZFORMEN.size).toBe(43 + TEIL_BEFEHLE.length)
     for (const name of ['an', 'aus', 'hilfe', 'vermenschlichen']) expect(registered.find(one => one.name === name)).toBeUndefined()
     for (const [kurz, name] of LEITSTAND_KURZFORMEN) {
       const one = LEITSTAND_BEFEHLE.find(befehl => befehl.name === name)
@@ -8442,7 +8111,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     world(on)
     const lines = (await run($, 'leitstand:hilfe')).split('\n')
     for (const one of LEITSTAND_BEFEHLE) {
-      const own = lines.filter(line => line.startsWith(`/${one.name}:`) || line.startsWith(`/${one.name} [`))
+      const own = lines.filter(line => line.startsWith(`/${one.name}:`) || line.startsWith(`/${one.name} `))
       expect(own).toEqual([`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''}: ${one.description}`])
     }
     for (const gruppe of new Set(LEITSTAND_BEFEHLE.map(one => one.gruppe))) expect(lines).toContain(gruppe)

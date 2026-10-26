@@ -11,6 +11,8 @@ import type {
   GlanceTask,
   GlanceUsage,
 } from '../types'
+import { gemerkteAntwort, merkeAntwort } from './antwort'
+import { DATEIEN_FENSTER } from './filetree/befehle'
 import {
   HISTORY_PREFIX,
   WEEK_DAYS,
@@ -42,7 +44,7 @@ import {
   LEITSTAND_BEFEHLE,
   LEITSTAND_BEFEHL_NAMEN,
   ALTE_BEFEHLE,
-  LEITSTAND_KURZFORMEN,
+  EIGENE_KURZFORMEN,
   kurzform,
   neuerName,
   vollerBefehl,
@@ -173,11 +175,11 @@ const HUMANIZE = '\u{1F9CD}'
 const SHORT_ANSWERS = '\u{1F4DD}'
 const LONG_ANSWERS = '\u{1F4D6}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
-/** The opener for Filetree's side pane, after ADHD mode: a tree. */
-const FILETREE = '\u{1F333}'
+/** The opener for the Dateien side pane (once the Filetree mod), after Kurzantworten: an open folder. */
+const FILETREE = '\u{1F4C2}'
 /** The clean-code skill, right behind Grill mich: a broom. */
 const CLEAN_CODE = '\u{1F9F9}'
-/** The reflect mod's command, right behind the broom: a mirror. */
+/** Selbstkritik (once the Reflect mod), right behind the broom: a mirror. */
 const REFLECT = '\u{1FA9E}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
 const MASK_ON = '\u{1F512}'
@@ -264,8 +266,6 @@ const hasGithubAtom = atom({ plugin: 'leitstand', key: 'hasGithub' } as const, f
 const armedAtom = atom({ plugin: 'leitstand', key: 'armedButton' } as const, null)
 const noticeAtom = atom({ plugin: 'leitstand', key: 'isNoticing' } as const, false)
 const tourAtom = atom({ plugin: 'leitstand', key: 'tourStep' } as const, null)
-const checkpointAtom = atom({ plugin: 'leitstand', key: 'checkpointAt' } as const, null)
-const recapAtom = atom({ plugin: 'leitstand', key: 'isRecapShown' } as const, false)
 const othersAtom = atom({ plugin: 'leitstand', key: 'otherChats' } as const, [])
 const showsOthersAtom = atom({ plugin: 'leitstand', key: 'showsOthers' } as const, true)
 // shortcut: each read of the store parses its whole file, one per other chat; fine for 20 chats every 20 s, a single
@@ -274,7 +274,6 @@ const OTHERS_EVERY_MS = 20_000
 const historyAtom = atom({ plugin: 'leitstand', key: 'historyView' } as const, null)
 const HISTORY_PANE = 'leitstand-history'
 const PLAN_PANE = 'leitstand-plan'
-const RECAP_PANE = 'leitstand-recap'
 const SETTINGS_PANE = 'leitstand-settings'
 const handoffAtom = atom({ plugin: 'leitstand', key: 'handoffState' } as const, 'idle')
 // The main chat is being compacted: a message sent now waits in the queue until it is through.
@@ -333,11 +332,6 @@ const SHIP_PROMPT = `Die Arbeit ist fertig. Liefere sie auf GitHub aus, der Reih
    Merge nie mit --admin oder --auto und umgeh den Branch-Schutz auch sonst nicht; ist der Merge blockiert, sag warum und hör auf.
 8. Schließ mit dem Link zum Pull Request und einer Zeile zum Ergebnis.`
 
-const CHECKPOINT_PROMPT = `Dieser Chat wird gleich verdichtet, um Platz zu schaffen. Schreib einen Sicherungspunkt, damit die Arbeit weitergeht,
-ohne dass etwas Wichtiges verloren geht. Nenne kurz: das Ziel; was schon erledigt ist; was noch offen ist, der Reihe nach;
-getroffene Entscheidungen und warum; was die Person verlangt oder ausgeschlossen hat; die Dateien, Befehle oder Links, auf die
-es ankommt; offene Fragen; und den allernächsten Schritt. Auf Deutsch, unter 300 Wörtern, ohne Einleitung. Beginne genau mit: "Sicherungspunkt:"`
-
 const PROMPT_SECTION = `# Leitstand (Fortschritts-Checkliste)
 Die Person verfolgt deine Arbeit auf einer Checkliste über dem Eingabefeld, in einfachem Deutsch.
 - Eine Frage, die du sofort und ohne Tools beantworten kannst, braucht keinen Plan: Antworte einfach.
@@ -369,8 +363,6 @@ let isRefreshing = false
 let failuresInARow = 0
 // A message held back for a password: memory only, never stored, and only to let the same one through on a resend.
 let heldMessage: { text: string; at: number } | null = null
-// The text of the last answer to /leitstand, until its stored row has passed session.append.
-let lastOwnAnswer: string | null = null
 // The secrets the shield just moved into the .env, until its tidy-up is over: a compaction of the main chat in that time
 // has their values replaced in what it leaves. Memory only; it lapses at `until` should the run never end.
 let pendingVault: { secrets: readonly Secret[]; until: number } | null = null
@@ -916,12 +908,6 @@ const showHistory = async ($: $, day: string, isOpening: boolean) => {
 /** Opens the whole plan in a side panel: every step, what each got done, its time and helpers. */
 const showPlan = ($: $) => $.ui.open({ id: PLAN_PANE, title: 'Plan', closeOnEscape: true })
 
-/** Where we left off: the checkpoint Claude saved before the chat was tidied up, in a side panel. */
-const showRecap = async ($: $) => {
-  await update($, recapAtom, () => false)
-  return $.ui.open({ id: RECAP_PANE, title: 'Letzter Stand', closeOnEscape: true })
-}
-
 /** Shows the team report for the day or the week, or your own week across projects, and copies it. */
 const showReportSpan = async ($: $, span: GlanceHistoryView['reportSpan'], surface?: RenderSurface) => {
   await update($, historyAtom, view => (view ? { ...view, reportSpan: span } : view))
@@ -1105,38 +1091,15 @@ const finishHelper = async ($: $, agentId: string, status: 'done' | 'failed') =>
 }
 
 /**
- * Tidies the chat up without forgetting: Claude first writes a checkpoint of the work, the compaction is told to keep
- * it, and it stays in Claude's instructions for the rest of this chat. Uses /compact itself when the engine refuses.
- *
- * With `secrets` (moved into the .env just before), the checkpoint and the compaction are told to name them only by
- * their placeholders, and the saved checkpoint has any value left in it replaced as well. The rule names the
- * placeholders, never the values: /compact, the fallback, shows its instructions in the chat.
+ * After the shield moved the chat's secrets into the .env: compacts the chat, told to name them only by their
+ * placeholders. Uses /compact itself when the engine refuses; the rule names the placeholders, never the values, as
+ * /compact shows its instructions in the chat. Tidying up with a checkpoint is the Statistik mod's.
  */
-const tidyUp = async ($: $, extra?: { secrets: readonly Secret[] }): Promise<'compacted' | 'command' | 'failed'> => {
-  const secrets = extra?.secrets ?? []
-  const rule = secrets.length === 0 ? null : secretRule(secrets)
-  // The .env button has said what happens next; its toast stays in view.
-  if (rule === null) $.ui.toast('Speichere einen Sicherungspunkt und räume dann den Chat auf…')
-  let note: string | null = null
+const compactForVault = async ($: $, secrets: readonly Secret[]): Promise<'compacted' | 'command' | 'failed'> => {
+  const instructions = secretRule(secrets)
   try {
-    const reply = await $.model.fork({ prompt: rule === null ? CHECKPOINT_PROMPT : `${CHECKPOINT_PROMPT}\n\n${rule}` })
-    if (reply.isAnswered && reply.text.trim()) note = replaceSecrets(reply.text.trim(), secrets)
-  } catch {
-    // Tidying up still helps without a checkpoint.
-  }
-  if (note !== null) {
-    const at = await now($)
-    await $.store.set(checkpointKey(await $.session.id()), { at, note })
-    await update($, checkpointAtom, () => at)
-  } else {
-    $.ui.toast("Sicherungspunkt ließ sich nicht speichern, räume trotzdem auf.")
-  }
-  const kept = note === null ? '' : `Behalte alles aus diesem Sicherungspunkt; die Arbeit braucht ihn, um weiterzugehen.\n\n${note}`
-  const instructions = rule === null ? kept : [rule, kept].filter(Boolean).join('\n\n')
-  try {
-    const done = await $.session.compact(instructions === '' ? undefined : { instructions })
-    if (done.skip !== undefined) $.ui.toast(`Der Chat wurde nicht aufgeräumt: ${done.skip}`)
-    else if (note !== null) await update($, recapAtom, () => true)
+    const done = await $.session.compact({ instructions })
+    if (done.skip !== undefined) $.ui.toast(`Der Chat wurde nicht verdichtet: ${done.skip}`)
     return done.skip === undefined ? 'compacted' : 'failed'
   } catch (refused) {
     $.ui.log(`leitstand: compaction refused: ${refused instanceof Error ? refused.message : String(refused)}`, { to: 'debug' })
@@ -1146,7 +1109,7 @@ const tidyUp = async ($: $, extra?: { secrets: readonly Secret[] }): Promise<'co
     return 'command'
   } catch (failed) {
     const reason = failed instanceof Error ? failed.message : String(failed)
-    $.ui.toast(`Der Chat ließ sich nicht aufräumen (${reason.slice(0, 80)}). Schreib /compact, um es noch mal zu versuchen.`)
+    $.ui.toast(`Der Chat ließ sich nicht verdichten (${reason.slice(0, 80)}). Schreib /compact, um es noch mal zu versuchen.`)
     return 'failed'
   }
 }
@@ -1183,13 +1146,7 @@ const withoutSecrets = (message: CompactedMessage, secrets: readonly Secret[]): 
   return built
 }
 
-/** The checkpoint saved before this chat was last tidied up, under its own key; null when there is none. */
-const checkpointOf = async ($: $): Promise<string | null> => {
-  const saved = (await $.store.get(checkpointKey(await $.session.id()))) as { note?: unknown } | undefined
-  return typeof saved?.note === 'string' && saved.note !== '' ? saved.note : null
-}
-
-/** What the checkpoint and the compaction are told about secrets moved into the .env: placeholders only, no values. */
+/** What the compaction is told about secrets moved into the .env: placeholders only, no values. */
 const secretRule = (secrets: readonly Secret[]) => {
   const placeholders = secrets.map(one => `\`\${${one.name}}\``).join(', ')
   return (
@@ -1270,7 +1227,7 @@ const vaultSecrets = async ($: $) => {
   pendingVault = { secrets, until: (await now($)) + VAULT_LAPSE_MS }
   let route: 'compacted' | 'command' | 'failed' = 'failed'
   try {
-    route = await tidyUp($, { secrets })
+    route = await compactForVault($, secrets)
   } finally {
     // /compact may run after it was started: then the secrets wait for that compaction, until they lapse.
     if (route !== 'command') pendingVault = null
@@ -1314,8 +1271,6 @@ const queued = <T,>(work: () => Promise<T>): Promise<T> => {
 
 const settingsKey = (sid: string) => `${SETTINGS_PREFIX}${sid}`
 const checkpointKey = (sid: string) => `${CHECKPOINT_PREFIX}${sid}`
-// Where the one checkpoint lay before each chat kept its own: { sessionId, at, note }.
-const LEGACY_CHECKPOINT_KEY = 'lastCheckpoint'
 
 /** Saves a chat's own values under its key, with when; with none left, the key goes. A store that fails leaves them in state. */
 const writeOwn = async ($: $, sid: string | null, values: Partial<ChatSettings>) => {
@@ -1347,22 +1302,6 @@ const applySettings = async ($: $, settings: ChatSettings) => {
   if (wasNaming !== (settings.enabled && settings.others)) void refreshOthers($).catch(() => undefined)
 }
 
-/**
- * When this chat last saved a checkpoint, for Letzter Stand; null when it has none. One saved before checkpoints were
- * kept per chat, under the old global key and for this chat, becomes this chat's own, once; the old key stays.
- */
-const loadCheckpoint = async ($: $, sid: string | null) => {
-  let saved = sid === null ? undefined : ((await $.store.get(checkpointKey(sid)).catch(() => undefined)) as { at?: unknown; note?: unknown } | undefined)
-  if (sid !== null && saved === undefined) {
-    const old = (await $.store.get(LEGACY_CHECKPOINT_KEY).catch(() => undefined)) as { sessionId?: unknown; at?: unknown; note?: unknown } | undefined
-    if (old?.sessionId === sid && typeof old.at === 'number' && typeof old.note === 'string') {
-      saved = { at: old.at, note: old.note }
-      await $.store.set(checkpointKey(sid), saved).catch(() => undefined)
-    }
-  }
-  await update($, checkpointAtom, () => (typeof saved?.at === 'number' ? saved.at : null))
-}
-
 /** Loads a chat's settings: what its key holds, else what this chat's state holds, else none; then puts them into effect. */
 const loadChatSettings = async ($: $, sid: string | null) => {
   const own = await read($, ownSettingsAtom)
@@ -1383,7 +1322,6 @@ const follow = async ($: $, isStart: boolean): Promise<boolean> => {
   const sid = await $.session.id().catch(() => null)
   const own = await read($, ownSettingsAtom)
   if (sid === own.sid && !isStart) return false
-  await loadCheckpoint($, sid)
   if (own.carry && sid !== null && sid !== own.sid) {
     const values = ownValues({ values: own.values })
     await update($, ownSettingsAtom, () => ({ sid, carry: false, values }))
@@ -1607,59 +1545,60 @@ const runCommand = async ($: $, label: string, names: string[], args?: string): 
 }
 
 /**
- * Autopilot: its mod's command, the old Nachtschicht's where only that is there; `an` while it is off, `aus` while it
- * is on. Started, not waited for: a command a plugin runs waits until the session is idle, and a running Autopilot
- * pushes on round after round, so a press that waited ran past its budget and Autopilot stayed on. A press that ends
- * it first leaves a wish in Leitstand's own state, the time of the press; Autopilot reads it as the round ends and
- * ends instead of pushing on. Until then 🅰️ stays lit, as it shows Autopilot's own state. The command still goes: an
- * idle session runs it at once, and an Autopilot that reads no wish ends by it. Named, not a bare toggle: it may come
- * through only after Autopilot ended by the wish, and a bare /autopilot would then start it again.
+ * Autopilot: its part (hooks/autopilot) answers a press of 🅰️ itself, at once, and starts or ends a run. A command
+ * Leitstand ran would not reach Leitstand's own hooks, its parts' included. This runs only if that part failed: a
+ * press that ends a run leaves a wish in Leitstand's state, the time of the press, which Autopilot reads as the round
+ * ends; one that starts it puts /autopilot-an into the prompt box.
  */
 const toggleNightShift = async ($: $) => {
-  const isOn = await isNightShiftOn($)
-  if (isOn) {
+  if (await isNightShiftOn($)) {
     const pressed = await now($)
     await update($, autopilotStopAtom, () => pressed)
     $.ui.toast('Der Autopilot geht nach dieser Runde aus.')
+    return
   }
-  void runCommand($, 'Autopilot', ['autopilot', 'nachtschicht'], isOn ? 'aus' : 'an').catch(() => undefined)
+  await $.prompt.fill({ text: '/autopilot-an' }).catch(() => undefined)
 }
 
-/** Filetree: the filetree plugin's command, which opens its side pane. Only Filetree closes it, so this opens, never toggles. */
-const openFiletree = ($: $) => runCommand($, 'Filetree', ['filetree'])
+// The tree the Dateien part (hooks/filetree) shows, for the pane's title.
+const DATEIEN_BAUM = { plugin: 'leitstand', key: 'dateienBaum' } as const
+
+/**
+ * Dateien: opens its side pane right here, at once even mid-turn; the part (hooks/filetree) draws it. A command
+ * Leitstand ran would not reach its own hooks. Only the pane closes it, so this opens, never toggles.
+ */
+const openFiletree = async ($: $) => {
+  const { value } = await $.state.get(DATEIEN_BAUM)
+  const root = value?.root ?? ''
+  const title = root === '' ? 'Dateien' : `Dateien: ${root.split('/').pop() || root}`
+  await $.ui.open({ id: DATEIEN_FENSTER, title, focus: true })
+}
 
 /** Clean code: the clean-code skill (functions, names, nesting, error handling), run as if typed. */
 const runCleanCode = ($: $) => runCommand($, 'clean-code', ['clean-code'])
 
-/** Reflect: the reflect mod's command, run as if typed. */
-const runReflect = ($: $) => runCommand($, 'Reflect', ['reflect'])
+/**
+ * Selbstkritik: its part (hooks/reflect) answers a press of 🪞 itself and starts it at once. This runs only if that
+ * part failed: /selbstkritik waits in the prompt box.
+ */
+const runReflect = ($: $) => void $.prompt.fill({ text: '/selbstkritik' }).catch(() => undefined)
 
-// Autopilot keeps its run in its own state, under the key from its days as the Nachtschicht (names here still say
-// night shift): the run while there is one, null once it is ended. Any plugin reads any value, so Leitstand reads it
-// straight from there and writes nothing of its own. Not a `dependencies` entry in plugin.json: Leitstand would then
-// not load where Autopilot is not installed. There the value was never written and reads as off.
-const NIGHT_SHIFT_STATE = { plugin: 'autopilot', key: 'schicht' } as const
-// The same value as the mod kept it while it was called Nachtschicht.
-const OLD_NIGHT_SHIFT_STATE = { plugin: 'nachtschicht', key: 'schicht' } as const
+// Autopilot keeps its run in Leitstand's own state since it became a part of it: the run while there is one, null
+// once it is ended. Its key still says Schicht, from the days as the Nachtschicht.
+const nightShiftAtom = atom({ plugin: 'leitstand', key: 'autopilotSchicht' } as const, null)
 // The key Autopilot draws its line under, in the band above the prompt; it keeps it fixed for the mods that move it.
 const AUTOPILOT_LINE = 'autopilot'
 // The key of Modellwahl's line: its proposal with Übernehmen and Nein, drawn while one waits.
 const MODEL_CHOICE_LINE = 'modellwahl'
 
 /**
- * Whether Autopilot is on, as it holds it: while there is a run, be it running, finished or halted, since /autopilot
- * then ends it. Read while drawing, the band draws again whenever Autopilot writes it, however it was switched (this
- * button, /autopilot typed, its own Beenden, Esc). Off on any error. Where Autopilot has written nothing yet in this
- * session, the Nachtschicht's value counts, so an instance in the middle of switching over still shows right.
+ * Whether Autopilot is on, as it holds it: while there is a run, be it running, finished or halted, since
+ * /autopilot-aus then ends it. Read while drawing, the band draws again whenever Autopilot writes it, however it was
+ * switched (this button, /autopilot typed, its own Beenden, Esc). Off on any error.
  */
 const isNightShiftOn = async ($: $): Promise<boolean> => {
   try {
-    // The values are the mods' own, declared in their contracts and not in Leitstand's, so they are typed here.
-    const { value: own } = (await $.state.get(NIGHT_SHIFT_STATE as never)) as { value?: unknown }
-    // Null is Autopilot's own word that no run is on, so the old value counts only while Autopilot's is unwritten.
-    if (own !== undefined) return own !== null
-    const { value: old } = (await $.state.get(OLD_NIGHT_SHIFT_STATE as never)) as { value?: unknown }
-    return old !== undefined && old !== null
+    return (await read($, nightShiftAtom)) !== null
   } catch {
     return false
   }
@@ -2307,7 +2246,7 @@ const vermenschlichen = async ($: $, isPhone: boolean) => {
 /** The shield, after ja: only where a .env has a place and the chat holds a secret; the move itself goes on after. */
 const geheimnisseSichern = async ($: $, args: string) => {
   if (!istJa(args)) {
-    return 'Würde Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner verschieben und den Chat danach aufräumen; Claude kennt dann nur noch Platzhalter.\nZum Ausführen: /leitstand:geheimnisse-sichern ja'
+    return 'Würde Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner verschieben und den Chat danach verdichten; Claude kennt dann nur noch Platzhalter.\nZum Ausführen: /leitstand:geheimnisse-sichern ja'
   }
   const folder = await $.session.cwd().catch(() => '')
   if (folder === '' || folder.replace(/\\/g, '/').includes('scratch-workspaces')) return 'Dieser Chat hat keinen Projektordner, darum gibt es keinen Ort für eine .env.'
@@ -2328,17 +2267,9 @@ const verlaufZeigen = async ($: $, args: string, isPhone: boolean) => {
   return `Verlauf für ${germanDay(day)}: ${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}. Er ist in der Seitenleiste.`
 }
 
-/** Letzter Stand: the pane, and on the phone the checkpoint itself, masked as the pane masks it. */
-const letzterStand = async ($: $, isPhone: boolean) => {
-  const note = await checkpointOf($).catch(() => null)
-  if (note === null) return 'In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.'
-  imHintergrund(() => showRecap($))
-  if (!isPhone) return 'Der letzte Stand ist in der Seitenleiste.'
-  const at = await read($, checkpointAtom)
-  const bare = note.replace(/^(Checkpoint|Sicherungspunkt):\s*/, '')
-  const text = localTimes((await read($, maskAtom)) ? maskPrivate(bare) : bare)
-  return `Letzter Stand${at === null ? '' : `, gespeichert um ${clockTime(at)}`}:\n\n${text}`
-}
+/** Where tidying up went: the Statistik mod's, since 2026-10-26. */
+const AUFRAEUMEN_UMGEZOGEN =
+  'Aufräumen mit Sicherungspunkt gehört jetzt zur Statistik: /statistik:chat-aufraeumen räumt auf, /statistik:letzter-stand-zeigen zeigt den Sicherungspunkt.'
 
 /** What one of the own commands does, as its button does it; its answer. */
 const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boolean): Promise<string> => {
@@ -2393,8 +2324,6 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       imHintergrund(() => showPlan($))
       return isPhone ? planAlsText(list) : 'Der Plan ist in der Seitenleiste.'
     }
-    case 'leitstand:letzter-stand-zeigen':
-      return letzterStand($, isPhone)
     case 'leitstand:neuer-chat':
       if (!istJa(args)) {
         return 'Würde eine Übergabenotiz schreiben, diesen Chat leeren und die Notiz als erste Nachricht in den neuen Chat schicken.\nZum Ausführen: /leitstand:neuer-chat ja'
@@ -2426,19 +2355,8 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       if (answer.run) danach($, () => runCleanCode($))
       return answer.text
     }
-    case 'leitstand:reflexion': {
-      const answer = skillAntwort('Reflect', await skillLage($, ['reflect']), isPhone, 'Reflect startet.')
-      if (answer.run) danach($, () => runReflect($))
-      return answer.text
-    }
     case 'leitstand:vermenschlichen':
       return vermenschlichen($, isPhone)
-    case 'leitstand:dateibaum': {
-      const opened = isPhone ? 'Filetree öffnet sich am Computer; auf dem Handy sind Fenster nicht zu sehen.' : 'Filetree öffnet sich in der Seitenleiste.'
-      const answer = skillAntwort('Filetree', await skillLage($, ['filetree']), isPhone, opened)
-      if (answer.run) danach($, () => openFiletree($))
-      return answer.text
-    }
     case 'leitstand:kurzantworten-an': {
       if (await read($, adhdAtom)) return 'Kurzantworten sind schon an.'
       const answer = skillAntwort('Der Modus Kurzantworten', await skillLage($, ADHD_NAMES), isPhone, `Kurzantworten gehen an ${NUR_HIER}: Claude antwortet mit dem nächsten Schritt zuerst.`)
@@ -2513,10 +2431,6 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       await setShipOnGithub($, isOn)
       return zustand('Auf GitHub abschließen ist', isOn)
     }
-    case 'leitstand:jetzt-aufraeumen':
-      // Not awaited: the compaction it may start runs once this command is done.
-      danach($, () => tidyUp($))
-      return 'Speichere einen Sicherungspunkt und räume dann den Chat auf.'
     case 'leitstand:zuruecksetzen':
       await resetSettings($)
       return `Alle Leitstand-Einstellungen stehen wieder auf dem Standard ${NUR_HIER}.`
@@ -2807,24 +2721,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         await pauseJob($)
         return { text: 'Pausiert.' }
       }
-      if (arg.startsWith('tidy')) {
-        const choice = arg.slice('tidy'.length).trim().replace(/^at\s+/, '').replace('%', '')
-        if (choice === '') {
-          void tidyUp($)
-          return { text: 'Speichere einen Sicherungspunkt und räume dann den Chat auf.' }
-        }
-        return {
-          text: 'Wie voll der Chat ist, zeigt jetzt der Statistik-Mod, und sein Schwamm räumt auf. /leitstand tidy räumt sofort auf, mit Sicherungspunkt.',
-        }
+      // Tidying up with a checkpoint went to the Statistik mod (2026-10-26); Leitstand only says where.
+      if (arg.startsWith('tidy') || arg === 'checkpoint') {
+        return { text: AUFRAEUMEN_UMGEZOGEN }
       }
       if (arg === 'settings') {
         await showSettings($)
         return { text: 'Die Einstellungen sind in der Seitenleiste.' }
-      }
-      if (arg === 'checkpoint') {
-        if ((await checkpointOf($).catch(() => null)) === null) return { text: 'In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.' }
-        await showRecap($)
-        return { text: 'Der letzte Stand ist in der Seitenleiste.' }
       }
       if (arg === 'plan') {
         await showPlan($)
@@ -2862,19 +2765,20 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       return { text: isEnabled ? 'Der Leitstand ist an.' : 'Der Leitstand ist aus.' }
     })()
     // Only this answer gets "(gemeldet vom Mod Leitstand)" in its stored row (session.append below).
-    lastOwnAnswer = answer.text
+    merkeAntwort(answer.text)
     return answer
   })
 
   // The own commands /leitstand:… and their short forms: their answer, like /leitstand's, gets "(gemeldet vom Mod
   // Leitstand)" in its stored row. An old name (/leitstand-pause, from a file left in ~/.claude/commands) says the new one.
-  on('command.run', { command: [...LEITSTAND_BEFEHL_NAMEN, ...LEITSTAND_KURZFORMEN.keys(), ...ALTE_BEFEHLE.keys()] }, async ($, e) => {
+  // Die Befehle der Teile (Selbstkritik und Regeln, Dateien, Autopilot) beantworten die Teile in ihren eigenen Hooks.
+  on('command.run', { command: [...LEITSTAND_BEFEHL_NAMEN, ...EIGENE_KURZFORMEN, ...ALTE_BEFEHLE.keys()] }, async ($, e) => {
     const jetzt = ALTE_BEFEHLE.get(e.command)
     const text = jetzt !== undefined ? neuerName(jetzt) : await leitstandBefehl($, vollerBefehl(e.command), e.args ?? '', e.origin?.kind === 'bridge')
-    lastOwnAnswer = text
+    merkeAntwort(text)
     return { text }
   }).catch(() => {
-    lastOwnAnswer = BEFEHL_FEHLER
+    merkeAntwort(BEFEHL_FEHLER)
     return { text: BEFEHL_FEHLER }
   })
 
@@ -2882,11 +2786,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   // stored row and, below its own answer, says where it came from. Its hook on every command (passwords from the phone)
   // makes it a party to the commands of other mods too: there it only takes its name out.
   on('session.append', { door: 'command', message: { type: 'system', name: 'local_command' } }, async ($, e, next) => {
-    const own = lastOwnAnswer
+    const own = gemerkteAntwort()
     const content = e.message.content.map(b => {
       if (b.type !== 'text' || typeof b.text !== 'string') return b
       const isOwn = own !== null && answerOf(b.text) === own.trim()
-      if (isOwn) lastOwnAnswer = null
+      if (isOwn) merkeAntwort(null)
       return { ...b, text: ohneVorsatz(b.text, PLUGIN, isOwn ? GEMELDET : null) }
     })
     return next({ ...e, message: { ...e.message, content } })
@@ -2898,7 +2802,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       return composed
     }
 
-    const checkpoint = await checkpointOf($).catch(() => null)
     const isDynamicMode = (await read($, workModeAtom)) === 'dynamisch'
 
     return {
@@ -2906,10 +2809,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         ...composed.sections,
         { id: `${PLUGIN}:checklist`, text: PROMPT_SECTION, scope: 'session' as const },
         ...(isDynamicMode ? [{ id: `${PLUGIN}:dynamisch`, text: DYNAMIC_SECTION, scope: 'session' as const }] : []),
-        // Saved before the chat was tidied up: what the work needs to carry on.
-        ...(checkpoint === null
-          ? []
-          : [{ id: `${PLUGIN}:checkpoint`, text: `# Sicherungspunkt, gespeichert, bevor dieser Chat aufgeräumt wurde\n${checkpoint}`, scope: 'session' as const }]),
       ],
     }
   })
@@ -3135,10 +3034,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       } else if (!hasFailedMerge && text !== CONTINUE_TEXT && !isContinueWords(text)) {
         endShipping()
       }
-    }
-    // The person moved on: the tidy-up note has done its job.
-    if (text && (await read($, recapAtom))) {
-      await update($, recapAtom, () => false)
     }
     const current = await read($, checklistAtom)
     // A go-ahead in the message that starts the person's turn also approves a plan Claude makes in this turn. A
@@ -3637,7 +3532,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const approves = await read($, approveAtom)
     const workMode = await read($, workModeAtom)
     const ships = await read($, shipOnGithubAtom)
-    const checkpointAt = await read($, checkpointAtom)
     const columns = Math.max(30, e.props.bodyColumns)
     const rule = '─'.repeat(Math.min(columns, 64))
 
@@ -3717,8 +3611,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       chime: 'Ein kurzer Signalton, wenn Claude dich braucht, festhängt oder einen Auftrag beendet, der länger als eine Minute gedauert hat.',
       voice: 'Der Signalton und ein paar Worte wie "Claude braucht dich".',
     }[sound]
-    const tidyHelp =
-      'Claude speichert vor dem Aufräumen einen Sicherungspunkt der Arbeit (Ziel, was erledigt und was offen ist, Entscheidungen, nächster Schritt), damit beim Verdichten nichts Wichtiges verloren geht. Wie voll der Chat ist, zeigt der Statistik-Mod; sein Schwamm räumt genauso auf.'
 
     return (
       <Box flexDirection="column" width={columns}>
@@ -3855,97 +3747,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             ? 'Passwörter, Schlüssel, Kartennummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte, auch in Befehls- und Werkzeugausgaben. Claude liest alles unverändert.'
             : 'Alles erscheint so, wie es im Chat steht. Schalte das ein, bevor du deinen Bildschirm teilst.',
         )}
-        {group(
-          'tidy',
-          'tidy',
-          'Chat aufräumen',
-          '',
-          <Box key="tidy-choices" flexDirection="row" gap={1}>
-            <Button key="tidy-now" label="Jetzt aufräumen" onPress={() => tidyUp($)} />
-            {checkpointAt !== null && <Button key="recap" label="Letzter Stand" onPress={() => showRecap($)} />}
-          </Box>,
-          tidyHelp,
-          checkpointAt !== null && (
-            <Box key="tidy-saved" marginTop={vector ? 1 : 0}>
-              <Text dimColor wrap="wrap">
-                {`Letzter Sicherungspunkt um ${clockTime(checkpointAt)} gespeichert.`}
-              </Text>
-            </Box>
-          ),
-        )}
         {!vector && <Text dimColor>{rule}</Text>}
         <Box key="actions" flexDirection="row" gap={1} marginTop={vector ? 2 : 0} justifyContent={vector ? 'flex-end' : undefined} width={vector ? columns : undefined}>
           {/* Changes apply as they are made, and the app draws the panel's close control: no Done needed there. */}
           {!vector && <Button key="close" label="Fertig" variant="primary" role="dismiss" onPress={() => $.ui.close({ id: SETTINGS_PANE })} />}
           <Button key="reset" label="Auf Standard zurücksetzen" onPress={() => resetSettings($)} />
         </Box>
-      </Box>
-    )
-  })
-
-  // The checkpoint Claude saved before the chat was tidied up, in its own words.
-  on('ui.render', { component: 'Pane', requestId: RECAP_PANE }, async ($, e) => {
-    const table = $.ui.resolve(e)
-    const { Box, Text, Button, Markdown } = table
-    const kit = kitOf(table, e.surface)
-    const vector = kit.isVector
-    const note = await checkpointOf($).catch(() => null)
-    const at = await read($, checkpointAtom)
-    const columns = Math.max(30, e.props.bodyColumns)
-    // The app draws a panel's own close control; the terminal's panel needs the button.
-    const close = vector ? null : <Button key="close" label="Schließen" role="dismiss" onPress={() => $.ui.close({ id: RECAP_PANE })} />
-    // A line with the checkpoint's mark on vector surfaces; plain dim text on the terminal.
-    const lead = (words: string) =>
-      vector ? (
-        <Box key="lead" flexDirection="row" gap={1} width={columns}>
-          {kit.icon('bookmark', 'quiet', NOTICE)}
-          <Box flexShrink={1}>
-            <Text dimColor wrap="wrap">
-              {words}
-            </Text>
-          </Box>
-        </Box>
-      ) : (
-        <Text key="lead" dimColor wrap="wrap">
-          {words}
-        </Text>
-      )
-    if (note === null) {
-      return (
-        <Box flexDirection="column" width={columns}>
-          {lead('In diesem Chat gibt es noch keinen Sicherungspunkt. Wenn Claude den Chat aufräumt, wird vorher einer gespeichert und hier angezeigt.')}
-          {close && (
-            <Box key="actions" flexDirection="row">
-              {close}
-            </Box>
-          )}
-        </Box>
-      )
-    }
-    // Claude's own words, as it keeps them; personal details masked and times in the person's own time.
-    const bare = note.replace(/^(Checkpoint|Sicherungspunkt):\s*/, '')
-    const text = localTimes((await read($, maskAtom)) ? maskPrivate(bare) : bare)
-
-    return (
-      <Box flexDirection="column" width={columns}>
-        {lead(`Gespeichert${at === null ? '' : ` um ${clockTime(at)}`}, bevor der Chat aufgeräumt wurde. Claude liest ihn für den Rest dieses Chats weiter mit.`)}
-        <Box key="note" flexDirection="column" marginTop={1}>
-          {vector ? (
-            // Claude writes the checkpoint in markdown: headings and lists read as they would in a reply.
-            <Markdown key="note-text" text={text.slice(0, 10_000)} />
-          ) : (
-            text.split('\n').map((line, index) => (
-              <Text key={`line-${index}`} wrap="wrap">
-                {line || ' '}
-              </Text>
-            ))
-          )}
-        </Box>
-        {close && (
-          <Box key="actions" flexDirection="row" marginTop={1}>
-            {close}
-          </Box>
-        )}
       </Box>
     )
   })
@@ -4722,37 +4529,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       )
     }
 
-    const isRecapShown = isEnabled && (await read($, recapAtom))
-    const recapButton = <Button key="recap" label="Letzter Stand" onPress={() => showRecap($)} />
-    const recapOk = <Button key="recap-ok" plain={vector ? undefined : true} label="OK" onPress={() => update($, recapAtom, () => false)} />
-    if (isRecapShown) {
-      const buttons = (
-        <Box flexDirection="row" gap={1}>
-          {recapButton}
-          {recapOk}
-        </Box>
-      )
-      warnings.push(
-        vector ? (
-          // Its buttons sit with the other actions at the bottom right.
-          line(
-            'recap',
-            kit.badge('check', 'ok', NOTICE),
-            <Text wrap="truncate-end">Chat aufgeräumt. Claude hat einen Sicherungspunkt der Arbeit behalten.</Text>,
-          )
-        ) : (
-          <Box key="recap" flexDirection="row" justifyContent="space-between" width={columns}>
-            <Box flexShrink={1}>
-              <Text wrap="truncate-end" color="green">
-                ✓ Chat aufgeräumt. Claude hat einen Sicherungspunkt der Arbeit behalten.
-              </Text>
-            </Box>
-            {buttons}
-          </Box>
-        ),
-      )
-    }
-
     // The view: on the terminal one button steps through Simple → Details → Off. Elsewhere a menu shows the view and
     // the others, so no press turns Leitstand off by surprise; a surface without one (the phone) keeps the button.
     const view = !isEnabled ? 'off' : isMinimal ? 'minimal' : isDetailed ? 'detailed' : 'simple'
@@ -4807,7 +4583,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // The mirror right behind the broom: the reflect mod's command, likewise not waited for.
     const reflectItem =
       !isEnabled || !vector ? null : (
-        <Button key="reflect" variant="secondary" label={REFLECT} onPress={() => void runReflect($).catch(() => undefined)} />
+        <Button key="reflect" variant="secondary" label={REFLECT} onPress={() => runReflect($)} />
       )
     // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
     // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it),
@@ -4851,7 +4627,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       at === 0 ? group.items : [<Text key={group.bar} dimColor>|</Text>, ...group.items],
     )
     // The row under the checklist. Elsewhere than the terminal: where to go on the left; on the right everything that
-    // acts, together: another mod's buttons, Tidy up now, Fresh chat, then Pause, Start or Continue, the main one last,
+    // acts, together: another mod's buttons, Fresh chat, then Pause, Start or Continue, the main one last,
     // as a dialog's buttons sit. In a narrow band the actions wrap onto a line of their own and still keep to the right.
     const actions =
       actionItems === null ? null : vector ? (
@@ -4860,8 +4636,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             {leftItems}
           </Box>
           <Box flexDirection="row" alignItems="center" justifyContent="flex-end" columnGap={1} rowGap={1} flexWrap="wrap" flexGrow={1} flexShrink={1} minWidth={0}>
-            {isRecapShown && recapButton}
-            {isRecapShown && recapOk}
             {lifted.buttons as RenderElement[]}
             {handoffItem}
             {shipItem}
@@ -5038,7 +4812,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     if (list === null) {
       const hint = vector ? 'Bitte Claude um etwas, dann erscheint hier sein Plan' : 'Bitte Claude um etwas: Hier erscheint sein Plan'
       // Nothing to show yet. Elsewhere than the terminal it keeps the checklist's frame: the hint and the view on top;
-      // below, the places to go on the left and, when the chat is full, Tidy up now on the right.
+      // below, the places to go on the left.
       return withBeneath(
         <Box flexDirection="column" width={columns}>
           {row(

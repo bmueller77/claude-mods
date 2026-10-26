@@ -1,7 +1,7 @@
 {
   "name": "leitstand",
-  "version": "0.56.1",
-  "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Modus und Gruppenarbeit. In der Knopfzeile Schalter für Kurzantworten, Remote Control, Autopilot und Verdecken, dazu ein Öffner für Filetree. Läuft der Autopilot, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT).",
+  "version": "0.57.0",
+  "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Modus und Gruppenarbeit. In der Knopfzeile Schalter für Kurzantworten, Remote Control und Verdecken. Eingebaut sind Selbstkritik und Regeln 🪞 (früher Reflect), Dateien 📂 (früher Filetree) und der Autopilot 🅰️; läuft er, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"
   },
@@ -70,6 +70,64 @@
       "title": "Auf GitHub abschließen",
       "description": "Ein fertiger Auftrag in einem GitHub-Projekt bietet den Knopf Push an: Commit, Pull Request und Merge nach deiner Freigabe. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
       "default": false
+    },
+    "regelpruefung": {
+      "type": "boolean",
+      "title": "Regeln: Korrekturen prüfen",
+      "description": "Prüft kurze Nachrichten darauf, ob eine wiederverwendbare Regel drinsteckt: ein kleiner Haiku-Aufruf je kurzer Nachricht. Standard für neue Chats, /regelpruefung-an und -aus gelten nur im Chat.",
+      "default": true
+    },
+    "regelpruefungModell": {
+      "type": "string",
+      "title": "Regeln: Modell für die Prüfung",
+      "description": "Welches Modell kurze Nachrichten auf Regeln prüft. haiku ist günstig und reicht dafür. Die Selbstkritik nutzt immer das Modell des Chats.",
+      "default": "haiku"
+    },
+    "selbstkritikAuto": {
+      "type": "boolean",
+      "title": "Selbstkritik nach Dateiänderungen",
+      "description": "Startet nach jeder Runde, in der Dateien geändert wurden, eine Selbstkritik im Hintergrund. Kostet einen Modellaufruf über den ganzen Chat je Runde. Standard für neue Chats, /selbstkritik-auto-an und -aus gelten nur im Chat.",
+      "default": false
+    },
+    "dateienAktivitaet": {
+      "type": "string",
+      "title": "Dateien: Claude-Aktivität",
+      "description": "Welche Dateiaktivität von Claude im Baum aufleuchtet: reads and writes = Lesen und Schreiben, writes = nur Schreiben, reads = nur Lesen, none = nichts. Gelesenes (Read-Werkzeug oder Bash-Leser wie rg, grep, find, cat) leuchtet Lila, Geschriebenes Orange, Git-Aktionen Grün.",
+      "default": "reads and writes",
+      "options": ["reads and writes", "writes", "reads", "none"]
+    },
+    "dateienSymbole": {
+      "type": "string",
+      "title": "Dateien: Symbole",
+      "description": "Symbolsatz: auto nimmt Nerd-Font-Symbole, wenn hier eine Nerd Font installiert ist (nicht in der Desktop-App); nerd erzwingt Nerd-Font-Symbole, plain nimmt nur Unicode.",
+      "default": "auto",
+      "options": ["auto", "nerd", "plain"]
+    },
+    "dateienFolgen": {
+      "type": "string",
+      "title": "Dateien: Claude folgen",
+      "description": "on (an): Der Baum scrollt zu dem, was Claude liest, schreibt oder committet. off (aus): Die Ansicht bleibt, wo du sie hingestellt hast, nur dein eigenes Scrollen bewegt sie; die Markierungen erscheinen trotzdem.",
+      "default": "on",
+      "options": ["on", "off"]
+    },
+    "dateienSpalte": {
+      "type": "string",
+      "title": "Dateien: rechte Spalte",
+      "description": "Was die rechte Spalte anfangs zeigt: date = Datum der letzten Änderung, size = Größe (Dateien in Bytes, Ordner als Plattenbelegung, im Hintergrund berechnet). Der Knopf Σ oben schaltet um.",
+      "default": "date",
+      "options": ["date", "size"]
+    },
+    "dateienOeffnen": {
+      "type": "string",
+      "title": "Dateien: öffnen mit",
+      "description": "Was ein Doppelklick oder Enter mit einer Datei macht. Leer: die Standard-App. preview oder Vorschau: zeigt die Datei im Fenster (Pfeil links geht zurück). Alles andere ist ein Befehl, der stattdessen läuft: {path} ist die Datei, {dir} ihr Ordner; ohne {path} kommt der Pfad ans Ende. Wörter werden an Leerzeichen getrennt, Anführungszeichen halten ein Wort zusammen, es läuft keine Shell. Der Befehl soll den Betrachter starten und zurückkehren; unter Linux läuft er losgelöst.",
+      "default": ""
+    },
+    "autopilotMaxRunden": {
+      "type": "number",
+      "title": "Autopilot: Höchstzahl angeschobener Runden",
+      "description": "So oft schiebt der Autopilot Claude nach einer Runde ohne Abschluss höchstens an, dann endet er. Jede Runde kostet Tokens wie eine eigene Nachricht. Eine neue Nachricht von dir setzt den Zähler zurück. Solange Agenten oder Workflows im Hintergrund laufen, schiebt er nicht an.",
+      "default": 10
     }
   }
 }

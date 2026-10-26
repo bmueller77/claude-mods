@@ -201,6 +201,170 @@ export type GlanceHistoryView = {
   myWeekEntries: GlanceHistoryEntry[]
 }
 
+// Selbstkritik und Regeln, bis 2026-10-26 der Mod Reflect.
+
+/** Wohin eine Regel geht: globale CLAUDE.md, die des Projekts, oder nur dieser Chat. */
+export type ReflectZiel = 'global' | 'project' | 'chat'
+
+/**
+ * Eine Regel, die die Pruefung gefunden hat (aus reflect-mod uebernommen):
+ * der Text, der vorgeschlagene Ort und was daraus wurde.
+ */
+export type ReflectFund = {
+  id: string
+  /** Die Regel, eine Zeile im Imperativ, auf Deutsch. */
+  rule: string
+  /** Der Ort, den das Modell vorschlaegt; "merke:" schlaegt global vor. */
+  scope: 'global' | 'project'
+  /** Das Projekt (Sitzungswurzel), in dem sie gesagt wurde. */
+  project: string
+  /** Wie oft sie gesagt wurde (Wiederholungen zaehlen auf derselben Zeile). */
+  count: number
+  firstAt: number
+  lastAt: number
+  /** pending wartet; saved steht in einer CLAUDE.md; skipped verworfen; chat gilt nur in einem Chat. */
+  status: 'pending' | 'saved' | 'skipped' | 'chat'
+  confidence: number
+}
+
+/** Eine in dieser Sitzung in eine CLAUDE.md gespeicherte Regel, mit ihrem Geltungsbereich. */
+export type ReflectGespeichert = { rule: string; scope: 'global' | 'project'; project: string }
+
+/** Eine Selbstkritik: wann, wozu, wie weit, und ihr Text. */
+export type ReflectReflexion = {
+  id: string
+  at: number
+  /** Was die Person als Schwerpunkt mitgab; leer ohne. */
+  schwerpunkt: string
+  /** befehl: /reflect; auto: nach einer Runde mit Dateiaenderungen. */
+  anlass: 'befehl' | 'auto'
+  status: 'laeuft' | 'fertig' | 'fehlgeschlagen'
+  /** Die Antwort des Modells (Markdown), sobald fertig. */
+  text: string
+  /** Warum sie fehlschlug. */
+  hinweis?: string
+}
+
+/** Die Einstellungen eines Chats; ein Chat ohne eigene Werte nimmt den Standard aus dem Menue. */
+export type ReflectEinstellungen = { pruefung: boolean; selbstkritikAuto: boolean }
+
+// Autopilot, bis 2026-10-26 ein eigener Mod. Ein Lauf heißt hier weiter Schicht, wie zur Zeit der Nachtschicht.
+
+/** Wie es um die Schicht steht. */
+export type AutopilotPhase =
+    /** Claude arbeitet, die Schicht schiebt nach jeder Runde ohne Abschluss an. */
+    | 'laeuft'
+    /**
+     * Claude hat gemeldet, dass alles erledigt ist, was ohne die Person geht. Nur noch
+     * in Schichten aus Versionen vor 0.6.0: Seitdem beendet die Marke die Schicht.
+     */
+    | 'fertig'
+    /** Die Schicht schiebt nicht mehr an: Leerlauf, Fehler oder Ablehnung. */
+    | 'angehalten'
+
+/** Eine laufende Schicht. */
+export type AutopilotSchicht = {
+    /** Wann sie begann, in Millisekunden seit der Epoche. */
+    seit: number
+    phase: AutopilotPhase
+    /** Warum sie fertig ist oder angehalten hat; null, solange sie laeuft. */
+    grund: string | null
+    /** Wie oft sie Claude insgesamt angeschoben hat. */
+    geschoben: number
+    /**
+     * Angeschobene Runden seit der letzten Nachricht der Person; bei maxRunden endet
+     * die Schicht. Fehlt bei Schichten, die eine Version vor 0.5.0 begann: dann 0.
+     */
+    runden?: number
+    /**
+     * Ob die laufende oder naechste Runde von der Schicht angeschoben wurde. Steht im
+     * Zustand, nicht im Modul, damit ein Neuladen die Leerlauf-Bremse nicht aushebelt.
+     */
+    angeschoben?: boolean
+    /** Angeschobene Runden in Folge ohne Werkzeugaufruf; bei 2 haelt die Schicht an. */
+    leerlauf?: number
+    /** Die Rueckfragen, die Claude stellen wollte und selbst entscheiden musste. */
+    fragen: string[]
+}
+
+/** Was von einer beendeten Schicht bleibt, bis man es wegklickt. */
+export type AutopilotBericht = {
+    /** Wie lange sie lief, in Minuten. */
+    minuten: number
+    geschoben: number
+    fragen: string[]
+    /** Warum sie endete. */
+    grund: string
+}
+
+// Dateien, bis 2026-10-26 der Mod Filetree.
+
+export type FiletreeNode = {
+  id: string
+  parent: string
+  name: string
+  kind: 'dir' | 'file' | 'link'
+  hidden: boolean
+  mtime: number
+  size: number
+  loaded: boolean
+}
+
+export type FiletreeBranch = {
+  head: string
+  upstream: string
+  ahead: number
+  behind: number
+}
+
+export type FiletreeActivity = {
+  id: number
+  kind: string
+  label: string
+  state: 'running' | 'done' | 'failed'
+  detail: string
+  at: number
+  tone: string
+  nerd: string
+  plain: string
+}
+
+export type FiletreeTree = {
+  root: string
+  nodes: FiletreeNode[]
+  expanded: string[]
+  cursor: string
+  selected: string
+  query: string
+  showHidden: boolean
+  showSize: boolean
+  dirSizes: Record<string, number>
+  git: Record<string, string>
+  diff: Record<string, [number, number]>
+  ignored: string[]
+  untrackedDirs: string[]
+  top: string
+  prefix: string
+  branch: FiletreeBranch | null
+  counts: Record<string, [number, number, number]>
+  flash: string[]
+  flashDim: string[]
+  flashOn: boolean
+  flashTones: Record<string, string>
+  scroll: number | null
+  preview: string
+  previewTop: number
+}
+
+export type FiletreeTheme = {
+  fg: string
+  accent: string
+  muted: string
+  urgent: string
+  selection: string
+  bg: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'leitstand': {
@@ -260,6 +424,28 @@ declare module 'claude-code' {
        * Autopilot reads it as a round ends and ends a run that began before it, instead of pushing on.
        */
       autopilotStop: number | null
+      /** Selbstkritik und Regeln: wartende Regeln dieses Projekts und globale, sortiert, wie das Band sie zeigt. */
+      regelnWartend: ReflectFund[]
+      /** In dieser Sitzung in CLAUDE.md gespeicherte Regeln: der Systemprompt trägt sie, bis CLAUDE.md neu gelesen wird. */
+      regelnGespeichert: ReflectGespeichert[]
+      /** Die IDs in der Reihenfolge, die /regeln zuletzt nummeriert hat. */
+      regelnNummern: string[]
+      /** Die letzten fünf Selbstkritiken, die neueste zuletzt. */
+      selbstkritikReflexionen: ReflectReflexion[]
+      /** Welche Selbstkritik das Fenster zeigt; null: die neueste. */
+      selbstkritikAngezeigt: string | null
+      /** Dateien: der Baum, wie das Fenster ihn zeigt. */
+      dateienBaum: FiletreeTree
+      /** Dateien: die Farben des Fensters. */
+      dateienTheme: FiletreeTheme
+      /** Dateien: was Claude zuletzt gelesen, geschrieben oder committet hat. */
+      dateienAktivitaet: FiletreeActivity[]
+      /** Autopilot: die laufende Schicht, oder null. */
+      autopilotSchicht: AutopilotSchicht | null
+      /** Autopilot: der Bericht der letzten Schicht, oder null. */
+      autopilotBericht: AutopilotBericht | null
+      /** Autopilot: ob die Liste der selbst entschiedenen Fragen aufgeklappt ist. */
+      autopilotZeigeFragen: boolean
       /**
        * This chat's own settings: the chat they belong to, whether they move to the next chat id (after /clear), and
        * the values the person changed in it; anything left out follows the defaults from the config menu.

@@ -4,16 +4,19 @@ Alle Befehle der Mods aus bjoern-mods, je Mod. Die Grundbefehle ohne Doppelpunkt
 
 - `/<mod>:hilfe` listet die Befehle eines Mods.
 - `hilfe` hinter einem Befehl erklärt ihn, etwa `/statistik:warmhalten-an hilfe`.
-- Befehle mit „(mit ja)“ tun erst etwas, wenn `ja` dahinter steht. Ohne `ja` sagen sie, was passieren würde.
+- Befehle mit "(mit ja)" tun erst etwas, wenn `ja` dahinter steht. Ohne `ja` sagen sie, was passieren würde.
 - Ein alter Name wie `/statistik-zeigen` oder `/leitstand-pause` antwortet nur noch mit dem neuen.
 
 ## Leitstand
 
-Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teambericht, dazu die Schalter in der Knopfzeile und die Einstellungen. Bis auf `an`, `aus`, `hilfe` und `vermenschlichen` geht jeder Befehl auch ohne `leitstand:` davor, etwa `/pause` oder `/verdecken-an`.
+Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teambericht, dazu die Schalter in der Knopfzeile und die Einstellungen. Seit 2026-10-26 gehören Selbstkritik und Regeln (früher der Mod Reflect), Dateien (früher Filetree) und der Autopilot dazu. Bis auf `an`, `aus`, `hilfe` und `vermenschlichen` geht jeder Befehl auch ohne `leitstand:` davor, etwa `/pause`, `/selbstkritik` oder `/autopilot-an`.
 
 | Befehl | Was er tut |
 |---|---|
 | `/leitstand …` | Grundbefehl mit den älteren englischen Unterbefehlen, etwa on, off, pause, continue, plan, week und tour |
+| `/reflect [Schwerpunkt]` | Startet die Selbstkritik; mit zeigen, regeln, speichern &lt;Nr>, verwerfen &lt;Nr> oder hilfe dahinter wie die Befehle unten |
+| `/filetree [Pfad]` | Öffnet die Dateien wie /dateien, ohne Pfad im Arbeitsordner |
+| `/autopilot [an\|aus]` | Autopilot ein- oder ausschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist |
 
 ### Allgemein
 
@@ -47,7 +50,6 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:pause` | Claude anhalten |
 | `/leitstand:weiter` | Claude weitermachen lassen |
 | `/leitstand:plan-zeigen` | Den ganzen Plan zeigen |
-| `/leitstand:letzter-stand-zeigen` | Den letzten Sicherungspunkt zeigen |
 | `/leitstand:neuer-chat [ja]` | Neuer Chat mit Übergabenotiz (mit ja) |
 | `/leitstand:abschliessen [ja]` | Auf GitHub abschließen: Commit, Pull Request, Merge (mit ja) |
 
@@ -66,13 +68,56 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 |---|---|
 | `/leitstand:ausfragen [Thema]` | Grill mich: Claude löchert dich mit Fragen |
 | `/leitstand:sauberer-code` | Code prüfen mit clean-code |
-| `/leitstand:reflexion` | Reflect starten |
 | `/leitstand:vermenschlichen` | Letzte Antwort natürlicher umschreiben |
-| `/leitstand:dateibaum` | Filetree öffnen |
 | `/leitstand:kurzantworten-an` | Kurzantworten einschalten |
 | `/leitstand:kurzantworten-aus` | Kurzantworten ausschalten |
 | `/leitstand:fernsteuerung-an` | Remote Control einschalten |
 | `/leitstand:fernsteuerung-aus` | Remote Control ausschalten |
+
+### Selbstkritik
+
+| Befehl | Was er tut |
+|---|---|
+| `/leitstand:selbstkritik [Schwerpunkt]` | Claude prüft die bisherige Arbeit kritisch |
+| `/leitstand:selbstkritik-zeigen` | Die neueste Selbstkritik als Text zeigen |
+| `/leitstand:selbstkritik-beheben` | Die Punkte der Selbstkritik als Auftrag ins Eingabefeld legen |
+| `/leitstand:selbstkritik-kopieren` | Die neueste Selbstkritik kopieren |
+| `/leitstand:selbstkritik-auto-an` | Selbstkritik nach jeder Runde mit Dateiänderungen |
+| `/leitstand:selbstkritik-auto-aus` | Keine Selbstkritik nach Dateiänderungen |
+
+### Regeln
+
+| Befehl | Was er tut |
+|---|---|
+| `/leitstand:regeln` | Wartende Regeln mit Nummern zeigen |
+| `/leitstand:regel-global <Nr>` | Eine wartende Regel für alle Projekte speichern |
+| `/leitstand:regel-projekt <Nr>` | Eine wartende Regel für dieses Projekt speichern |
+| `/leitstand:regel-chat <Nr>` | Eine wartende Regel nur für diesen Chat übernehmen |
+| `/leitstand:regel-bearbeiten <Nr>` | Eine wartende Regel umformulieren |
+| `/leitstand:regel-verwerfen <Nr>` | Eine wartende Regel verwerfen |
+| `/leitstand:regelpruefung-an` | Korrekturen auf Regeln prüfen |
+| `/leitstand:regelpruefung-aus` | Korrekturen nicht mehr auf Regeln prüfen |
+
+### Dateien
+
+| Befehl | Was er tut |
+|---|---|
+| `/leitstand:dateien [Pfad]` | Dateien in der Seitenleiste zeigen |
+| `/leitstand:dateien-versteckte-an` | Versteckte Dateien zeigen (◉) |
+| `/leitstand:dateien-versteckte-aus` | Versteckte Dateien ausblenden (○) |
+| `/leitstand:dateien-groessen-an` | Dateien: Größe statt Datum zeigen (Σ) |
+| `/leitstand:dateien-groessen-aus` | Dateien: Datum statt Größe zeigen (Σ) |
+| `/leitstand:dateien-neu-laden` | Dateien neu einlesen (↻) |
+| `/leitstand:dateien-einklappen` | Dateien: alle Ordner einklappen (⊟) |
+
+### Autopilot
+
+| Befehl | Was er tut |
+|---|---|
+| `/leitstand:autopilot-an` | Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist |
+| `/leitstand:autopilot-aus` | Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld |
+| `/leitstand:autopilot-fragen-zeigen` | Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text |
+| `/leitstand:autopilot-bericht-weg` | Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen |
 
 ### Schutz
 
@@ -103,12 +148,11 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:plan-freigeben-aus` | Plan zuerst freigeben: aus |
 | `/leitstand:github-abschluss-an` | Auf GitHub abschließen: an |
 | `/leitstand:github-abschluss-aus` | Auf GitHub abschließen: aus |
-| `/leitstand:jetzt-aufraeumen` | Den Chat jetzt aufräumen |
 | `/leitstand:zuruecksetzen` | Einstellungen auf den Standard zurücksetzen |
 
 ## Statistik
 
-Eine Zeile über der Eingabe mit Nutzungslimits, Tokens, Kontext und Cache-Uhr. Hält den Prompt-Cache auf Wunsch warm.
+Eine Zeile über der Eingabe mit Nutzungslimits, Tokens, Kontext und Cache-Uhr. Hält den Prompt-Cache auf Wunsch warm und räumt den Chat mit Sicherungspunkt auf.
 
 | Befehl | Was er tut |
 |---|---|
@@ -121,6 +165,7 @@ Eine Zeile über der Eingabe mit Nutzungslimits, Tokens, Kontext und Cache-Uhr. 
 | `/statistik:warmhalten-immer` | Prompt-Cache ohne Ende warm halten, bis dieser Chat endet |
 | `/statistik:warmhalten-aus` | Warmhalten des Prompt-Caches sofort ausschalten |
 | `/statistik:chat-aufraeumen` | Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown |
+| `/statistik:letzter-stand-zeigen` | Den Sicherungspunkt zeigen, den Claude beim letzten Aufräumen gespeichert hat |
 | `/statistik:verdichten` | Den Kontext verdichten (/compact), sofort ohne Countdown |
 
 ## Nächste Schritte
@@ -161,58 +206,6 @@ Zeigt den Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf W
 | `/visible-compact:zeigen` | Öffnet das Fenster „Verdichtungen des Chats“ (wie /show-last-compact) |
 | `/visible-compact:uebersetzen-an` | Zeigt englische Abschnitte im Fenster auf Deutsch, nur in diesem Chat |
 | `/visible-compact:uebersetzen-aus` | Zeigt die Abschnitte im Fenster wieder im Original, nur in diesem Chat |
-
-## Autopilot
-
-Claude arbeitet ohne Rückfragen weiter, während du weg bist, und schreibt am Ende eine Übergabe.
-
-| Befehl | Was er tut |
-|---|---|
-| `/autopilot [an\|aus]` | Autopilot ein- oder ausschalten. Claude arbeitet ohne Rückfragen weiter, während du weg bist |
-| `/autopilot:hilfe` | Alle Befehle des Autopiloten mit einer Zeile Erklärung |
-| `/autopilot:an` | Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist |
-| `/autopilot:aus` | Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld |
-| `/autopilot:fragen-zeigen` | Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text |
-| `/autopilot:bericht-weg` | Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen |
-
-## Filetree
-
-Ein Dateibaum als Seitenfenster mit Git-Status. Er zeigt, welche Dateien Claude gerade liest, schreibt oder committet.
-
-| Befehl | Was er tut |
-|---|---|
-| `/filetree [Pfad]` | Zeigt den Dateibaum, ohne Pfad den Arbeitsordner |
-| `/filetree:hilfe` | Listet alle Befehle von Filetree |
-| `/filetree:zeigen [Pfad]` | Zeigt den Dateibaum in der Seitenleiste (wie /filetree) |
-| `/filetree:versteckte-an` | Zeigt versteckte Dateien im Dateibaum (◉) |
-| `/filetree:versteckte-aus` | Blendet versteckte Dateien im Dateibaum aus (○) |
-| `/filetree:groessen-an` | Zeigt Größen statt Datum im Dateibaum (Σ) |
-| `/filetree:groessen-aus` | Zeigt wieder das Datum statt der Größen im Dateibaum (Σ) |
-| `/filetree:neu-laden` | Liest den Dateibaum, Git und die Größen neu ein (↻) |
-| `/filetree:einklappen` | Klappt alle Ordner im Dateibaum ein (⊟) |
-
-## Reflect
-
-Lernt aus Korrekturen Regeln für CLAUDE.md oder nur für den Chat und lässt Claude die bisherige Arbeit kritisch durchsehen.
-
-| Befehl | Was er tut |
-|---|---|
-| `/reflect [Schwerpunkt]` | Startet die Selbstkritik; mit zeigen, regeln, speichern &lt;Nr>, verwerfen &lt;Nr> oder hilfe dahinter wirkt er wie die Befehle unten |
-| `/reflect:hilfe` | Listet alle Befehle von Reflect |
-| `/reflect:starten [Schwerpunkt]` | Startet eine Selbstkritik der bisherigen Arbeit, Ergebnis im Fenster „Reflexion“ |
-| `/reflect:zeigen` | Gibt die neueste Reflexion als Text aus und öffnet das Fenster |
-| `/reflect:regeln` | Listet die wartenden Regeln mit Nummern |
-| `/reflect:speichern-global <Nr>` | Speichert eine wartende Regel in die globale CLAUDE.md (alle Projekte) |
-| `/reflect:speichern-projekt <Nr>` | Speichert eine wartende Regel in die CLAUDE.md dieses Projekts |
-| `/reflect:speichern-chat <Nr>` | Übernimmt eine wartende Regel nur für diesen Chat |
-| `/reflect:bearbeiten <Nr>` | Legt eine wartende Regel als „merke: …“ ins Eingabefeld zum Umformulieren |
-| `/reflect:verwerfen <Nr>` | Verwirft eine wartende Regel |
-| `/reflect:beheben` | Legt die Punkte der neuesten Reflexion als Auftrag ins Eingabefeld |
-| `/reflect:kopieren` | Kopiert die neueste Reflexion in die Zwischenablage |
-| `/reflect:pruefung-an` | Kurze Nachrichten auf Regeln prüfen, nur in diesem Chat |
-| `/reflect:pruefung-aus` | Kurze Nachrichten nicht mehr auf Regeln prüfen, nur in diesem Chat |
-| `/reflect:auto-an` | Selbstkritik nach jeder Runde mit Dateiänderungen, nur in diesem Chat |
-| `/reflect:auto-aus` | Keine automatische Selbstkritik mehr, nur in diesem Chat |
 
 ## Prompt Upgrade
 
