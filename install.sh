@@ -6,7 +6,9 @@ MARKET="${1:-bmueller77/claude-mods}"
 # Der ganze Katalog. Die älteren Mods (savvy-progress, next-steps, cache-meter, cache-tax,
 # catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; wo sie
 # noch installiert sind, entfernt man sie mit "claude plugin uninstall <mod>@bjoern-mods".
-PLUGINS="leitstand statistik naechste-schritte zusammenfassung visible-compact autopilot filetree reflect prompt-upgrade modellwahl i-have-adhd"
+# Reflect, Filetree und Autopilot stecken seit 2026-10-26 im Leitstand.
+PLUGINS="leitstand statistik naechste-schritte zusammenfassung visible-compact prompt-upgrade modellwahl i-have-adhd"
+EINGEBAUT="reflect filetree autopilot"
 
 claude plugin marketplace add "$MARKET" 2>&1 | tail -1
 claude plugin marketplace update bjoern-mods 2>&1 | tail -1
@@ -18,5 +20,12 @@ for p in $PLUGINS; do
   claude plugin update "$p@bjoern-mods" 2>&1 | grep -q "updated from" && echo "neu    $p"
 done
 claude plugin enable cc-plugin-you-should-know@builtin 2>&1 | tail -1
+# Neben dem Leitstand liefen sie doppelt. Entfernen löscht ihre Einstellungen und Daten, deshalb nur ein Hinweis.
+installiert=$(claude plugin list 2>/dev/null)
+for p in $EINGEBAUT; do
+  case "$installiert" in *"$p@bjoern-mods"*)
+    echo "HINWEIS $p steckt jetzt im Leitstand und läuft sonst doppelt: claude plugin uninstall $p@bjoern-mods" ;;
+  esac
+done
 echo "Fertig. In laufenden Sitzungen /reload-plugins eingeben."
 exit $fail

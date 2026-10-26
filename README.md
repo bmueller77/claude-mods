@@ -20,7 +20,7 @@ Alle Befehle je Mod, jeder mit einer Zeile Erklärung, stehen in [BEFEHLE.md](BE
 
 Alles, was sich per Knopf schalten oder auslösen lässt, geht auch per Befehl, damit es auch vom Handy aus
 geht. Die Namen folgen Anthropics Schreibweise für Befehle eines Plugins, `/<mod>:<funktion>[-<wert>]`, zum
-Beispiel `/statistik:warmhalten-aus`, `/autopilot:an`, `/reflect:speichern-global 2`,
+Beispiel `/statistik:warmhalten-aus`, `/leitstand:autopilot-an`, `/leitstand:regel-global 2`,
 `/leitstand:arbeitsmodus-gruppenarbeit`. Jeder Mod hat `/<mod>:hilfe` mit allen Befehlen, und jeder Befehl erklärt
 sich mit `hilfe` dahinter (`/statistik:warmhalten-aus hilfe`). Jeder Mod bringt die Dateien für diese Befehle in
 seinem Ordner `commands/` selbst mit. Der Leitstand hat dazu Kurzformen ohne `leitstand:`, etwa `/pause`,
@@ -38,18 +38,32 @@ ob die Langformen mit Doppelpunkt bis zum Rundenende warten, ist ungeprüft.
 
 | Mod | Quelle | Was er tut | Kostet Tokens |
 |---|---|---|---|
-| leitstand | hier (hervorgegangen aus GlanceFlow von Antreas-Strb, MIT) | Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf, Teambericht; Arbeitsweisen Auto-Modus und Gruppenarbeit (dort startet ein Plan ohne Freigabe, wenn er nur liest oder der Prompt mit „Starte sofort“ beginnt, und nach 30 s, wenn er aus einer geplanten Aufgabe kommt); Schalter für Kurzantworten, Remote Control, Autopilot, Verdecken; Öffner für Filetree; `/leitstand` | ja: Haiku benennt jeden Auftrag, in der Gruppenarbeit laufen Arbeiter-Subagenten |
-| statistik | hier (Eigenbau) | eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr; Warmhalten, Compact, Kontext-Details über `/context` | nur beim Warmhalten: jeder Ping liest den Kontext aus dem Cache |
+| leitstand | hier (hervorgegangen aus GlanceFlow von Antreas-Strb, MIT; Regeln nach reflect-mod von BayramAnnakov/claude-reflect, MIT; Dateien nach data-goblin/claude-code-filetree, MIT) | Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf, Teambericht; Arbeitsweisen Auto-Modus und Gruppenarbeit (dort startet ein Plan ohne Freigabe, wenn er nur liest oder der Prompt mit „Starte sofort“ beginnt, und nach 30 s, wenn er aus einer geplanten Aufgabe kommt); Schalter für Kurzantworten, Remote Control, Autopilot, Verdecken. Eingebaut: Selbstkritik 🪞 (Claude sieht die bisherige Arbeit kritisch durch) und Regeln (lernt aus Korrekturen eine Regel für alle Projekte, dieses Projekt oder nur diesen Chat), Dateien 📂 (Dateibaum als Seitenfenster mit Git-Status, im Terminal mit `/tui fullscreen`), Autopilot 🅰️ (Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe); `/leitstand`, `/reflect`, `/filetree`, `/autopilot` | ja: Haiku benennt jeden Auftrag, in der Gruppenarbeit laufen Arbeiter-Subagenten; die Regelprüfung ruft Haiku je kurzer Nachricht (je Chat abschaltbar), die Selbstkritik ist ein Fork über den Chat, jede Runde, die der Autopilot anschiebt, kostet wie eine Nachricht |
+| statistik | hier (Eigenbau) | eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr; Warmhalten, Aufräumen mit Sicherungspunkt (`/statistik:chat-aufraeumen`, der Sicherungspunkt mit `/statistik:letzter-stand-zeigen`), Compact, Kontext-Details über `/context` | beim Warmhalten: jeder Ping liest den Kontext aus dem Cache; beim Aufräumen ein Fork für den Sicherungspunkt |
 | naechste-schritte | hier (nach next-steps von Hamza Zafar) | nach jeder Antwort zwei oder drei Vorschläge, per Ziffer 1 bis 3 oder Knopf ins Feld | ja, ein Haiku-Aufruf je Antwort |
 | zusammenfassung | hier (Eigenbau) | nach jeder Arbeitsrunde: was getan wurde und was man leicht übersieht, mit Dateiliste und Replay | ja, ein Haiku-Aufruf je Arbeitsrunde |
 | visible-compact | hier (deutsche Fassung von nvsravank/visible-compact, MIT) | Chat vor und nach `/compact` nebeneinander, Knopf Übersetzen; `/show-last-compact` | nur beim Übersetzen (Haiku) |
-| autopilot | hier (Eigenbau, früher nachtschicht) | Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe; `/autopilot` | ja: jede angeschobene Runde kostet wie eine Nachricht |
-| filetree | hier (deutsche Fassung von data-goblin/claude-code-filetree, MIT) | Dateibaum als Seitenfenster mit Git-Status, im Terminal mit `/tui fullscreen` | nein |
-| reflect | hier (Teil 1 nach reflect-mod von BayramAnnakov/claude-reflect, MIT; Teil 2 Eigenbau) | lernt aus Korrekturen: eine Regel wird nach Knopfdruck für alle Projekte (`~/.claude/CLAUDE.md`), dieses Projekt (`./CLAUDE.md`) oder nur diesen Chat gemerkt; `/reflect` kritisiert die bisherige Arbeit im Seitenfenster; Knopf 🪞 im Leitstand | ja: ein Haiku-Aufruf je kurzer Nachricht (abschaltbar je Chat), `/reflect` ein Fork über den Chat |
 | prompt-upgrade | hier (Eigenbau) | `/better <Prompt>`: bis zu drei Rückfragen, dann ein verbesserter Prompt neben dem Original, gesendet erst auf Ausführen; `/better an|aus` fängt am Rechner getippte Prompts ab (je Chat, Standard aus) | ja: zwei Haiku-Aufrufe je Upgrade |
 | modellwahl | hier (Eigenbau) | schlägt einmal je Aufgabe Modell (Haiku, Sonnet, Opus, Fable) und Aufwand vor: automatisch bei der ersten Nachricht eines neuen Chats, sonst per `/modellwahl [Aufgabe]`; am Rechner gilt der Vorschlag nach 15 s (Übernehmen und Nein über der Eingabe), vom Handy erst auf ja oder ok; nennt den geschätzten Limit-Verbrauch eines Wechsels | ja: ein Haiku-Aufruf je Wahl; ein Wechsel mitten im Chat liest den Kontext einmal neu |
 | i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; im Leitstand Kurzantworten, Knopf 📖/📝 | nur der Skilltext im Kontext, solange der Modus an ist |
 | you-should-know | in Claude Code eingebaut | wird von install.sh eingeschaltet | ja |
+
+## Im Leitstand aufgegangen am 2026-10-26
+
+Ein Mod ruft keinen anderen Mod auf, höchstens Skills. Deshalb sind Reflect, Filetree und Autopilot jetzt Teile des
+Leitstands, der ihre Knöpfe hat, und keine eigenen Mods mehr. Ihre Ordner liegen weiter im Repo, stehen aber nicht mehr
+im Katalog. Wo einer noch installiert ist, läuft er neben dem Leitstand doppelt: `claude plugin uninstall
+<mod>@bjoern-mods`. Das löscht seine Einstellungen und bei Reflect die offenen Regelvorschläge; Regeln, die schon in
+einer CLAUDE.md stehen, bleiben.
+
+| Alter Mod | Jetzt im Leitstand |
+|---|---|
+| reflect | Selbstkritik 🪞 (`/selbstkritik`) und Regeln (`/regeln`); `/reflect` geht weiter |
+| filetree | Dateien 📂 (`/dateien`); `/filetree` geht weiter |
+| autopilot | Autopilot 🅰️ (`/autopilot-an`, `/autopilot-aus`); `/autopilot` geht weiter |
+
+Das Aufräumen mit Sicherungspunkt ist aus demselben Grund vom Leitstand in die Statistik gezogen, die es vorher über
+`/leitstand tidy` angestoßen hat.
 
 ## Entfernt am 2026-10-18
 

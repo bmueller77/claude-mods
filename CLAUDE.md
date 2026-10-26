@@ -19,6 +19,13 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   nach `~/.claude/commands/`, kennt die Desktop-App sie schon in der ersten Nachricht. Alte Namen
   `<mod>-<funktion>` nennen im Hook nur noch den neuen. Bekommt ein Mod einen Befehl dazu oder
   verliert er einen, müssen die Dateien mitziehen, ebenso `BEFEHLE.md`, die alle Befehle je Mod listet.
+- Ein Mod ruft keinen anderen Mod auf, höchstens Skills und eingebaute Befehle wie `/compact` oder
+  `/context` (Björn, 2026-10-26). Deshalb stecken Reflect, Filetree und Autopilot seit leitstand 0.57.0
+  im Leitstand, als Teile unter `leitstand/hooks/<teil>/` (`teil.ts` meldet an, `befehle.ts` hält die
+  Befehle für Übersicht und Kurzformen, `teile.ts` gibt ihnen ihre Einstellungen unter den alten
+  Namen). Ihre alten Ordner bleiben im Repo, stehen aber nicht mehr im Katalog. Das Aufräumen mit
+  Sicherungspunkt gehört seit statistik 0.18.0 der Statistik. Fremden Zustand nur lesen (etwa die
+  Zeile der Modellwahl im Band) ist kein Aufruf.
 - `README.md` sagt, was jeder Mod tut. `UMSTIEG.md` ist der Prompt für andere Instanzen,
   `install.sh` installiert alles.
 
@@ -75,7 +82,20 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   mit Doppelpunkt bleiben heil. Deshalb `MSYS_NO_PATHCONV=1` davor (oder PowerShell); dann laufen
   registrierte Befehle und Markdown-Befehle aus dem Plugin-Ordner (geprüft 2026-10-26).
 - Den Vorsatz der App vor Befehlsantworten („leitstand: …") streicht ein `session.append`-Hook;
-  dafür steht „(gemeldet vom Mod …)" am Ende.
+  dafür steht „(gemeldet vom Mod …)" am Ende. Im Leitstand bekommt es die Antwort, die zuletzt mit
+  `merkeAntwort` (`hooks/antwort.ts`) gemerkt wurde; so melden auch seine Teile ihre Antworten.
+- `claude plugin validate` lehnt ab, wenn `$` an eine Funktion aus einer anderen Datei geht: `$` nur in
+  Funktionen derselben Datei, `on` darf weitergegeben werden. Deshalb beantwortet jeder Teil des
+  Leitstands seine Befehle im eigenen `command.run`-Hook; der Leitstand meldet nur ihre Kurzformen an.
+  Die Hooks eines Mods liegen in der Reihenfolge ihrer Anmeldung, die erste außen: Der Leitstand
+  meldet sich vor seinen Teilen an und holt so die Zeile des Autopiloten nach oben.
+- Ein `$.command.run` eines Mods erreicht dessen eigene `command.run`-Hooks nicht, auch nicht die seiner
+  Teile (Re-entry-Regel, im Test-Kit geprüft 2026-10-26). Ein Knopf des Leitstands, der etwas eines Teils
+  auslöst, läuft deshalb über einen `ui.press`-Hook im Teil (`{ plugin: 'leitstand', element: '<Key>' }`,
+  so bei 🪞 und 🅰️; sofort, auch mitten in einer Runde), oder der Leitstand tut es selbst (📂 öffnet das
+  Fenster `leitstand-dateien` direkt). Je Ereignis darf ein Mod nur einen Hook ohne Matcher haben, die Hooks
+  der Tests mitgezählt; die Teile geben jedem Hook einen Matcher. Ein Hook, der wirft, verwirft, was die
+  äußeren Hooks desselben Mods nach `next` noch tun wollten; die Teile fangen ihre Fehler selbst.
 - Herkunft einer Nachricht (`origin.kind`): Desktop-App `sdk`, Handy über Remote Control `bridge`,
   Terminal `composer`. In einer Cloud-Sitzung (claude.ai/code, in der App angesehen) kommt Björns
   Nachricht als `composer` an, und `$.session.surfaces()` ist leer: Hooks, Tools und Befehle
@@ -160,5 +180,11 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
    und filetree (3). Die Zusammenfassung las das Argument von `/modellwahl <Aufgabe>` als Auftrag
    und meldete, er sei "nicht bearbeitet" worden.
-6. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
+6. Live-Test ausstehend: leitstand 0.57.0 (🪞 Selbstkritik mit Fenster, Regel-Band nach einer Korrektur,
+   📂 Dateien, 🅰️ Autopilot, alles jetzt im Leitstand) und statistik 0.18.0 (Schwamm räumt mit
+   Sicherungspunkt auf, `/statistik:letzter-stand-zeigen`). Das Fenster Dateien öffnet sich, wie bei
+   Filetree, bei jedem Sitzungsstart. Gesehen, nicht behoben: Der Leitstand setzt "Braucht dich" schon,
+   bevor der Autopilot eine Rückfrage ablehnt (glance.tsx, Rückfrage-Werkzeug); es bleibt bis zum nächsten
+   Werkzeug stehen.
+7. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.

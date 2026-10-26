@@ -24,7 +24,10 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    glanceflow, nachtschicht, savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius,
    antwortzeit, zweiter-blick und context-bar, wo vorhanden. Ebenso filetree aus dem Katalog
    claude-code-filetree (die deutsche Fassung kommt jetzt aus bjoern-mods) und reflect-mod bzw.
-   claude-reflect aus claude-reflect-marketplace (sonst prüft reflect jede Korrektur doppelt).
+   claude-reflect aus claude-reflect-marketplace (sonst prüft der Leitstand jede Korrektur doppelt).
+   Aus bjoern-mods außerdem reflect, filetree und autopilot: Sie stecken seit 2026-10-26 im
+   Leitstand und liefen sonst doppelt. Das löscht ihre Einstellungen und die offenen
+   Regelvorschläge von reflect; Regeln, die schon in einer CLAUDE.md stehen, bleiben.
    Entferne danach diese Kataloge (`claude plugin marketplace remove <katalog>`, also auch
    claude-code-filetree und claude-reflect-marketplace), aber nicht bjoern-mods. Plugins aus anderen
    Katalogen (Skills, MCP-Server und Ähnliches für deine Arbeit) bleiben; nenne sie im Bericht.
@@ -46,8 +49,8 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    Ordner). Steht dort noch die alte Quelle, hat das `add` nicht gegriffen; dann den Eintrag in
    settings.json noch einmal ansehen.
 4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
-   leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, autopilot,
-   filetree, reflect, prompt-upgrade, modellwahl, i-have-adhd. Meldet install "already installed",
+   leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, prompt-upgrade,
+   modellwahl, i-have-adhd. Meldet install "already installed",
    holt `claude plugin update <name>@bjoern-mods` die neue Version (install allein tut das nicht).
    Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
    (install.sh im Repo tut dasselbe.)
@@ -57,11 +60,12 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    Zip) nach ~/.claude/commands/ kopieren und eine alte ~/.claude/commands/nachtschicht.md
    entfernen, ebenso alle alten ~/.claude/commands/<mod>-*.md der Mods von bjoern-mods
    (leitstand-, statistik-, zusammenfassung-, autopilot-, naechste-schritte-, reflect-,
-   prompt-upgrade-, modellwahl-, visible-compact-, filetree-) und adhs-an.md, adhs-aus.md.
+   prompt-upgrade-, modellwahl-, visible-compact-, filetree-) und adhs-an.md, adhs-aus.md,
+   reflexion.md, dateibaum.md, jetzt-aufraeumen.md, letzter-stand-zeigen.md.
    Seit 2026-10-26 heißen die Befehle /<mod>:…, die Dateien dafür bringt jeder Mod selbst mit.
-   Dann kennt die App alle Befehle (z. B. /leitstand:hilfe, /pause, /autopilot:an,
-   /reflect:zeigen) schon in der ersten Nachricht.
-6. Prüfen: `claude plugin list` zeigt die elf als enabled mit Scope user. Danach neu starten:
+   Dann kennt die App alle Befehle (z. B. /leitstand:hilfe, /pause, /selbstkritik, /dateien,
+   /autopilot-an) schon in der ersten Nachricht.
+6. Prüfen: `claude plugin list` zeigt die acht als enabled mit Scope user. Danach neu starten:
    die Desktop-App ganz beenden und öffnen; auf Servern laufende Sitzungen über ihren Dienst neu
    starten (z. B. die Remote-Control-Bridge per systemctl), nicht von Hand im tmux.
 7. Bericht: was entfernt wurde, was installiert ist (mit Versionen), was stehen blieb, Fehler.
@@ -71,14 +75,11 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 
 | Mod | Was er tut |
 |---|---|
-| leitstand | Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf; Knopfzeile mit Schaltern (früher GlanceFlow) |
-| statistik | eine Zeile: Nachrichten, Kontext, Cache-Uhr mit Warmhalten, Limits |
+| leitstand | Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf; Knopfzeile mit Schaltern (früher GlanceFlow). Eingebaut: Selbstkritik 🪞 und Regeln (früher Reflect), Dateien 📂 (früher Filetree), Autopilot 🅰️ |
+| statistik | eine Zeile: Nachrichten, Kontext, Cache-Uhr mit Warmhalten, Limits; Aufräumen mit Sicherungspunkt |
 | naechste-schritte | zwei oder drei Vorschläge für die nächste Eingabe, ganz unten |
 | zusammenfassung | nach jeder Arbeitsrunde zwei Zeilen: getan, und was man leicht übersieht |
 | visible-compact | Chat vor und nach `/compact` nebeneinander |
-| autopilot | `/autopilot`: Claude arbeitet ohne Rückfragen weiter, mit Übergabe am Ende (früher Nachtschicht) |
-| filetree | Dateibaum als Seitenfenster mit Git-Status, deutsche Fassung |
-| reflect | lernt aus Korrekturen und fragt: Regel für alle Projekte, dieses Projekt oder nur diesen Chat; `/reflect` kritisiert die bisherige Arbeit; Knopf 🪞 im Leitstand |
 | modellwahl | schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch zu Beginn eines neuen Chats oder per `/modellwahl`; am Rechner gilt der Vorschlag nach 15 s, vom Handy auf ja |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
 | i-have-adhd | ADHS-Modus, im Leitstand Kurzantworten mit Knopf 📖/📝 |
@@ -100,7 +101,7 @@ deshalb gleiches Bild auf jeder Instanz.
 - Einstellungen gelten je Chat: Ein Schalter, den man in einem Chat umlegt, ändert keinen anderen
   Chat. Neue Chats starten mit dem Standard aus dem Einstellungsmenü der App bzw.
   `/plugin configure <mod>@bjoern-mods`. Standard des Leitstands: Auto-Modus, Verdecken und
-  Passwortschutz an, Ansicht minimal, alles andere aus. Reflect prüft Korrekturen standardmäßig,
+  Passwortschutz an, Ansicht minimal, alles andere aus. Die Regelprüfung im Leitstand ist an,
   die Automatik von Prompt Upgrade ist aus.
 - Der Leitstand startet in der Arbeitsweise "Auto-Modus" ohne Plan-Freigabe. In der Gruppenarbeit
   nennt Claude den Plan im Chat und wartet auf "los" oder Start. Bei laufendem Autopilot startet
@@ -109,12 +110,12 @@ deshalb gleiches Bild auf jeder Instanz.
   Prompt, der mit "Starte sofort" beginnt (so auch Cron-Aufträge per tmux), und `claude -p` ohne
   Oberfläche. Ein Auftrag aus einer geplanten Aufgabe (`/schedule`, Routine) startet nach 30 Sekunden.
 - Android-App (Remote Control): Kein Mod hält etwas an, das dort nicht zu sehen ist. Passwörter in
-  Nachrichten vom Handy werden entfernt statt die Nachricht anzuhalten; `/better` und das
-  Seitenfenster von Reflect gehen nur am Rechner, `/reflect zeigen` und `/reflect regeln` auch
-  vom Handy.
+  Nachrichten vom Handy werden entfernt statt die Nachricht anzuhalten; `/better` und die
+  Seitenfenster von Selbstkritik und Dateien gehen nur am Rechner, `/selbstkritik-zeigen` und
+  `/regeln` auch vom Handy.
 - Kosten: Nächste Schritte und Zusammenfassung rufen je Antwort bzw. Arbeitsrunde Haiku auf;
-  der Leitstand benennt Aufträge mit Haiku; Reflect prüft jede kurze Nachricht mit Haiku
-  (je Chat abschaltbar: `/reflect pruefung aus`); Prompt Upgrade braucht zwei Haiku-Aufrufe je
+  der Leitstand benennt Aufträge mit Haiku und prüft jede kurze Nachricht mit Haiku auf Regeln
+  (je Chat abschaltbar: `/regelpruefung-aus`); Prompt Upgrade braucht zwei Haiku-Aufrufe je
   Upgrade; die Statistik kostet nur beim Warmhalten.
 - Updates: `claude plugin marketplace update bjoern-mods`, dann `claude plugin update <mod>@bjoern-mods`
   und neu starten.
