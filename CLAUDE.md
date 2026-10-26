@@ -18,7 +18,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   und die Kurzformen des Leitstands. Für genau diese hält das Wurzel-`commands/` eine Datei; kopiert
   nach `~/.claude/commands/`, kennt die Desktop-App sie schon in der ersten Nachricht. Alte Namen
   `<mod>-<funktion>` nennen im Hook nur noch den neuen. Bekommt ein Mod einen Befehl dazu oder
-  verliert er einen, müssen die Dateien mitziehen.
+  verliert er einen, müssen die Dateien mitziehen, ebenso `BEFEHLE.md`, die alle Befehle je Mod listet.
 - `README.md` sagt, was jeder Mod tut. `UMSTIEG.md` ist der Prompt für andere Instanzen,
   `install.sh` installiert alles.
 

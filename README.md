@@ -16,6 +16,8 @@ In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/stati
 
 ## Befehle für jeden Knopf
 
+Alle Befehle je Mod, jeder mit einer Zeile Erklärung, stehen in [BEFEHLE.md](BEFEHLE.md).
+
 Alles, was sich per Knopf schalten oder auslösen lässt, geht auch per Befehl, damit es auch vom Handy aus
 geht. Die Namen folgen Anthropics Schreibweise für Befehle eines Plugins, `/<mod>:<funktion>[-<wert>]`, zum
 Beispiel `/statistik:warmhalten-aus`, `/autopilot:an`, `/reflect:speichern-global 2`,
