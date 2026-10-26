@@ -55,7 +55,9 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    "mcp__ccd_session_mgmt__set_remote_control" ergänzen, vorhandene Einträge behalten. Sonst
    lehnt der Auto-Modus den Knopf 🛜 ab. Außerdem die Dateien aus `commands/` im Repo (bzw. im
    Zip) nach ~/.claude/commands/ kopieren und eine alte ~/.claude/commands/nachtschicht.md
-   entfernen; dann kennt die App alle Befehle der Mods (über 100, z. B. /leitstand-hilfe,
+   entfernen, ebenso die alten ~/.claude/commands/leitstand-*.md, adhs-an.md und adhs-aus.md
+   (seit leitstand 0.56.0 heißen die Befehle /leitstand:…, die Dateien dafür bringt der Mod
+   selbst mit). Dann kennt die App alle Befehle der Mods (z. B. /leitstand:hilfe, /pause,
    /autopilot-an, /reflect-zeigen) schon in der ersten Nachricht.
 6. Prüfen: `claude plugin list` zeigt die elf als enabled mit Scope user. Danach neu starten:
    die Desktop-App ganz beenden und öffnen; auf Servern laufende Sitzungen über ihren Dienst neu
@@ -77,7 +79,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 | reflect | lernt aus Korrekturen und fragt: Regel für alle Projekte, dieses Projekt oder nur diesen Chat; `/reflect` kritisiert die bisherige Arbeit; Knopf 🪞 im Leitstand |
 | modellwahl | schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch zu Beginn eines neuen Chats oder per `/modellwahl`; am Rechner gilt der Vorschlag nach 15 s, vom Handy auf ja |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
-| i-have-adhd | ADHS-Modus, Knopf 🧠 im Leitstand |
+| i-have-adhd | ADHS-Modus, im Leitstand Kurzantworten mit Knopf 🧠 |
 
 ## Reihenfolge über dem Eingabefeld
 

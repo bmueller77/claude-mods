@@ -11,7 +11,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Ein Ordner je Mod: `.claude-plugin/plugin.json` (mit Version), `hooks/`, `types/`, `tests/`.
 - `.claude-plugin/marketplace.json` ist der Katalog. `i-have-adhd` ist fremd und kommt direkt aus
   `ayghri/i-have-adhd`.
-- `commands/` hält eine kleine Datei je Befehl (`/<mod>-<funktion>[-<wert>]`, `/<mod>-hilfe` usw.).
+- `commands/` hält eine kleine Datei je Befehl (`/<mod>-<funktion>[-<wert>]`, `/<mod>-hilfe` usw.;
+  beim Leitstand nur die Kurzformen, seine Langformen `/leitstand:…` liegen in `leitstand/commands/`).
   Kopiert nach `~/.claude/commands/`, kennt die Desktop-App die Befehle schon in der ersten
   Nachricht. Bekommt ein Mod einen Befehl dazu oder verliert er einen, muss die Datei mitziehen.
 - `README.md` sagt, was jeder Mod tut. `UMSTIEG.md` ist der Prompt für andere Instanzen,
@@ -55,9 +56,16 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Einstellungen gelten je Chat, der Standard kommt aus `userConfig`. Leitstand-Standard: Auto-Modus,
   Verdecken und Passwortschutz an, Ansicht minimal, alles andere aus.
 - Jeder Knopf hat einen Befehl. `hilfe` hinter jedem Befehl erklärt ihn, größere Aktionen wollen `ja`.
-  Seit leitstand 0.55.0 gehen die Leitstand-Befehle auch ohne `leitstand-` davor (`/pause`,
-  `/verdecken-an`), außer `an`, `aus`, `hilfe` und `vermenschlichen` (`OHNE_KURZFORM` in `logic.ts`).
-  Jede Kurzform hat ihre eigene Datei in `commands/`; ein neuer Leitstand-Befehl braucht beide.
+  Leitstand seit 0.56.0 (Björns Wunsch, Anthropics Schreibweise): Langform `/leitstand:<funktion>`
+  als Markdown-Datei in `leitstand/commands/` (die App setzt `leitstand:` davor; ein Name mit
+  Doppelpunkt lässt sich nicht registrieren), beantwortet vom `command.run`-Hook, der `e.command`
+  als `leitstand:pause` bekommt (geprüft mit `claude -p --plugin-dir`, 2.1.308). Kurzform `/pause`
+  per `$.command.register` und Datei in `commands/`, außer `an`, `aus`, `hilfe`, `vermenschlichen`
+  (`OHNE_KURZFORM` in `logic.ts`). Ein neuer Leitstand-Befehl braucht beide Dateien. Alte Namen
+  (`/leitstand-pause`, `/adhs-an`) nennen nur den neuen (`ALTE_BEFEHLE`). Die Skill-Suche
+  (`lookUpCommand`) übergeht `leitstand:…`, sonst fände `:vermenschlichen` den eigenen Befehl.
+  Ungeprüft: ob `/leitstand:pause` mitten in einer Runde sofort wirkt (Markdown-Befehle haben kein
+  `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten.
 - Den Vorsatz der App vor Befehlsantworten („leitstand: …") streicht ein `session.append`-Hook;
   dafür steht „(gemeldet vom Mod …)" am Ende.
 - Herkunft einer Nachricht (`origin.kind`): Desktop-App `sdk`, Handy über Remote Control `bridge`,

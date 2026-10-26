@@ -17,21 +17,24 @@ In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/stati
 ## Befehle für jeden Knopf
 
 Alles, was sich per Knopf schalten oder auslösen lässt, geht auch per Befehl, damit es auch vom Handy aus
-geht. Die Namen folgen dem Muster `/<mod>-<funktion>[-<wert>]`, zum Beispiel `/leitstand-arbeitsmodus-gruppenarbeit`,
-`/leitstand-verdecken-an`, `/statistik-warmhalten-aus`, `/autopilot-an`, `/reflect-speichern-global 2`. Jeder Mod hat
-`/<mod>-hilfe` mit allen Befehlen, und jeder Befehl erklärt sich mit `hilfe` dahinter (`/leitstand-verdecken-an hilfe`).
-Befehle, die wie ein doppelter Knopfdruck etwas Größeres auslösen (`/leitstand-neuer-chat`, `/leitstand-abschliessen`,
-`/leitstand-geheimnisse-sichern`), wollen ein `ja` dahinter. Die alten Kurzformen (`/leitstand …`, `/better`, `/reflect …`,
-`/autopilot`, `/warmhalten`) gehen weiter. Die Befehle des Leitstands gehen auch ohne `leitstand-` davor, etwa `/pause`,
-`/verdecken-an` oder `/neuer-chat ja`; nur `an`, `aus`, `hilfe` und `vermenschlichen` nicht, weil diese Namen allein
-nicht sagen, welcher Mod gemeint ist, und `/vermenschlichen` der Skill selbst ist. In `commands/` liegt für jeden Befehl eine kleine Datei, damit die Desktop-App
-ihn schon in der ersten Nachricht eines Chats kennt.
+geht. Die Namen folgen dem Muster `/<mod>-<funktion>[-<wert>]`, zum Beispiel `/statistik-warmhalten-aus`,
+`/autopilot-an`, `/reflect-speichern-global 2`. Jeder Mod hat `/<mod>-hilfe` mit allen Befehlen, und jeder Befehl
+erklärt sich mit `hilfe` dahinter (`/statistik-warmhalten-aus hilfe`). Der Leitstand folgt seit 0.56.0 Anthropics
+Schreibweise für Befehle eines Plugins, `/leitstand:<funktion>`, etwa `/leitstand:arbeitsmodus-gruppenarbeit` oder
+`/leitstand:hilfe`, und hat dazu Kurzformen ohne `leitstand:`, etwa `/pause`, `/verdecken-an` oder `/kurzantworten-an`.
+Ohne Kurzform bleiben `an`, `aus`, `hilfe` und `vermenschlichen`: Die ersten drei sagen allein nicht, welcher Mod
+gemeint ist, und `/vermenschlichen` ist der Skill selbst. Ein alter Name wie `/leitstand-pause` nennt nur noch den neuen.
+Befehle, die wie ein doppelter Knopfdruck etwas Größeres auslösen (`/neuer-chat`, `/abschliessen`,
+`/geheimnisse-sichern`), wollen ein `ja` dahinter. Die alten Kurzformen (`/leitstand …`, `/better`, `/reflect …`,
+`/autopilot`, `/warmhalten`) gehen weiter. In `commands/` liegt für jeden Befehl eine kleine Datei, damit die
+Desktop-App ihn schon in der ersten Nachricht eines Chats kennt; die Langformen des Leitstands bringt er in
+`leitstand/commands/` selbst mit.
 
 ## Installiert install.sh
 
 | Mod | Quelle | Was er tut | Kostet Tokens |
 |---|---|---|---|
-| leitstand | hier (hervorgegangen aus GlanceFlow von Antreas-Strb, MIT) | Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf, Teambericht; Arbeitsweisen Auto-Modus und Gruppenarbeit (dort startet ein Plan ohne Freigabe, wenn er nur liest oder der Prompt mit „Starte sofort“ beginnt, und nach 30 s, wenn er aus einer geplanten Aufgabe kommt); Schalter für ADHS-Modus, Remote Control, Autopilot, Verdecken; Öffner für Filetree; `/leitstand` | ja: Haiku benennt jeden Auftrag, in der Gruppenarbeit laufen Arbeiter-Subagenten |
+| leitstand | hier (hervorgegangen aus GlanceFlow von Antreas-Strb, MIT) | Checkliste über der Eingabe mit Plan, Fortschritt, Helfern, Verlauf, Teambericht; Arbeitsweisen Auto-Modus und Gruppenarbeit (dort startet ein Plan ohne Freigabe, wenn er nur liest oder der Prompt mit „Starte sofort“ beginnt, und nach 30 s, wenn er aus einer geplanten Aufgabe kommt); Schalter für Kurzantworten, Remote Control, Autopilot, Verdecken; Öffner für Filetree; `/leitstand` | ja: Haiku benennt jeden Auftrag, in der Gruppenarbeit laufen Arbeiter-Subagenten |
 | statistik | hier (Eigenbau) | eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr; Warmhalten, Compact, Kontext-Details über `/context` | nur beim Warmhalten: jeder Ping liest den Kontext aus dem Cache |
 | naechste-schritte | hier (nach next-steps von Hamza Zafar) | nach jeder Antwort zwei oder drei Vorschläge, per Ziffer 1 bis 3 oder Knopf ins Feld | ja, ein Haiku-Aufruf je Antwort |
 | zusammenfassung | hier (Eigenbau) | nach jeder Arbeitsrunde: was getan wurde und was man leicht übersieht, mit Dateiliste und Replay | ja, ein Haiku-Aufruf je Arbeitsrunde |
@@ -41,7 +44,7 @@ ihn schon in der ersten Nachricht eines Chats kennt.
 | reflect | hier (Teil 1 nach reflect-mod von BayramAnnakov/claude-reflect, MIT; Teil 2 Eigenbau) | lernt aus Korrekturen: eine Regel wird nach Knopfdruck für alle Projekte (`~/.claude/CLAUDE.md`), dieses Projekt (`./CLAUDE.md`) oder nur diesen Chat gemerkt; `/reflect` kritisiert die bisherige Arbeit im Seitenfenster; Knopf 🪞 im Leitstand | ja: ein Haiku-Aufruf je kurzer Nachricht (abschaltbar je Chat), `/reflect` ein Fork über den Chat |
 | prompt-upgrade | hier (Eigenbau) | `/better <Prompt>`: bis zu drei Rückfragen, dann ein verbesserter Prompt neben dem Original, gesendet erst auf Ausführen; `/better an|aus` fängt am Rechner getippte Prompts ab (je Chat, Standard aus) | ja: zwei Haiku-Aufrufe je Upgrade |
 | modellwahl | hier (Eigenbau) | schlägt einmal je Aufgabe Modell (Haiku, Sonnet, Opus, Fable) und Aufwand vor: automatisch bei der ersten Nachricht eines neuen Chats, sonst per `/modellwahl [Aufgabe]`; am Rechner gilt der Vorschlag nach 15 s (Übernehmen und Nein über der Eingabe), vom Handy erst auf ja oder ok; nennt den geschätzten Limit-Verbrauch eines Wechsels | ja: ein Haiku-Aufruf je Wahl; ein Wechsel mitten im Chat liest den Kontext einmal neu |
-| i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; Knopf 🧠 im Leitstand | nur der Skilltext im Kontext, solange der Modus an ist |
+| i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; im Leitstand Kurzantworten, Knopf 🧠 | nur der Skilltext im Kontext, solange der Modus an ist |
 | you-should-know | in Claude Code eingebaut | wird von install.sh eingeschaltet | ja |
 
 ## Entfernt am 2026-10-18
