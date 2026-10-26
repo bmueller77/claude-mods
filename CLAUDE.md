@@ -109,8 +109,11 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Computersteuerung: Das Fenster der Claude-App selbst darf sie nicht bedienen (`request_access` für
   "Claude" wird grundsätzlich abgelehnt). Live-Tests im Band macht Björn; ohne Fenster prüft Claude mit
   `claude -p` und liest den Verlauf unter `~/.claude/projects/<ordner>/<sitzung>.jsonl`.
+  Ein neuer Chat (`start_session`) lädt nach `claude plugin update` schon die neuen Versionen, ohne
+  Neustart der App. Eine Nachricht aus einer anderen Sitzung (`send_message`, Herkunft `peer`) kommt
+  als Text an; ein Slash-Befehl darin läuft nicht als Befehl.
 
-## Offen (Stand 2026-10-19, nach dem Live-Test am PC)
+## Offen (Stand 2026-10-26, nach dem Live-Test am PC)
 
 1. Live-Test am PC (2026-10-19). Es klappen: Knopf-Befehle (`/leitstand-hilfe`, Verdecken an/aus,
    `hilfe`, `ja`-Abfrage), automatische Modellwahl im neuen Chat samt Statuszeile,
@@ -123,8 +126,13 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Nachprüfung 0.1.1 am 2026-10-25 bestanden: "Zurückgezogen: nein" nach der ersten Runde,
    Rückfrage vor Opus, `/modellwahl ja`. Nicht gemacht: Rückzug bei Umstellung von Hand in der App.
    Nicht ausdrücklich bestätigt: Abbrechen in Prompt Upgrade legt den Text zurück ins Feld.
-   Live-Test ausstehend für modellwahl 0.2.0 (Band mit Countdown, Übernehmen/Nein, Handy mit ja/ok)
-   und leitstand 0.54.0 ("Starte sofort", geplante Aufgabe nach 30 s, `nurLesen`).
+   Live-Test 2026-10-25/26 (modellwahl 0.2.0, leitstand 0.54.0) bestanden: erste Nachricht schlägt
+   vor und läuft sofort mit dem Modell aus dem Menü, nach 15 s gilt der Vorschlag (nächste Runde von
+   Haiku), nach 13 h noch "Zurückgezogen: nein"; `/modellwahl` vom Handy wartet auf ja ("10 Minuten
+   lang"). Gruppenarbeit: "Starte sofort", eine Antwort nur im Chat und ein Lese-Plan ohne Startwort
+   (Haiku setzte `nurLesen` selbst) liefen ohne "los"; ein Plan zum Ändern wartete. Gefunden und
+   behoben: Grund endete auf "Doku,." (0.2.1). Noch nicht gesehen: Band mit Countdown, Übernehmen und
+   Nein am Rechner; `ja`/`ok` vom Handy; geplante Aufgabe nach 30 s.
 2. Leitstand: Im Test-Chat (Haiku) stand das Band Minuten nach Rundenende noch auf "Arbeitet" mit
    "Nutzt eine verbundene App". Im Nachbau zeigt es nach Rundenende richtig "Braucht dich". Ursache
    offen (Helfer als laufend gezählt? `turn.complete` nicht angekommen?); beobachten.
