@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement, RenderNode, RenderSurface, SessionMessage } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderNode, RenderSurface, SessionCompactInput, SessionMessage } from 'claude-code'
 
 import type { CacheSample, Chatlaenge, ContextSample, Countdown, Fenster, Lage, Nutzung } from '../types'
 
@@ -63,10 +63,36 @@ const SPEICHER_QUELLE = 'statistik.ttlSource'
 /** Alte Einstellung, mit der jede Sitzung warm begann; wird beim Sitzungsstart geloescht. */
 const SPEICHER_IMMER = 'statistik.warmImmer'
 const SPEICHER_WARM_BIS = 'statistik.warmBis'
-/** Wann zuletzt abgelaufene Fristen fremder Chats weggeraeumt wurden. */
+/** Wann zuletzt abgelaufene Fristen und alte Sicherungspunkte fremder Chats weggeraeumt wurden. */
 const SPEICHER_AUFGERAEUMT = 'statistik.aufgeraeumt'
 /** Hoechstens so oft werden fremde Chats aufgeraeumt. */
 const AUFRAEUMEN_ABSTAND_MS = 24 * 60 * 60_000
+/**
+ * Davor, mit der Sitzungs-ID dahinter, liegt der Sicherungspunkt eines Chats (`Sicherungspunkt`):
+ * gespeichert beim Aufraeumen, vor dem Verdichten.
+ */
+const SPEICHER_SICHERUNGSPUNKT = 'statistik.sicherungspunkt'
+/** Sicherungspunkte anderer Chats, die so lange unberuehrt sind, werden weggeraeumt. */
+const SICHERUNGSPUNKT_FRIST_MS = 30 * 24 * 60 * 60_000
+
+/** Das Fenster Letzter Stand: der Sicherungspunkt dieses Chats. */
+const FENSTER_LETZTER_STAND = 'statistik-letzter-stand'
+
+/** Was Claude vor dem Aufraeumen schreibt, im Fork ueber den eigenen Verlauf (wie bisher im Leitstand). */
+const SICHERUNGSPUNKT_PROMPT = `Dieser Chat wird gleich verdichtet, um Platz zu schaffen. Schreib einen Sicherungspunkt, damit die Arbeit weitergeht,
+ohne dass etwas Wichtiges verloren geht. Nenne kurz: das Ziel; was schon erledigt ist; was noch offen ist, der Reihe nach;
+getroffene Entscheidungen und warum; was die Person verlangt oder ausgeschlossen hat; die Dateien, Befehle oder Links, auf die
+es ankommt; offene Fragen; und den allernächsten Schritt. Auf Deutsch, unter 300 Wörtern, ohne Einleitung. Beginne genau mit: "Sicherungspunkt:"`
+
+/** Was der Letzte Stand sagt, solange dieser Chat keinen Sicherungspunkt hat. */
+export const OHNE_SICHERUNGSPUNKT = 'In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.'
+
+/**
+ * Der Schalter Verdecken des Leitstands. Nur gelesen, nie geschrieben: Ist er an, verdeckt
+ * auch der Letzte Stand Passwoerter und persoenliche Daten. Kein Eintrag unter `dependencies`,
+ * die Statistik laedt auch ohne Leitstand; dann ist der Wert nie geschrieben und gilt als aus.
+ */
+const LEITSTAND_VERDECKEN = { plugin: 'leitstand', key: 'masksPrivate' } as const
 
 /** Steht statt einer Frist unter dem Schluessel der Sitzung: warm ohne Ende in diesem Chat. */
 const WARM_IMMER = 'immer'
@@ -464,6 +490,8 @@ const BERLIN = (() => {
         return new Intl.DateTimeFormat('en-US', {
             timeZone: 'Europe/Berlin',
             weekday: 'short',
+            month: '2-digit',
+            day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
             hourCycle: 'h23',
@@ -473,8 +501,8 @@ const BERLIN = (() => {
     }
 })()
 
-/** Wochentag (0 = Sonntag), Stunde und Minute in Berlin; ohne Zeitzonendaten die des Rechners. */
-function berlin(ms: number): { tag: number; stunde: number; minute: number } {
+/** Wochentag (0 = Sonntag), Datum ("24.10."), Stunde und Minute in Berlin; ohne Zeitzonendaten die des Rechners. */
+function berlin(ms: number): { tag: number; datum: string; stunde: number; minute: number } {
     const d = new Date(ms)
     if (BERLIN !== null) {
         const teile: Record<string, string> = {}
@@ -482,9 +510,12 @@ function berlin(ms: number): { tag: number; stunde: number; minute: number } {
         const tag = TAG_EN.indexOf(teile.weekday ?? '')
         const stunde = Number(teile.hour)
         const minute = Number(teile.minute)
-        if (tag >= 0 && Number.isFinite(stunde) && Number.isFinite(minute)) return { tag, stunde: stunde % 24, minute }
+        if (tag >= 0 && Number.isFinite(stunde) && Number.isFinite(minute) && teile.day && teile.month) {
+            return { tag, datum: `${teile.day}.${teile.month}.`, stunde: stunde % 24, minute }
+        }
     }
-    return { tag: d.getDay(), stunde: d.getHours(), minute: d.getMinutes() }
+    const zwei = (n: number) => String(n).padStart(2, '0')
+    return { tag: d.getDay(), datum: `${zwei(d.getDate())}.${zwei(d.getMonth() + 1)}.`, stunde: d.getHours(), minute: d.getMinutes() }
 }
 
 /** Uhrzeit hh:mm in Berliner Zeit. */
@@ -496,6 +527,12 @@ function uhrzeit(ms: number): string {
 /** Wochentag und Uhrzeit in Berliner Zeit: "Do 09:00". */
 export function wochentagZeit(ms: number): string {
     return `${WOCHENTAG[berlin(ms).tag]} ${uhrzeit(ms)}`
+}
+
+/** Wann etwas gespeichert wurde, in Berliner Zeit: "um 14:05", an einem anderen Tag "am 24.10. um 14:05". */
+export function gespeichertUm(am: number, jetzt: number): string {
+    const datum = berlin(am).datum
+    return datum === berlin(jetzt).datum ? `um ${uhrzeit(am)}` : `am ${datum} um ${uhrzeit(am)}`
 }
 
 /** Ob ein Zuruecksetzen mehr als 24 Stunden entfernt ist. */
@@ -1087,20 +1124,35 @@ async function schalteWarmhalten($: EngineInterface): Promise<void> {
     }
 }
 
-/** Die eigene, abgelaufene Frist aus dem Speicher raeumen; fremde Sitzungen bleiben unberuehrt. */
+/**
+ * Die eigene, abgelaufene Frist aus dem Speicher raeumen; der eigene Sicherungspunkt gilt als
+ * benutzt. Einmal am Tag gehen abgelaufene Fristen und alte Sicherungspunkte anderer Chats.
+ */
 async function raeumeAuf($: EngineInterface, jetzt: number): Promise<void> {
     const bis = await $.store.get(warmSchluessel())
     if (bis !== undefined && bis !== WARM_IMMER && !(typeof bis === 'number' && bis > jetzt)) {
         await $.store.delete(warmSchluessel())
     }
+    // Solange dieser Chat weiterlaeuft, raeumt kein anderer seinen Sicherungspunkt weg.
+    const eigener = alsSicherungspunkt(await $.store.get(sicherungspunktSchluessel(z.sid)))
+    if (eigener) {
+        await $.store.set(sicherungspunktSchluessel(z.sid), { ...eigener, benutzt: jetzt })
+    }
     // Abgelaufene Fristen anderer Chats, hoechstens einmal am Tag. "immer" und
-    // laufende Fristen bleiben: der Chat kann fortgesetzt werden.
+    // laufende Fristen bleiben: der Chat kann fortgesetzt werden. Ebenso
+    // Sicherungspunkte anderer Chats, die 30 Tage niemand benutzt hat.
     const zuletzt = await $.store.get(SPEICHER_AUFGERAEUMT)
     if (typeof zuletzt === 'number' && jetzt - zuletzt < AUFRAEUMEN_ABSTAND_MS) {
         return
     }
     await $.store.set(SPEICHER_AUFGERAEUMT, jetzt)
     for (const schluessel of await $.store.keys()) {
+        if (schluessel.startsWith(`${SPEICHER_SICHERUNGSPUNKT}:`) && schluessel !== sicherungspunktSchluessel(z.sid)) {
+            if (istVeraltet(await $.store.get(schluessel), jetzt)) {
+                await $.store.delete(schluessel)
+            }
+            continue
+        }
         if (!schluessel.startsWith(`${SPEICHER_WARM_BIS}:`) || schluessel === warmSchluessel()) {
             continue
         }
@@ -1144,7 +1196,9 @@ async function protokolliere(
  *
  * `$.session.compact()` geht nur im Terminal zwischen zwei Runden; sonst wird
  * `/compact` eingereiht und laeuft, sobald die Sitzung still ist. `wer` merkt
- * sich, welcher Knopf eingereiht hat: der zeigt die Sanduhr.
+ * sich, welcher Knopf eingereiht hat: der zeigt die Sanduhr. Einen Sicherungspunkt,
+ * der noch auf die Verdichtung wartet, sagt ihr der eigene `session.compact`-Hook;
+ * `/compact` bleibt dafuer ohne Text dahinter, und der Chat zeigt keine lange Anweisung.
  */
 async function verdichte(
     $: EngineInterface,
@@ -1159,11 +1213,15 @@ async function verdichte(
     if (!istBeschaeftigt && flaeche === 'terminal') {
         try {
             hookHatProtokolliert = false
-            const r = await $.session.compact()
+            // Ob der eigene Hook diesen Aufruf sieht, ist nicht sicher: die Anweisung gleich mitgeben.
+            const punkt = await sicherungspunktVon($).catch(() => null)
+            const wartend = punkt && punkt.verdichtet === undefined ? punkt : null
+            const r = await $.session.compact(wartend ? { instructions: behalteAnweisung(wartend.notiz) } : undefined)
             if (r.skip === undefined) {
                 if (!hookHatProtokolliert) {
                     await protokolliere($, r)
                 }
+                await markiereVerdichtet($).catch(() => {})
                 return
             }
         } catch {
@@ -1178,39 +1236,224 @@ async function verdichte(
     }
 }
 
+// --- Aufraeumen mit Sicherungspunkt ---
+// Bis statistik 0.17 rief der Schwamm dafuer den Leitstand auf (/leitstand tidy). Ein Mod
+// ruft keinen anderen auf, also macht die Statistik es jetzt selbst: Claude schreibt im
+// Fork ueber den eigenen Verlauf einen Sicherungspunkt der Arbeit, die Verdichtung soll
+// ihn behalten, und danach steht er fuer den Rest des Chats im Systemprompt.
+
 /**
- * Der Wisch-Knopf: Mit dem Leitstand speichert Claude erst einen Sicherungspunkt der
- * Arbeit und verdichtet dann so, dass er bleibt (/leitstand tidy). Fehlt der Leitstand,
- * tut es GlanceFlow, aus dem er hervorging (/glanceflow tidy). Ohne Leitstand und
- * GlanceFlow ein schlichtes /compact.
+ * Was unter dem Schluessel eines Chats liegt: wann gespeichert, Claudes Text, wann die
+ * Verdichtung danach lief (fehlt, solange sie aussteht) und wann der Chat zuletzt startete.
+ */
+type Sicherungspunkt = { am: number; notiz: string; verdichtet?: number; benutzt?: number }
+
+function sicherungspunktSchluessel(sid: string): string {
+    return `${SPEICHER_SICHERUNGSPUNKT}:${sid}`
+}
+
+/** Ein gespeicherter Wert als Sicherungspunkt; null, wenn er keiner ist. */
+export function alsSicherungspunkt(wert: unknown): Sicherungspunkt | null {
+    if (!wert || typeof wert !== 'object') {
+        return null
+    }
+    const { am, notiz, verdichtet, benutzt } = wert as Record<string, unknown>
+    if (typeof am !== 'number' || typeof notiz !== 'string' || notiz.trim() === '') {
+        return null
+    }
+    return {
+        am,
+        notiz,
+        ...(typeof verdichtet === 'number' ? { verdichtet } : {}),
+        ...(typeof benutzt === 'number' ? { benutzt } : {}),
+    }
+}
+
+/** Ob ein Sicherungspunkt eines anderen Chats weg kann: 30 Tage unberuehrt; ein kaputter Wert immer. */
+export function istVeraltet(wert: unknown, jetzt: number): boolean {
+    const punkt = alsSicherungspunkt(wert)
+    return punkt === null || jetzt - Math.max(punkt.am, punkt.benutzt ?? 0) > SICHERUNGSPUNKT_FRIST_MS
+}
+
+/** Der Sicherungspunkt dieses Chats; null, wenn es keinen gibt. */
+async function sicherungspunktVon($: EngineInterface): Promise<Sicherungspunkt | null> {
+    return alsSicherungspunkt(await $.store.get(sicherungspunktSchluessel(await $.session.id())))
+}
+
+/** Was die Verdichtung zum Sicherungspunkt gesagt bekommt. */
+export function behalteAnweisung(notiz: string): string {
+    return `Behalte alles aus diesem Sicherungspunkt; die Arbeit braucht ihn, um weiterzugehen.\n\n${notiz}`
+}
+
+/** Der Abschnitt im Systemprompt, sobald nach dem Sicherungspunkt verdichtet wurde. */
+export function sicherungspunktAbschnitt(notiz: string): string {
+    return `# Sicherungspunkt, gespeichert, bevor dieser Chat aufgeräumt wurde\n${notiz}`
+}
+
+/**
+ * Claude schreibt den Sicherungspunkt, im Fork ueber den eigenen Verlauf (der liest den
+ * Cache), und er landet unter dem Schluessel dieses Chats. Null ohne Text oder wenn das
+ * Speichern scheitert; aufgeraeumt wird dann trotzdem.
+ */
+async function schreibeSicherungspunkt($: EngineInterface): Promise<string | null> {
+    try {
+        const antwort = await $.model.fork({ prompt: SICHERUNGSPUNKT_PROMPT })
+        const notiz = antwort.isAnswered === true ? antwort.text.trim() : ''
+        if (notiz === '') {
+            return null
+        }
+        const punkt: Sicherungspunkt = { am: await $.clock.now(), notiz }
+        await $.store.set(sicherungspunktSchluessel(await $.session.id()), punkt)
+        $.ui.invalidate('ui.render')
+        return notiz
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Nach einer Verdichtung: Der Sicherungspunkt, der auf sie wartete, gilt ab jetzt und steht
+ * im Systemprompt. Vorher nicht, sonst aenderte er den Systemprompt schon vor dem Verdichten
+ * und kostete einen kalten Cache.
+ */
+async function markiereVerdichtet($: EngineInterface): Promise<void> {
+    const schluessel = sicherungspunktSchluessel(await $.session.id())
+    const punkt = alsSicherungspunkt(await $.store.get(schluessel))
+    if (punkt && punkt.verdichtet === undefined) {
+        await $.store.set(schluessel, { ...punkt, verdichtet: await $.clock.now() })
+        $.ui.invalidate('ui.render')
+    }
+}
+
+/** Die Verdichtung soll einen Sicherungspunkt behalten, der noch auf sie wartet; steht er schon drin, bleibt alles. */
+async function mitSicherungspunkt($: EngineInterface, e: SessionCompactInput): Promise<SessionCompactInput> {
+    const punkt = await sicherungspunktVon($).catch(() => null)
+    if (!punkt || punkt.verdichtet !== undefined || e.instructions?.includes(punkt.notiz)) {
+        return e
+    }
+    const anweisung = behalteAnweisung(punkt.notiz)
+    return { ...e, instructions: e.instructions?.trim() ? `${e.instructions.trim()}\n\n${anweisung}` : anweisung }
+}
+
+/**
+ * Der Schwamm: Aufraeumen mit Sicherungspunkt. Erst schreibt Claude den Sicherungspunkt,
+ * solange zeigt der Schwamm die Sanduhr; dann wird verdichtet, und der eigene
+ * `session.compact`-Hook sagt der Verdichtung, ihn zu behalten. Ohne Sicherungspunkt wird
+ * trotzdem verdichtet. Kein anderer Mod wird dafuer aufgerufen, nur /compact.
  */
 async function wische($: EngineInterface, istBeschaeftigt: boolean, flaeche: RenderSurface, schonEingereiht: boolean): Promise<void> {
     if (schonEingereiht) {
         return
     }
-    let aufraeumer: string | undefined
+    await update($, eingereiht, () => 'wischen')
+    let notiz: string | null = null
     try {
-        // Die eigenen Befehle /statistik:… zaehlen nie, auch wenn einer auf :leitstand enden sollte.
-        const namen = (await $.command.list()).map(b => b.name).filter(name => !name.startsWith('statistik:'))
-        // Zuerst der Leitstand, sonst GlanceFlow; je unter eigenem Namen oder als Kopie eines Plugins.
-        for (const mod of ['leitstand', 'glanceflow']) {
-            aufraeumer = namen.find(name => name === mod || name.endsWith(`:${mod}`))
-            if (aufraeumer !== undefined) {
-                break
-            }
-        }
+        notiz = await schreibeSicherungspunkt($)
+    } finally {
+        await update($, eingereiht, () => null)
+    }
+    if (notiz === null) {
+        $.ui.toast('Der Sicherungspunkt ließ sich nicht speichern. Der Chat wird trotzdem aufgeräumt.')
+    } else {
+        $.ui.log('Sicherungspunkt gespeichert. /statistik:letzter-stand-zeigen zeigt ihn.')
+    }
+    // Waehrend Claude schrieb, kann eine Runde begonnen oder geendet haben.
+    await verdichte($, zuletztBeschaeftigt.get(flaeche) ?? istBeschaeftigt, flaeche, false, 'wischen')
+}
+
+// --- Letzter Stand ---
+
+/** Ein Ziffernblock wie eine Kartennummer ist eine, wenn die Pruefsumme nach Luhn stimmt. */
+function istKarte(treffer: string): boolean {
+    const ziffern = treffer.replace(/\D/g, '')
+    let summe = 0
+    for (let i = 0; i < ziffern.length; i += 1) {
+        const d = Number(ziffern[ziffern.length - 1 - i]) * (i % 2 === 1 ? 2 : 1)
+        summe += d > 9 ? d - 9 : d
+    }
+    return ziffern.length >= 13 && ziffern.length <= 19 && summe % 10 === 0
+}
+
+/** Schluessel und Token, die man an ihrer Form erkennt. */
+const SCHLUESSEL_MUSTER = [
+    /sk-ant-[A-Za-z0-9_-]{16,}/g,
+    /\bsk-(?:proj-|live-|test-|svcacct-)?[A-Za-z0-9_-]{20,}/g,
+    /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g,
+    /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+    /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
+    /\bAIza[0-9A-Za-z_-]{30,}/g,
+    /\bAKIA[0-9A-Z]{16}\b/g,
+    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
+    /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/gi,
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
+]
+/**
+ * NAME=wert oder "passwort": "wert", wo der Name nach Zugangsdaten klingt ("tokens: 5" nicht).
+ * Ein Satzzeichen am Ende gehoert nicht zum Wert.
+ */
+const ZUWEISUNG =
+    /\b([A-Za-z0-9_.-]*(?:API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PASSWORT|KENNWORT)(?:[_.-][A-Za-z0-9_.-]*)?)(["']?\s*[=:]\s*["']?)([^\s"'`,;}{]{5,}[^\s"'`,;}{.:!?)])/gi
+/** "mein Passwort ist X", "das WLAN-Kennwort lautet: X", "Datenbankpasswort: X". */
+const PASSWORT_SATZ = /(?<!\p{L})(\p{L}*(?:passwort|password|kennwort)\s*(?:(?:ist|lautet|heißt|is)(?:\s*[=:])?|[=:])\s*["']?)([^\s"']{3,}[^\s"'.,;:!?)])/giu
+const KARTE = /(?<![\w-])(?:4\d{3}|5[1-5]\d{2}|2[2-7]\d{2}|3[47]\d{2}|6(?:011|5\d{2}))(?:[ -]?\d{2,4}){3,4}(?![\w-])/g
+const IBAN = /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b/g
+const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
+const TELEFON = /(?<![\w.])(?:\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}|\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})(?![\w.])/g
+const PUNKTE = '••••••••'
+
+/**
+ * Passwoerter, Schluessel und persoenliche Daten verdeckt, aehnlich wie der Leitstand es mit
+ * seinem Schalter Verdecken tut: Schluessel und Zuweisungen von Passwoertern, Kartennummern,
+ * IBAN, E-Mail-Adressen und Telefonnummern. Nur fuer die Anzeige; Claude liest den Text, wie er ist.
+ */
+export function verdecke(text: string): string {
+    let raus = text
+    for (const muster of SCHLUESSEL_MUSTER) {
+        raus = raus.replace(muster, PUNKTE)
+    }
+    raus = raus.replace(ZUWEISUNG, (ganz, name: string, trenner: string, wert: string) =>
+        /pass|secret|kennw/i.test(name) || /[^\p{L}_-]/u.test(wert) || wert.length >= 16 ? name + trenner + PUNKTE : ganz,
+    )
+    raus = raus.replace(PASSWORT_SATZ, (_ganz, kopf: string) => kopf + PUNKTE)
+    raus = raus.replace(KARTE, treffer => (istKarte(treffer) ? '•••• •••• •••• ••••' : treffer))
+    raus = raus.replace(IBAN, '•••')
+    raus = raus.replace(EMAIL, '•••@•••')
+    return raus.replace(TELEFON, '+•• •••')
+}
+
+/** Ob der Schalter Verdecken des Leitstands an ist; ohne Leitstand oder bei einem Fehler aus. */
+async function leitstandVerdeckt($: EngineInterface): Promise<boolean> {
+    try {
+        // Der Wert gehoert dem Leitstand und steht in seinem Vertrag, nicht in diesem: daher ungetypt.
+        const { value } = (await $.state.get(LEITSTAND_VERDECKEN as never)) as { value?: unknown }
+        return value === true
     } catch {
-        aufraeumer = undefined
+        return false
     }
-    if (aufraeumer !== undefined) {
-        try {
-            await $.command.run({ command: aufraeumer, args: 'tidy' })
-            return
-        } catch {
-            // Dann eben schlicht verdichten.
+}
+
+/** Claudes Text zum Zeigen: ohne den Vorsatz "Sicherungspunkt:", verdeckt, wenn der Leitstand verdeckt. */
+async function zeigbar($: EngineInterface, notiz: string): Promise<string> {
+    const text = notiz.replace(/^(Checkpoint|Sicherungspunkt):\s*/, '')
+    return (await leitstandVerdeckt($)) ? verdecke(text) : text
+}
+
+/**
+ * /statistik:letzter-stand-zeigen: am Rechner das Fenster Letzter Stand, vom Handy der
+ * Sicherungspunkt als Text. Kann die Flaeche kein Fenster zeigen, kommt auch dort der Text.
+ */
+async function letzterStand($: EngineInterface, vomHandy: boolean): Promise<string> {
+    const punkt = await sicherungspunktVon($)
+    if (!punkt) {
+        return OHNE_SICHERUNGSPUNKT
+    }
+    if (!vomHandy) {
+        const offen = await $.ui.open({ id: FENSTER_LETZTER_STAND, title: 'Letzter Stand', closeOnEscape: true }).catch(() => null)
+        if (offen?.isPlaced) {
+            return 'Der letzte Stand steht im Fenster daneben.'
         }
     }
-    await verdichte($, istBeschaeftigt, flaeche, schonEingereiht, 'wischen')
+    return `Letzter Stand, gespeichert ${gespeichertUm(punkt.am, await $.clock.now())}:\n\n${await zeigbar($, punkt.notiz)}`
 }
 
 // --- Countdown vor Schwamm und Pfeil ---
@@ -1581,11 +1824,20 @@ export const BEFEHLE: readonly Befehl[] = [
     {
         name: 'statistik:chat-aufraeumen',
         description: 'Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown',
-        was: 'Räumt den Chat auf: mit dem Leitstand über /leitstand tidy (erst ein Sicherungspunkt der Arbeit, dann verdichten), sonst mit GlanceFlow über /glanceflow tidy, sonst ein schlichtes /compact. Sofort, ohne Countdown; ein laufender Countdown endet dabei.',
+        was: 'Räumt den Chat auf: Claude schreibt erst einen Sicherungspunkt der Arbeit (Ziel, Erledigtes, Offenes, Entscheidungen, nächster Schritt), dann wird mit /compact verdichtet, und die Verdichtung behält den Sicherungspunkt. Danach liest Claude ihn für den Rest des Chats mit; /statistik:letzter-stand-zeigen zeigt ihn. Sofort, ohne Countdown; ein laufender Countdown endet dabei.',
         knopf: '🧽 neben der Chatlänge, aber ohne die zehn Sekunden Countdown',
         gilt: 'für diesen Chat',
         argumente: 'keine',
         beispiel: '/statistik:chat-aufraeumen',
+    },
+    {
+        name: 'statistik:letzter-stand-zeigen',
+        description: 'Den Sicherungspunkt zeigen, den Claude beim letzten Aufräumen gespeichert hat',
+        was: 'Zeigt den Sicherungspunkt, den Claude beim letzten Aufräumen dieses Chats geschrieben hat, im Fenster Letzter Stand, mit der Uhrzeit. Vom Handy kommt er als Text. Ist im Leitstand Verdecken an, sind Passwörter und persönliche Daten darin verdeckt.',
+        knopf: 'keiner',
+        gilt: 'für diesen Chat; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/statistik:letzter-stand-zeigen',
     },
     {
         name: 'statistik:verdichten',
@@ -1648,6 +1900,8 @@ async function wirke($: EngineInterface, name: string, args: string, vomHandy: b
             return warmhaltenAus($)
         case 'statistik:chat-aufraeumen':
             return sofort($, 'wischen')
+        case 'statistik:letzter-stand-zeigen':
+            return letzterStand($, vomHandy)
         case 'statistik:verdichten':
             return sofort($, 'compact')
         default:
@@ -1911,9 +2165,17 @@ export const register: Register = (on, options) => {
     }).catch(($, e, next) => next(e))
 
     on('session.compact', async ($, e, next) => {
-        const r = await next(e)
-        if (r.skip !== undefined || e.agentId) {
+        if (e.agentId) {
+            return next(e)
+        }
+        // Wartet ein Sicherungspunkt vom Aufraeumen, soll die Verdichtung ihn behalten.
+        const r = await next(await mitSicherungspunkt($, e))
+        if (r.skip !== undefined) {
             return r
+        }
+        // Eine Vorausberechnung setzt noch nichts ein; erst die echte Verdichtung zaehlt.
+        if (e.trigger !== 'precompute') {
+            await markiereVerdichtet($).catch(() => {})
         }
         z.kompaktiert = true
         z.nachVerdichtung = true
@@ -1923,6 +2185,58 @@ export const register: Register = (on, options) => {
         await schaerfe($)
         return r
     }).catch(($, e, next) => next(e))
+
+    // Nach dem Aufraeumen steht der Sicherungspunkt fuer den Rest des Chats im Systemprompt,
+    // erst ab der Verdichtung: vorher kostete ein geaenderter Systemprompt einen kalten Cache.
+    on('prompt.compose', async ($, e, next) => {
+        const r = await next(e)
+        const punkt = await sicherungspunktVon($)
+        if (!punkt || punkt.verdichtet === undefined) {
+            return r
+        }
+        return {
+            sections: [...r.sections, { id: 'statistik:sicherungspunkt', text: sicherungspunktAbschnitt(punkt.notiz), scope: 'session' as const }],
+        }
+    }).catch(($, e, next) => next(e))
+
+    // Das Fenster Letzter Stand: der Sicherungspunkt dieses Chats als Markdown, wie Claude ihn schrieb.
+    on('ui.render', { component: 'Pane', requestId: FENSTER_LETZTER_STAND }, async ($, e) => {
+        const { Box, Button, Markdown, Text } = $.ui.resolve(e)
+        // Die App zeichnet am Fenster ein eigenes Schliessen, das Terminal braucht den Knopf.
+        const schliessen =
+            e.surface === 'terminal' ? (
+                <Box key="aktionen" marginTop={1}>
+                    <Button key="schliessen" label="Schließen" role="dismiss" onPress={() => void $.ui.close({ id: FENSTER_LETZTER_STAND })} />
+                </Box>
+            ) : null
+        const punkt = await sicherungspunktVon($).catch(() => null)
+        if (!punkt) {
+            return (
+                <Box flexDirection="column">
+                    <Text dimColor wrap="wrap">
+                        {OHNE_SICHERUNGSPUNKT}
+                    </Text>
+                    {schliessen}
+                </Box>
+            )
+        }
+        const um = gespeichertUm(punkt.am, await $.clock.now())
+        const kopf =
+            punkt.verdichtet === undefined
+                ? `Gespeichert ${um}. Verdichtet wurde danach noch nicht.`
+                : `Gespeichert ${um}, bevor der Chat aufgeräumt wurde. Claude liest ihn für den Rest dieses Chats mit.`
+        return (
+            <Box flexDirection="column">
+                <Text dimColor wrap="wrap">
+                    {kopf}
+                </Text>
+                <Box key="notiz" flexDirection="column" marginTop={1}>
+                    <Markdown key="notiz-text" text={(await zeigbar($, punkt.notiz)).slice(0, 10_000)} />
+                </Box>
+                {schliessen}
+            </Box>
+        )
+    })
 
     // Die Engine setzt die Namen der Mods vor jede Befehlsantwort. Dieser Mod streicht in der
     // gespeicherten Zeile seinen und sagt stattdessen am Ende, dass die Antwort von ihm kommt.

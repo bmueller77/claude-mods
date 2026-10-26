@@ -111,7 +111,10 @@ declare module 'claude-code' {
             nutzung: Nutzung
             /** Zaehlt jede Minute hoch, damit die Tortenuhr weiterlaeuft. */
             tick: number
-            /** Welcher Knopf /compact eingereiht hat, das noch wartet: Dreieck oder Schwamm; null, wenn nichts wartet. */
+            /**
+             * Welcher Knopf /compact eingereiht hat, das noch wartet: Dreieck oder Schwamm; null, wenn nichts wartet.
+             * Beim Schwamm auch, solange Claude vorher den Sicherungspunkt schreibt.
+             */
             eingereiht: 'compact' | 'wischen' | null
             /** Die Chatlaenge, nach jeder Runde, jedem Compact und beim Sitzungsstart neu; null, wenn der Verlauf nicht lesbar war. */
             chatlaenge: Chatlaenge | null

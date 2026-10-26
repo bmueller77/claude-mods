@@ -2,7 +2,26 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionContextBreakdown } from 'claude-code'
 
-import { ALTE_BEFEHLE, BEFEHLE, dauer, fableAus, fehlerText, hilfeText, leseDauer, restUhr, tokenMenge, uhrZeichen, warmRest, wochentagZeit } from '../hooks/register'
+import {
+    ALTE_BEFEHLE,
+    BEFEHLE,
+    OHNE_SICHERUNGSPUNKT,
+    behalteAnweisung,
+    dauer,
+    fableAus,
+    fehlerText,
+    gespeichertUm,
+    hilfeText,
+    istVeraltet,
+    leseDauer,
+    restUhr,
+    sicherungspunktAbschnitt,
+    tokenMenge,
+    uhrZeichen,
+    verdecke,
+    warmRest,
+    wochentagZeit,
+} from '../hooks/register'
 
 const FLAECHEN = ['terminal', 'desktop'] as const
 const BAND = { plugin: 'statistik', component: 'AbovePrompt' } as const
@@ -79,7 +98,12 @@ type Stand = {
     nachrichten?: unknown[] | 'fehler'
     /** Die Sitzungs-ID; ohne Angabe sitzung-1. */
     sid?: string
+    /** Was Claude als Sicherungspunkt schreibt; null: der Fork kommt ohne Text zurueck. Ohne Angabe SICHERUNG. */
+    sicherungspunkt?: string | null
 }
+
+/** Was Claude im Test als Sicherungspunkt schreibt, wenn der Stand nichts anderes sagt. */
+const SICHERUNG = 'Sicherungspunkt: **Ziel**: die Statistik räumt selbst auf. Nächster Schritt: Tests.'
 type Ping = { read: number; write: number }
 
 /**
@@ -149,7 +173,15 @@ function boden(on: On, stand: Stand) {
         eingaben.push(e.text)
         return { text: e.text, origin: e.origin }
     })
-    on('model.fork', (_$, _e, _next) => {
+    // Ein Fork mit dem Auftrag zum Sicherungspunkt ist keiner der Pings.
+    const sicherungen: string[] = []
+    on('model.fork', (_$, e, _next) => {
+        if (String(e.prompt).startsWith('Dieser Chat wird gleich verdichtet')) {
+            sicherungen.push(String(e.prompt))
+            const text = stand.sicherungspunkt === undefined ? SICHERUNG : stand.sicherungspunkt
+            const usage = { input_tokens: 10, output_tokens: 200, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 20 }
+            return { value: text === null ? { isAnswered: false, reason: 'empty-reply', usage } : { isAnswered: true, text, usage } } as never
+        }
         pings.push({ ...naechsterPing })
         return {
             value: {
@@ -188,7 +220,7 @@ function boden(on: On, stand: Stand) {
         }
         return h(Text, {}, 'engine') as RenderElement
     })
-    return { pings, naechsterPing, logs, eingaben, befehle, abrufe, angemeldet }
+    return { pings, naechsterPing, logs, eingaben, befehle, abrufe, angemeldet, sicherungen }
 }
 
 type T$ = {
@@ -625,16 +657,23 @@ test('der Schwamm steht rechts neben der Chatlänge, das Dreieck 🔻 am Kontext
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('ohne Leitstand und GlanceFlow verdichtet der Schwamm schlicht und zeigt selbst die Sanduhr', async ($, on) => {
+test('der Schwamm speichert erst einen Sicherungspunkt, dann verdichtet er mit /compact und zeigt die Sanduhr', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
-    mock.store(on, {})
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     await ui.press({ key: 'wischen' })
     await clock.advance(COUNTDOWN)
+    expect(b.sicherungen).toHaveLength(1)
+    expect(b.sicherungen[0]).toContain('Beginne genau mit: "Sicherungspunkt:"')
+    expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am: 1_000_000 + COUNTDOWN, notiz: SICHERUNG })
+    // /compact ohne die lange Anweisung dahinter: die gibt der eigene Hook der Verdichtung.
     expect(b.befehle).toEqual(['compact'])
+    expect(b.logs).toContain('Sicherungspunkt gespeichert. /statistik:letzter-stand-zeigen zeigt ihn.')
+    expect(b.pings).toEqual([])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     // Das Dreieck tut nichts, solange der Schwamm eingereiht hat.
@@ -642,47 +681,37 @@ test('ohne Leitstand und GlanceFlow verdichtet der Schwamm schlicht und zeigt se
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('nur mit GlanceFlow räumt der Schwamm mit Sicherungspunkt auf, über /glanceflow tidy; der Pfeil bleibt schlicht', async ($, on) => {
+test('der Pfeil 🔻 verdichtet schlicht: kein Fork, kein Sicherungspunkt', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
-    mock.store(on, {})
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
-    on('command.list', () => ({ value: [{ name: 'glanceflow', description: '', source: 'plugin' }] }) as never)
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    await ui.press({ key: 'wischen' })
-    await clock.advance(COUNTDOWN)
-    expect(b.befehle).toEqual(['glanceflow tidy'])
-    // GlanceFlow raeumt selbst auf; die Statistik reiht nichts ein.
-    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
-    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('🔻')
     await ui.press({ key: 'compact' })
     await clock.advance(COUNTDOWN)
-    expect(b.befehle).toEqual(['glanceflow tidy', 'compact'])
+    expect(b.befehle).toEqual(['compact'])
+    expect(b.sicherungen).toEqual([])
+    expect([...speicher.keys()].filter(k => k.startsWith('statistik.sicherungspunkt'))).toEqual([])
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('⏳')
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
 })
 
-test('mit Leitstand räumt der Schwamm über /leitstand tidy auf, auch wenn GlanceFlow noch da ist', async ($, on) => {
+test('kein anderer Mod: auch mit Leitstand und GlanceFlow ruft der Schwamm weder /leitstand noch /glanceflow', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
     const befehl = (name: string) => ({ name, description: '', source: 'plugin' })
-    // GlanceFlow steht vorn in der Liste; der Leitstand geht trotzdem vor.
-    let liste = [befehl('glanceflow'), befehl('leitstand')]
-    on('command.list', () => ({ value: liste }) as never)
+    on('command.list', () => ({ value: [befehl('glanceflow'), befehl('leitstand'), befehl('bjoern-mods:leitstand')] }) as never)
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     await ui.press({ key: 'wischen' })
     await clock.advance(COUNTDOWN)
-    expect(b.befehle).toEqual(['leitstand tidy'])
-    // Als Kopie eines Plugins zaehlt er auch.
-    liste = [befehl('glanceflow'), befehl('bjoern-mods:leitstand')]
-    await ui.press({ key: 'wischen' })
-    await clock.advance(COUNTDOWN)
-    expect(b.befehle).toEqual(['leitstand tidy', 'bjoern-mods:leitstand tidy'])
-    // Der Leitstand raeumt selbst auf; die Statistik reiht nichts ein.
-    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+    expect(b.sicherungen).toHaveLength(1)
+    expect(b.befehle).toEqual(['compact'])
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
 })
 
 /** Was die Statistik als Toast zeigt. */
@@ -1533,6 +1562,7 @@ const NEUE = [
     'statistik:warmhalten-immer',
     'statistik:warmhalten-aus',
     'statistik:chat-aufraeumen',
+    'statistik:letzter-stand-zeigen',
     'statistik:verdichten',
 ]
 
@@ -1601,18 +1631,21 @@ test('ein alter Name sagt den neuen und tut sonst nichts', async ($, on) => {
     expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
 })
 
-test('die eigenen Befehle /statistik:… zaehlen beim Aufraeumen nicht als Leitstand oder GlanceFlow', async ($, on) => {
+test('kommt der Fork ohne Text zurück, räumt der Schwamm trotzdem auf und sagt das', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
-    mock.store(on, {})
-    const b = boden(on, STAND)
-    const eigene = BEFEHLE.map(one => ({ name: one.name, description: one.description, source: 'plugin' }))
-    // Auch ein eigener Name, der wie eine Kopie endet, zaehlt nicht.
-    on('command.list', () => ({ value: [...eigene, { name: 'statistik:leitstand', description: '', source: 'plugin' }] }) as never)
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
+    const b = boden(on, { ...STAND, sicherungspunkt: null })
+    const toasts = toastZaehler(on)
     await start($ as never)
     await runde($ as never)
     expect(await befehl($ as never, 'statistik:chat-aufraeumen')).toBe('Der Chat wird jetzt aufgeräumt.')
     await clock.advance(0)
+    expect(b.sicherungen).toHaveLength(1)
     expect(b.befehle).toEqual(['compact'])
+    expect(toasts).toEqual(['Der Sicherungspunkt ließ sich nicht speichern. Der Chat wird trotzdem aufgeräumt.'])
+    expect(speicher.has('statistik.sicherungspunkt:sitzung-1')).toBe(false)
+    expect(await befehl($ as never, 'statistik:letzter-stand-zeigen')).toBe(OHNE_SICHERUNGSPUNKT)
 })
 
 test('/statistik:hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzformen eingeschlossen', async ($, on) => {
@@ -1731,16 +1764,18 @@ test('/statistik:chat-aufraeumen raeumt sofort auf, ohne Countdown, wie 🧽 nac
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('/statistik:chat-aufraeumen nimmt wie 🧽 den Leitstand, wenn es ihn gibt', async ($, on) => {
+test('/statistik:chat-aufraeumen speichert wie 🧽 einen Sicherungspunkt und ruft keinen anderen Mod auf', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
-    mock.store(on, {})
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
     const b = boden(on, STAND)
     on('command.list', () => ({ value: [{ name: 'glanceflow', description: '', source: 'plugin' }, { name: 'leitstand', description: '', source: 'plugin' }] }) as never)
     await start($ as never)
     await runde($ as never)
     await befehl($ as never, 'statistik:chat-aufraeumen')
     await clock.advance(0)
-    expect(b.befehle).toEqual(['leitstand tidy'])
+    expect(b.befehle).toEqual(['compact'])
+    expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am: 1_000_000, notiz: SICHERUNG })
 })
 
 test('/statistik:verdichten verdichtet sofort, ohne Countdown, wie 🔻 nach seinem Countdown', async ($, on) => {
@@ -1807,4 +1842,246 @@ test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', 
     expect(await gespeichert($, on, '<local-command-stdout>statistik: Warmhalten ist aus.</local-command-stdout>')).toEqual([
         '<local-command-stdout>Warmhalten ist aus. (gemeldet vom Mod Statistik)</local-command-stdout>',
     ])
+})
+
+// --- Aufraeumen mit Sicherungspunkt und Letzter Stand ---
+
+/** Eine Verdichtung, wie die Engine sie beantwortet; zurueck kommt, was ihr als Anweisung gesagt wurde. */
+function verdichtungMitAnweisung(on: On) {
+    const anweisungen: (string | undefined)[] = []
+    on('session.compact', (_$, e, _next) => {
+        anweisungen.push(e.instructions)
+        return { messages: [{ role: 'user', text: 'Zusammenfassung', toolUses: [] }], tokensBefore: 40_000, tokensAfter: 8_000 } as never
+    })
+    return anweisungen
+}
+
+type Abschnitt = { id: string; text: string; scope: string }
+
+/** Die Abschnitte der Statistik im Systemprompt, wie die Engine ihn zusammensetzt. */
+async function abschnitte($: { prompt: { compose: (e: never) => Promise<{ sections: readonly Abschnitt[] }> } }) {
+    const fakten = { model: 'claude-opus-5', promptModel: 'claude-opus-5', surfaces: ['desktop'], tools: [], outputStyle: null, traits: [] }
+    return (await $.prompt.compose(fakten as never)).sections.filter(a => a.id.startsWith('statistik:'))
+}
+
+const VERLAUF_KURZ = [{ role: 'user', text: 'Hallo', toolUses: [] }]
+
+test('die Verdichtung nach dem Aufräumen behält den Sicherungspunkt; danach steht er im Systemprompt, vorher nicht', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
+    const stand: Stand = { ...STAND }
+    const b = boden(on, stand)
+    const anweisungen = verdichtungMitAnweisung(on)
+    on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'Basis', scope: 'shared' }] }) as never)
+    await start($ as never)
+    await runde($ as never)
+    expect(await abschnitte($ as never)).toEqual([])
+
+    expect(await befehl($ as never, 'statistik:chat-aufraeumen')).toBe('Der Chat wird jetzt aufgeräumt.')
+    await clock.advance(0)
+    expect(b.befehle).toEqual(['compact'])
+    // Vor dem Verdichten bleibt der Systemprompt, wie er war: ein geaenderter kostete einen kalten Cache.
+    expect(await abschnitte($ as never)).toEqual([])
+
+    // Die Engine fuehrt das eingereihte /compact aus, hier mit Text, den die Person dahinter schrieb.
+    await $.session.compact({ trigger: 'manual', instructions: 'Fokus auf die Tests', messages: VERLAUF_KURZ } as never)
+    expect(anweisungen).toEqual([`Fokus auf die Tests\n\n${behalteAnweisung(SICHERUNG)}`])
+    expect(behalteAnweisung(SICHERUNG)).toBe(`Behalte alles aus diesem Sicherungspunkt; die Arbeit braucht ihn, um weiterzugehen.\n\n${SICHERUNG}`)
+    expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am: 1_000_000, notiz: SICHERUNG, verdichtet: 1_000_000 })
+    expect(await abschnitte($ as never)).toEqual([{ id: 'statistik:sicherungspunkt', text: sicherungspunktAbschnitt(SICHERUNG), scope: 'session' }])
+    expect(sicherungspunktAbschnitt(SICHERUNG)).toBe(`# Sicherungspunkt, gespeichert, bevor dieser Chat aufgeräumt wurde\n${SICHERUNG}`)
+    // Die Sanduhr ist weg, sobald verdichtet ist.
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+
+    // Eine spaetere Verdichtung bekommt ihn nicht noch einmal gesagt; im Systemprompt bleibt er.
+    await $.session.compact({ trigger: 'auto', messages: VERLAUF_KURZ } as never)
+    expect(anweisungen).toHaveLength(2)
+    expect(anweisungen[1]).toBeUndefined()
+    expect(await abschnitte($ as never)).toHaveLength(1)
+
+    // Nach /clear ist es ein neuer Chat, ohne Sicherungspunkt.
+    stand.sid = 'sitzung-2'
+    expect(await abschnitte($ as never)).toEqual([])
+})
+
+test('im Terminal zwischen zwei Runden verdichtet der Schwamm direkt, mit der Anweisung, den Sicherungspunkt zu behalten', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    const speicher = new Map<string, unknown>()
+    eigenerSpeicher(on, speicher)
+    const b = boden(on, STAND)
+    const anweisungen = verdichtungMitAnweisung(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    await ui.press({ key: 'wischen' })
+    await clock.advance(COUNTDOWN)
+    expect(b.sicherungen).toHaveLength(1)
+    // Kein /compact eingereiht, kein anderer Mod: die Sitzung verdichtet selbst.
+    expect(b.befehle).toEqual([])
+    expect(anweisungen).toEqual([behalteAnweisung(SICHERUNG)])
+    const am = 1_000_000 + COUNTDOWN
+    expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am, notiz: SICHERUNG, verdichtet: am })
+    expect(b.logs[0]).toBe('Sicherungspunkt gespeichert. /statistik:letzter-stand-zeigen zeigt ihn.')
+    expect(b.logs[1]).toBe('Compact: 40k auf 8,0k Tokens, 80 Prozent weniger')
+    expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+})
+
+/** Ein Sicherungspunkt am 15. Juli 2026 um 12:05 UTC: 14:05 in Berlin. */
+const PUNKT_AM = Date.UTC(2026, 6, 15, 12, 5)
+const PUNKT = { am: PUNKT_AM, notiz: SICHERUNG, verdichtet: PUNKT_AM }
+/** Was der Letzte Stand von SICHERUNG zeigt: ohne den Vorsatz. */
+const PUNKT_TEXT = '**Ziel**: die Statistik räumt selbst auf. Nächster Schritt: Tests.'
+
+const FENSTER = {
+    plugin: 'statistik',
+    component: 'Pane',
+    requestId: 'statistik-letzter-stand',
+    props: { title: 'Letzter Stand', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+} as const
+
+test('gespeichert um: Uhrzeit in Berliner Zeit, an einem anderen Tag mit Datum', () => {
+    expect(gespeichertUm(PUNKT_AM, Date.UTC(2026, 6, 15, 18, 0))).toBe('um 14:05')
+    expect(gespeichertUm(PUNKT_AM, Date.UTC(2026, 6, 17, 9, 0))).toBe('am 15.07. um 14:05')
+    // 23:30 UTC ist in Berlin schon der naechste Tag, 00:30 im Winter: derselbe Tag wie 08:00 UTC.
+    expect(gespeichertUm(Date.UTC(2026, 11, 1, 23, 30), Date.UTC(2026, 11, 2, 8, 0))).toBe('um 00:30')
+})
+
+test('/statistik:letzter-stand-zeigen vom Handy: der Sicherungspunkt als Text, kein Fenster', async ($, on) => {
+    mock.clock(on, { now: Date.UTC(2026, 6, 15, 18, 0) })
+    mock.store(on, { 'statistik.sicherungspunkt:sitzung-1': PUNKT })
+    const b = boden(on, STAND)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    expect(await vomHandy($ as never, 'statistik:letzter-stand-zeigen')).toBe(`Letzter Stand, gespeichert um 14:05:\n\n${PUNKT_TEXT}`)
+    expect(geoeffnet).toEqual([])
+    expect(b.befehle).toEqual([])
+    expect(b.sicherungen).toEqual([])
+})
+
+test('/statistik:letzter-stand-zeigen ohne Sicherungspunkt: ein Satz, am Rechner wie am Handy', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, STAND)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    expect(OHNE_SICHERUNGSPUNKT).toBe('In diesem Chat gibt es noch keinen Sicherungspunkt. Beim Aufräumen wird einer gespeichert.')
+    expect(await vomHandy($ as never, 'statistik:letzter-stand-zeigen')).toBe(OHNE_SICHERUNGSPUNKT)
+    expect(await befehl($ as never, 'statistik:letzter-stand-zeigen')).toBe(OHNE_SICHERUNGSPUNKT)
+    expect(geoeffnet).toEqual([])
+    // Das Fenster sagt dasselbe, falls es noch offen ist.
+    const ui = await $.ui.mount({ ...FENSTER, surface: 'desktop' })
+    expect((await ui.find({ type: 'Text', text: /Sicherungspunkt/ }))?.text).toBe(OHNE_SICHERUNGSPUNKT)
+})
+
+test('/statistik:letzter-stand-zeigen am Rechner: das Fenster Letzter Stand mit dem Sicherungspunkt als Markdown', async ($, on) => {
+    mock.clock(on, { now: Date.UTC(2026, 6, 15, 18, 0) })
+    mock.store(on, { 'statistik.sicherungspunkt:sitzung-1': PUNKT })
+    boden(on, STAND)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    expect(await befehl($ as never, 'statistik:letzter-stand-zeigen')).toBe('Der letzte Stand steht im Fenster daneben.')
+    expect(geoeffnet).toEqual(['statistik-letzter-stand'])
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...FENSTER, surface })
+        expect((await ui.find({ type: 'Markdown' }))?.text).toBe(PUNKT_TEXT)
+        expect((await ui.find({ type: 'Text', text: /Gespeichert/ }))?.text).toBe(
+            'Gespeichert um 14:05, bevor der Chat aufgeräumt wurde. Claude liest ihn für den Rest dieses Chats mit.',
+        )
+        // Die App zeichnet ihr eigenes Schliessen; das Terminal bekommt einen Knopf.
+        expect(Boolean(await ui.find({ type: 'Button', key: 'schliessen' }))).toBe(surface === 'terminal')
+        await ui.unmount()
+    }
+})
+
+test('kann keine Fläche das Fenster zeigen, kommt der Letzte Stand als Text', async ($, on) => {
+    mock.clock(on, { now: Date.UTC(2026, 6, 15, 18, 0) })
+    mock.store(on, { 'statistik.sicherungspunkt:sitzung-1': { am: PUNKT_AM, notiz: SICHERUNG } })
+    boden(on, STAND)
+    on('ui.open', () => ({ value: { isPlaced: false, reason: 'keine Fläche' } }) as never)
+    await start($ as never)
+    expect(await befehl($ as never, 'statistik:letzter-stand-zeigen')).toBe(`Letzter Stand, gespeichert um 14:05:\n\n${PUNKT_TEXT}`)
+    // Ohne Verdichtung danach sagt das Fenster das auch.
+    const ui = await $.ui.mount({ ...FENSTER, surface: 'desktop' })
+    expect((await ui.find({ type: 'Text', text: /Gespeichert/ }))?.text).toBe('Gespeichert um 14:05. Verdichtet wurde danach noch nicht.')
+})
+
+test('verdecke: Schlüssel, Passwörter, Karten, IBAN, E-Mail und Telefon; Zahlen und Zeiten bleiben', () => {
+    expect(verdecke('Token ghp_abcdefghijklmnopqrstuvwxyz123456 und sk-ant-api03-abcdefghijklmnopqrstuv')).toBe('Token •••••••• und ••••••••')
+    expect(verdecke('DB_PASSWORT=geheim123, API_KEY: "abc-123-def"')).toBe('DB_PASSWORT=••••••••, API_KEY: "••••••••"')
+    expect(verdecke('Das WLAN-Kennwort lautet: Sonne2026')).toBe('Das WLAN-Kennwort lautet: ••••••••')
+    expect(verdecke('Karte 4111 1111 1111 1111, IBAN DE89 3704 0044 0532 0130 00')).toBe('Karte •••• •••• •••• ••••, IBAN •••')
+    expect(verdecke('Mail an bjoern@example.com, Tel. +49 171 1234567')).toBe('Mail an •••@•••, Tel. +•• •••')
+    const bleibt = 'Kontext 150k, Tokens: 150000, max_tokens=4096, um 14:05 am 2026-10-26, Version 2.1.308, Karte 4111 1111 1111 1112'
+    expect(verdecke(bleibt)).toBe(bleibt)
+})
+
+/** Der Leitstand, so weit die Statistik ihn liest: sein Schalter Verdecken, hier per Befehl gesetzt. */
+const LEITSTAND = {
+    name: 'leitstand',
+    register(on: On) {
+        on('command.run', { command: 'verdecken' }, async ($, e) => {
+            await $.state.set({ plugin: 'leitstand', key: 'masksPrivate' } as never, (e.args === 'an') as never)
+            return { text: '' }
+        })
+    },
+}
+
+test('ist im Leitstand Verdecken an, verdeckt der Letzte Stand Passwörter und persönliche Daten', { plugins: [LEITSTAND] }, async ($, on) => {
+    const notiz = 'Sicherungspunkt: Login mit bjoern@example.com, DB_PASSWORT=geheim123.'
+    mock.clock(on, { now: Date.UTC(2026, 6, 15, 18, 0) })
+    mock.store(on, { 'statistik.sicherungspunkt:sitzung-1': { am: PUNKT_AM, notiz, verdichtet: PUNKT_AM } })
+    boden(on, STAND)
+    on('prompt.compose', () => ({ sections: [] }) as never)
+    await start($ as never)
+    const offen = 'Login mit bjoern@example.com, DB_PASSWORT=geheim123.'
+    const verdeckt = 'Login mit •••@•••, DB_PASSWORT=••••••••.'
+    // Ohne Wert vom Leitstand: nichts verdeckt.
+    expect(await vomHandy($ as never, 'statistik:letzter-stand-zeigen')).toBe(`Letzter Stand, gespeichert um 14:05:\n\n${offen}`)
+
+    await befehl($ as never, 'verdecken', 'an')
+    expect(await vomHandy($ as never, 'statistik:letzter-stand-zeigen')).toBe(`Letzter Stand, gespeichert um 14:05:\n\n${verdeckt}`)
+    const ui = await $.ui.mount({ ...FENSTER, surface: 'desktop' })
+    expect((await ui.find({ type: 'Markdown' }))?.text).toBe(verdeckt)
+    // Claude liest den Sicherungspunkt, wie er ist.
+    expect((await abschnitte($ as never))[0]?.text).toBe(sicherungspunktAbschnitt(notiz))
+
+    await befehl($ as never, 'verdecken', 'aus')
+    expect(await vomHandy($ as never, 'statistik:letzter-stand-zeigen')).toBe(`Letzter Stand, gespeichert um 14:05:\n\n${offen}`)
+    expect((await ui.find({ type: 'Markdown' }))?.text).toBe(offen)
+})
+
+test('Sicherungspunkte anderer Chats, 30 Tage unberührt, gehen höchstens einmal am Tag; der eigene nie', async ($, on) => {
+    const TAG = 24 * 60 * MIN
+    const clock = mock.clock(on, { now: 100 * TAG })
+    const speicher = new Map<string, unknown>([
+        ['statistik.sicherungspunkt:alt', { am: 60 * TAG, notiz: 'alt' }],
+        ['statistik.sicherungspunkt:alt-aber-benutzt', { am: 60 * TAG, notiz: 'benutzt', benutzt: 90 * TAG }],
+        ['statistik.sicherungspunkt:frisch', { am: 80 * TAG, notiz: 'frisch', verdichtet: 80 * TAG }],
+        ['statistik.sicherungspunkt:kaputt', 'kein Sicherungspunkt'],
+        ['statistik.sicherungspunkt:sitzung-1', { am: 10 * TAG, notiz: 'meiner', verdichtet: 10 * TAG }],
+        ['statistik.warmBis:laeuft', 100 * TAG + 60 * MIN],
+    ])
+    eigenerSpeicher(on, speicher)
+    boden(on, STAND)
+    await start($ as never)
+    expect(speicher.has('statistik.sicherungspunkt:alt')).toBe(false)
+    expect(speicher.has('statistik.sicherungspunkt:kaputt')).toBe(false)
+    expect(speicher.has('statistik.sicherungspunkt:alt-aber-benutzt')).toBe(true)
+    expect(speicher.has('statistik.sicherungspunkt:frisch')).toBe(true)
+    expect(speicher.get('statistik.warmBis:laeuft')).toBe(100 * TAG + 60 * MIN)
+    // Der eigene bleibt, so alt er ist, und gilt ab jetzt als benutzt.
+    expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am: 10 * TAG, notiz: 'meiner', verdichtet: 10 * TAG, benutzt: 100 * TAG })
+    expect(istVeraltet({ am: 0, notiz: 'x', benutzt: 99 * TAG }, 100 * TAG)).toBe(false)
+    expect(istVeraltet({ am: 69 * TAG, notiz: 'x' }, 100 * TAG)).toBe(true)
+
+    // Am selben Tag nicht noch einmal, am naechsten schon.
+    speicher.set('statistik.sicherungspunkt:alt', { am: 1, notiz: 'alt' })
+    await start($ as never)
+    expect(speicher.has('statistik.sicherungspunkt:alt')).toBe(true)
+    await clock.advance(TAG)
+    await start($ as never)
+    expect(speicher.has('statistik.sicherungspunkt:alt')).toBe(false)
+    expect(speicher.has('statistik.sicherungspunkt:frisch')).toBe(true)
 })
