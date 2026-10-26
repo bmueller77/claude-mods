@@ -27,6 +27,9 @@ test('Einschätzung lesen: JSON auch mit Text drumherum, sonst null', () => {
     expect(leseEinschaetzung('{"modell":"claude-fable-5-1","aufwand":"xhigh","grund":"eins zwei drei vier fünf sechs sieben acht"}')?.grund).toBe(
         'eins zwei drei vier fünf sechs',
     )
+    expect(leseEinschaetzung('{"modell":"opus","aufwand":"medium","grund":"Neuer Mod mit Tests und Doku, aufwendig"}')?.grund).toBe(
+        'Neuer Mod mit Tests und Doku',
+    )
     expect(leseEinschaetzung('{"modell":"gpt","aufwand":"low"}')).toBeNull()
     expect(leseEinschaetzung('{"modell":"haiku","aufwand":"ultra"}')).toBeNull()
     expect(leseEinschaetzung('Opus, hoch')).toBeNull()

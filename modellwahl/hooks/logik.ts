@@ -118,8 +118,10 @@ export function leseEinschaetzung(text: string): Einschaetzung | null {
     if (!modell || !(stufe in AUFWAENDE)) {
         return null
     }
-    const grund = typeof o.grund === 'string' ? o.grund.replace(/\s+/g, ' ').trim().replace(/[.!]+$/, '') : ''
-    return { modell, aufwand: stufe as Aufwand, grund: grund.split(' ').filter(Boolean).slice(0, 6).join(' ') }
+    const woerter = typeof o.grund === 'string' ? o.grund.split(/\s+/).filter(Boolean).slice(0, 6) : []
+    // Erst kürzen, dann das Satzzeichen am Ende weg: sonst bleibt nach dem sechsten Wort ein Komma stehen ("Doku,.").
+    const grund = woerter.join(' ').replace(/[\s,;:.!?–-]+$/, '')
+    return { modell, aufwand: stufe as Aufwand, grund }
 }
 
 // --- Kosten ---
