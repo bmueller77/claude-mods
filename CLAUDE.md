@@ -66,6 +66,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   (`lookUpCommand`) übergeht `leitstand:…`, sonst fände `:vermenschlichen` den eigenen Befehl.
   Ungeprüft: ob `/leitstand:pause` mitten in einer Runde sofort wirkt (Markdown-Befehle haben kein
   `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten.
+  Unter `claude -p` greifen per `$.command.register` angemeldete Befehle im Prompt nicht, sie gehen
+  ans Modell (`/leitstand hilfe`, `/statistik-zeigen`, `/pause`); Markdown-Befehle aus dem
+  Plugin-Ordner laufen dort (`/leitstand:verdecken-an hilfe`, geprüft 2026-10-26).
 - Den Vorsatz der App vor Befehlsantworten („leitstand: …") streicht ein `session.append`-Hook;
   dafür steht „(gemeldet vom Mod …)" am Ende.
 - Herkunft einer Nachricht (`origin.kind`): Desktop-App `sdk`, Handy über Remote Control `bridge`,
