@@ -1,6 +1,6 @@
 import { type BuiltinToolResults, type CommandRunInput, type EngineInterface, type Register, type Timer, update } from 'claude-code'
 import { LINUX_LAUNCH, openCommand, openWithCommand } from './open'
-import { anmeldung, hilfeText, istHilfe, type Knopfbefehl, uebersicht, vomHandy } from './knopfbefehle'
+import { alteNamen, heisstJetzt, hilfeText, istHilfe, type Knopfbefehl, uebersicht, vomHandy } from './knopfbefehle'
 
 import type { Activity, FileNode, FileTree, Theme } from '../types'
 import { BRANCH_ICON, chainOf, type GitAction, gitActions, readOnly, readTargets, resolve, TONES } from './git'
@@ -1056,92 +1056,92 @@ async function layoutHinweis($: EngineInterface, e: CommandRunInput, befehl: str
 
 // One slash command per button; /filetree stays as the short form.
 
-export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /filetree-hilfe zeigt die Befehle.'
-export const TEXT_NICHT_OFFEN = 'Der Dateibaum ist in diesem Chat noch nicht offen; /filetree-zeigen öffnet ihn.'
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /filetree:hilfe zeigt die Befehle.'
+export const TEXT_NICHT_OFFEN = 'Der Dateibaum ist in diesem Chat noch nicht offen; /filetree:zeigen öffnet ihn.'
 
 const NUR_CHAT = 'nur in diesem Chat, wie der Knopf'
 
 /** The commands in the order of the help; what each does is in `befehlAus`. */
 export const BEFEHLE: readonly Knopfbefehl[] = [
   {
-    name: 'filetree-hilfe',
+    name: 'filetree:hilfe',
     description: 'Listet alle Befehle von Filetree',
     tut: 'Listet alle Befehle von Filetree mit je einer Zeile.',
     knopf: 'keiner, nur Übersicht',
     geltung: 'überall; ändert nichts',
     argumente: 'keine',
-    beispiel: '/filetree-hilfe',
+    beispiel: '/filetree:hilfe',
   },
   {
-    name: 'filetree-zeigen',
+    name: 'filetree:zeigen',
     description: 'Zeigt den Dateibaum in der Seitenleiste (wie /filetree)',
     argumentHint: '[Pfad]',
     tut: 'Öffnet den Dateibaum in der Seitenleiste, wie /filetree. Ohne Pfad folgt er dem Arbeitsordner, mit Pfad bleibt er bei diesem Ordner. Geht nur am Rechner.',
     knopf: 'keiner; wie /filetree, ohne Pfad wie ⌂ im Kopf des Baums',
     geltung: 'dieser Chat',
     argumente: 'optional ein Ordner, absolut, relativ zum Arbeitsordner oder mit ~',
-    beispiel: '/filetree-zeigen src',
+    beispiel: '/filetree:zeigen src',
   },
   {
-    name: 'filetree-versteckte-an',
+    name: 'filetree:versteckte-an',
     description: 'Zeigt versteckte Dateien im Dateibaum (◉)',
     tut: 'Zeigt versteckte Dateien und Ordner (die mit Punkt am Anfang) im Dateibaum.',
     knopf: '◉ im Kopf des Dateibaums',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/filetree-versteckte-an',
+    beispiel: '/filetree:versteckte-an',
   },
   {
-    name: 'filetree-versteckte-aus',
+    name: 'filetree:versteckte-aus',
     description: 'Blendet versteckte Dateien im Dateibaum aus (○)',
     tut: 'Blendet versteckte Dateien und Ordner (die mit Punkt am Anfang) im Dateibaum aus.',
     knopf: '○ im Kopf des Dateibaums',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/filetree-versteckte-aus',
+    beispiel: '/filetree:versteckte-aus',
   },
   {
-    name: 'filetree-groessen-an',
+    name: 'filetree:groessen-an',
     description: 'Zeigt Größen statt Datum im Dateibaum (Σ)',
     tut: 'Zeigt in der rechten Spalte des Dateibaums die Größe statt des Datums; Ordner werden zusammengezählt.',
     knopf: 'Σ im Kopf des Dateibaums',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/filetree-groessen-an',
+    beispiel: '/filetree:groessen-an',
   },
   {
-    name: 'filetree-groessen-aus',
+    name: 'filetree:groessen-aus',
     description: 'Zeigt wieder das Datum statt der Größen im Dateibaum (Σ)',
     tut: 'Zeigt in der rechten Spalte des Dateibaums wieder das Datum der letzten Änderung.',
     knopf: 'Σ im Kopf des Dateibaums',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/filetree-groessen-aus',
+    beispiel: '/filetree:groessen-aus',
   },
   {
-    name: 'filetree-neu-laden',
+    name: 'filetree:neu-laden',
     description: 'Liest den Dateibaum, Git und die Größen neu ein (↻)',
     tut: 'Liest die offenen Ordner, den Git-Stand und die Größen neu ein und wiederholt eine laufende Suche.',
     knopf: '↻ im Kopf des Dateibaums',
     geltung: 'dieser Chat',
     argumente: 'keine',
-    beispiel: '/filetree-neu-laden',
+    beispiel: '/filetree:neu-laden',
   },
   {
-    name: 'filetree-einklappen',
+    name: 'filetree:einklappen',
     description: 'Klappt alle Ordner im Dateibaum ein (⊟)',
     tut: 'Klappt alle Ordner im Dateibaum ein; zu sehen bleibt die oberste Ebene.',
     knopf: '⊟ im Kopf des Dateibaums',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/filetree-einklappen',
+    beispiel: '/filetree:einklappen',
   },
 ]
 
-/** /filetree-zeigen: like /filetree, but the answer comes first and the pane opens behind it. */
+/** /filetree:zeigen: like /filetree, but the answer comes first and the pane opens behind it. */
 async function befehlZeigen($: EngineInterface, arg: string, e: CommandRunInput): Promise<string> {
-  if (vomHandy(e)) return 'Der Dateibaum geht nur am Rechner; dort öffnet /filetree-zeigen ihn in der Seitenleiste.'
-  const hinweis = await layoutHinweis($, e, 'filetree-zeigen')
+  if (vomHandy(e)) return 'Der Dateibaum geht nur am Rechner; dort öffnet /filetree:zeigen ihn in der Seitenleiste.'
+  const hinweis = await layoutHinweis($, e, 'filetree:zeigen')
   if (hinweis) return hinweis
   noDock = false
   const cwd = await cwdOf($)
@@ -1153,26 +1153,26 @@ async function befehlZeigen($: EngineInterface, arg: string, e: CommandRunInput)
 
 /** What each command does, as its button; the answer comes back as one sentence. */
 async function befehlAus($: EngineInterface, name: string, arg: string, e: CommandRunInput): Promise<string> {
-  if (name === 'filetree-hilfe') return uebersicht('Filetree – die Befehle:', BEFEHLE)
-  if (name === 'filetree-zeigen') return befehlZeigen($, arg, e)
+  if (name === 'filetree:hilfe') return uebersicht('Filetree – die Befehle:', BEFEHLE)
+  if (name === 'filetree:zeigen') return befehlZeigen($, arg, e)
   if (!(await get($)).root) return TEXT_NICHT_OFFEN
   switch (name) {
-    case 'filetree-versteckte-an':
+    case 'filetree:versteckte-an':
       await zeigeVersteckte($, true)
       return 'Versteckte Dateien sind im Dateibaum jetzt zu sehen.'
-    case 'filetree-versteckte-aus':
+    case 'filetree:versteckte-aus':
       await zeigeVersteckte($, false)
       return 'Versteckte Dateien sind im Dateibaum jetzt ausgeblendet.'
-    case 'filetree-groessen-an':
+    case 'filetree:groessen-an':
       await zeigeGroessen($, true)
       return 'Der Dateibaum zeigt jetzt Größen statt Datum.'
-    case 'filetree-groessen-aus':
+    case 'filetree:groessen-aus':
       await zeigeGroessen($, false)
       return 'Der Dateibaum zeigt jetzt das Datum statt der Größen.'
-    case 'filetree-neu-laden':
+    case 'filetree:neu-laden':
       void neuLaden($).catch(() => undefined)
       return 'Der Dateibaum wird neu eingelesen.'
-    case 'filetree-einklappen':
+    case 'filetree:einklappen':
       await einklappen($)
       return 'Alle Ordner im Dateibaum sind eingeklappt.'
     default:
@@ -1219,8 +1219,7 @@ export const register: Register = (on, options) => {
   openWithSetting = typeof options?.open === 'string' ? options.open : ''
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'filetree', description: 'Zeigt den Dateibaum; Argument: [Pfad] (ohne Pfad = Arbeitsordner)' })
-    // Je Knopf ein Befehl; einer, der nicht ankommt, hält die anderen nicht auf.
-    for (const b of BEFEHLE) await $.command.register(anmeldung(b)).catch(() => undefined)
+    // Die Befehle je Knopf (/filetree:zeigen) sind Dateien in commands/ und brauchen keine Anmeldung.
     const windows = (await $.env.get('OS')) === 'Windows_NT'
     useDrives(windows)
     home = posix(((await $.env.get('HOME')) || (await $.env.get('USERPROFILE')) || '').replace(/[\\/]+$/, ''))
@@ -1269,6 +1268,13 @@ export const register: Register = (on, options) => {
       }
     }).catch(() => ({ text: BEFEHL_FEHLER }))
   }
+
+  // Die alten Namen bis filetree 0.4 (/filetree-zeigen): nicht mehr angemeldet, aber eine alte Datei in
+  // ~/.claude/commands ruft sie noch auf. Sie sagen nur, wie der Befehl jetzt heißt.
+  const alte = alteNamen(BEFEHLE)
+  on('command.run', { command: [...alte.keys()] }, async ($, e) => ({ text: heisstJetzt(alte.get(e.command) ?? e.command) })).catch(() => ({
+    text: BEFEHL_FEHLER,
+  }))
 
   on('tool.call', async ($, e, next) => {
     if (e.tool !== 'Edit' && e.tool !== 'Write' && e.tool !== 'NotebookEdit' && e.tool !== 'Bash') return next(e)

@@ -578,62 +578,78 @@ const KURZFORMEN: readonly { name: string; description: string }[] = [
     { name: 'replay', description: 'zeigt die Dateiänderungen der letzten Runde Schritt für Schritt (Kurzform)' },
 ]
 
+/**
+ * Die Einzelbefehle, in der Reihenfolge der Uebersicht. Jeder ist eine Datei in commands/ des Mods
+ * (commands/hilfe.md wird /zusammenfassung:hilfe); ein Name mit Doppelpunkt laesst sich nicht anmelden.
+ * Den Lauf beantwortet trotzdem dieser Mod, die Datei kommt nie beim Modell an.
+ */
 export const BEFEHLE: readonly Befehl[] = [
     {
-        name: 'zusammenfassung-hilfe',
-        description: 'Alle Befehle der Zusammenfassung mit einer Zeile Erklärung (Zusammenfassung)',
+        name: 'zusammenfassung:hilfe',
+        description: 'Alle Befehle der Zusammenfassung mit einer Zeile Erklärung',
         was: 'Listet alle Befehle der Zusammenfassung mit einer Zeile Erklärung.',
         knopf: 'keiner',
         gilt: 'zeigt nur Text, ändert nichts',
         argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/zusammenfassung-hilfe',
+        beispiel: '/zusammenfassung:hilfe',
     },
     {
-        name: 'zusammenfassung-an',
-        description: 'Die Zusammenfassung nach jeder Arbeitsrunde in diesem Chat einschalten (Zusammenfassung)',
+        name: 'zusammenfassung:an',
+        description: 'Die Zusammenfassung nach jeder Arbeitsrunde in diesem Chat einschalten',
         was: 'Schaltet die Zusammenfassung nach jeder Arbeitsrunde ein, wie /zusammenfassung, wenn sie aus ist.',
         knopf: 'keiner; dasselbe wie /zusammenfassung',
         gilt: 'nur in diesem Chat; der Standard für neue Chats steht in den Einstellungen des Mods',
         argumente: 'keine',
-        beispiel: '/zusammenfassung-an',
+        beispiel: '/zusammenfassung:an',
     },
     {
-        name: 'zusammenfassung-aus',
-        description: 'Die Zusammenfassung in diesem Chat ausschalten; das Replay bleibt (Zusammenfassung)',
+        name: 'zusammenfassung:aus',
+        description: 'Die Zusammenfassung in diesem Chat ausschalten; das Replay bleibt',
         was: 'Schaltet die Zusammenfassung nach jeder Arbeitsrunde aus, wie /zusammenfassung, wenn sie an ist. Das Replay der Dateiänderungen bleibt.',
         knopf: 'keiner; dasselbe wie /zusammenfassung',
         gilt: 'nur in diesem Chat; der Standard für neue Chats steht in den Einstellungen des Mods',
         argumente: 'keine',
-        beispiel: '/zusammenfassung-aus',
+        beispiel: '/zusammenfassung:aus',
     },
     {
-        name: 'zusammenfassung-aufklappen',
-        description: 'Die Zusammenfassung aufklappen: ungekürzt, mit Erklärung zum Hinweis und Dateiliste (Zusammenfassung)',
+        name: 'zusammenfassung:aufklappen',
+        description: 'Die Zusammenfassung aufklappen: ungekürzt, mit Erklärung zum Hinweis und Dateiliste',
         was: 'Klappt die Zusammenfassung über dem Eingabefeld auf: beide Zeilen ungekürzt, die Erklärung zum Hinweis und die geänderten Dateien.',
         knopf: `${SYMBOL_AUF} neben „Zusammenfassung“`,
         gilt: 'in diesem Chat, bis die nächste Arbeitsrunde die Zusammenfassung ersetzt',
         argumente: 'keine',
-        beispiel: '/zusammenfassung-aufklappen',
+        beispiel: '/zusammenfassung:aufklappen',
     },
     {
-        name: 'zusammenfassung-zuklappen',
-        description: 'Die aufgeklappte Zusammenfassung wieder zuklappen (Zusammenfassung)',
+        name: 'zusammenfassung:zuklappen',
+        description: 'Die aufgeklappte Zusammenfassung wieder zuklappen',
         was: 'Klappt die Zusammenfassung über dem Eingabefeld wieder zu.',
         knopf: `${SYMBOL_ZU} neben „Zusammenfassung“`,
         gilt: 'in diesem Chat',
         argumente: 'keine',
-        beispiel: '/zusammenfassung-zuklappen',
+        beispiel: '/zusammenfassung:zuklappen',
     },
     {
-        name: 'zusammenfassung-replay',
-        description: 'Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen (Zusammenfassung)',
+        name: 'zusammenfassung:replay',
+        description: 'Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen',
         was: 'Öffnet das Replay der Dateiänderungen der letzten Runde, wie /replay. Vom Handy kommt statt des Fensters eine Liste der Schritte als Text.',
         knopf: `${SYMBOL_REPLAY} neben „Zusammenfassung“`,
         gilt: 'für die letzte Arbeitsrunde in diesem Chat',
         argumente: 'keine',
-        beispiel: '/zusammenfassung-replay',
+        beispiel: '/zusammenfassung:replay',
     },
 ]
+
+/**
+ * Die alten Namen bis zusammenfassung 0.6: /zusammenfassung-aus statt /zusammenfassung:aus. Sie stehen
+ * nicht mehr im Menue; wer einen tippt (eine alte Datei in ~/.claude/commands), erfaehrt den neuen.
+ */
+export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map(BEFEHLE.map(b => [b.name.replace(':', '-'), b.name] as const))
+
+/** Was ein alter Name antwortet: wie der Befehl jetzt heisst. */
+export function neuerName(name: string): string {
+    return `Der Befehl heißt jetzt /${name}.`
+}
 
 /** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
 export function istHilfe(args: string): boolean {
@@ -653,26 +669,26 @@ export function fehlerText(name: string): string {
 
 /** Alle Befehle des Mods, je eine Zeile. */
 export function uebersicht(): string {
-    const zeilen = [...BEFEHLE.map(b => ({ name: b.name, description: b.description.replace(/ \(Zusammenfassung\)$/, '') })), ...KURZFORMEN]
+    const zeilen = [...BEFEHLE, ...KURZFORMEN]
     return ['Befehle der Zusammenfassung (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
 }
 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
 async function wirke($: EngineInterface, name: string, modell: string, vomHandy: boolean): Promise<string> {
     switch (name) {
-        case 'zusammenfassung-hilfe':
+        case 'zusammenfassung:hilfe':
             return uebersicht()
-        case 'zusammenfassung-an':
+        case 'zusammenfassung:an':
             await setzeAus($, false)
             return 'Die Zusammenfassung ist in diesem Chat an.'
-        case 'zusammenfassung-aus':
+        case 'zusammenfassung:aus':
             await setzeAus($, true)
             return 'Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.'
-        case 'zusammenfassung-aufklappen':
+        case 'zusammenfassung:aufklappen':
             return klappeNach($, modell, true)
-        case 'zusammenfassung-zuklappen':
+        case 'zusammenfassung:zuklappen':
             return klappeNach($, modell, false)
-        case 'zusammenfassung-replay':
+        case 'zusammenfassung:replay':
             return replayBefehl($, vomHandy)
         default:
             throw new Error(`kein Befehl ${name}`)
@@ -692,7 +708,8 @@ export const register: Register = (on, options) => {
         const r = await next(e)
         // Die Desktop-App holt ihre Befehlsliste, bevor dieser Hook laeuft. Damit die
         // Befehle nicht als unbekannt gelten, liegen gleichnamige Befehlsdateien in
-        // ~/.claude/commands; den Lauf beantwortet trotzdem dieser Mod.
+        // ~/.claude/commands; den Lauf beantwortet trotzdem dieser Mod. Angemeldet werden
+        // nur die Kurzformen; die Einzelbefehle /zusammenfassung:… sind Dateien in commands/.
         await $.command
             .register({
                 name: 'zusammenfassung',
@@ -707,17 +724,6 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
-        // Je Knopf ein eigener Befehl, dazu die Hilfe.
-        for (const b of BEFEHLE) {
-            await $.command
-                .register({
-                    name: b.name,
-                    description: b.description,
-                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
-                    immediate: true,
-                })
-                .catch(() => {})
-        }
         const sid = await $.session.id()
         const jetzt = await $.clock.now()
         const aus = await ladeAus($, sid, standardAus, jetzt)
@@ -766,6 +772,10 @@ export const register: Register = (on, options) => {
             }
         }).catch(() => ({ text: fehlerText(b.name) }))
     }
+
+    // Ein alter Name (/zusammenfassung-aus, aus einer alten Datei in ~/.claude/commands) sagt nur den neuen.
+    const alterName = (e: { command: string }) => ({ text: neuerName(ALTE_BEFEHLE.get(e.command) ?? e.command) })
+    on('command.run', { command: [...ALTE_BEFEHLE.keys()] }, async (_$, e) => alterName(e)).catch((_$, e) => alterName(e))
 
     // Eine neue Runde beginnt die Aufzeichnung von vorn. Die Zusammenfassung der
     // letzten Arbeitsrunde bleibt stehen, bis eine neue Arbeitsrunde sie ersetzt.

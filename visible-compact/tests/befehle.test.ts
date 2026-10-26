@@ -1,4 +1,4 @@
-/** Je Knopf ein Befehl: angemeldet, mit Hilfe, mit derselben Wirkung wie der Knopf. */
+/** Je Knopf ein Befehl /visible-compact:…: mit Hilfe, mit derselben Wirkung wie der Knopf; die alten Namen nennen den neuen. */
 import type { CommandSpec, On, SessionAppendInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
@@ -86,24 +86,34 @@ async function knoepfe($: Engine) {
 }
 
 const NAMEN = [
-  'visible-compact-hilfe',
-  'visible-compact-zeigen',
-  'visible-compact-uebersetzen-an',
-  'visible-compact-uebersetzen-aus',
+  'visible-compact:hilfe',
+  'visible-compact:zeigen',
+  'visible-compact:uebersetzen-an',
+  'visible-compact:uebersetzen-aus',
 ]
 
-test('genau die freigegebenen Befehle, alle angemeldet, mit Beschreibung', async ($, on) => {
+test('genau die freigegebenen Befehle, mit Beschreibung; angemeldet ist nur /show-last-compact', async ($, on) => {
   const w = welt(on)
   await start($)
   expect(BEFEHLE.map(b => b.name)).toEqual(NAMEN)
-  for (const name of NAMEN) {
-    const spec = w.angemeldet.find(s => s.name === name)
-    expect(spec).toBeDefined()
-    expect((spec?.description ?? '').length).toBeGreaterThan(10)
-    expect(spec?.immediate).toBe(true)
+  for (const b of BEFEHLE) {
+    expect(b.description.length).toBeGreaterThan(10)
+    // Die Langform ist eine Datei in commands/: Einen Namen mit Doppelpunkt nimmt $.command.register nicht.
+    expect(w.angemeldet.find(s => s.name === b.name)).toBeUndefined()
   }
-  // Die Kurzform bleibt.
-  expect(w.angemeldet.some(s => s.name === 'show-last-compact')).toBe(true)
+  // Die Kurzform bleibt, die alten Namen mit Bindestrich sind nicht mehr angemeldet.
+  expect(w.angemeldet.map(s => s.name)).toEqual(['show-last-compact'])
+})
+
+test('ein alter Name wie /visible-compact-zeigen sagt nur, wie der Befehl jetzt heißt', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  for (const name of NAMEN) {
+    const alt = name.replace('visible-compact:', 'visible-compact-')
+    for (const arg of ['', 'hilfe']) expect(await befehl($, alt, arg)).toBe(`Der Befehl heißt jetzt /${name}.`)
+  }
+  expect(w.geoeffnet).toEqual([])
+  expect(w.store.has('translate:sitzung-1')).toBe(false)
 })
 
 test('jeder Befehl erklärt sich mit hilfe und mit ?', async ($, on) => {
@@ -121,19 +131,19 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?', async ($, on) => {
   expect(w.store.has('translate:sitzung-1')).toBe(false)
 })
 
-test('/visible-compact-hilfe listet alle Befehle mit einer Zeile', async ($, on) => {
+test('/visible-compact:hilfe listet alle Befehle mit einer Zeile', async ($, on) => {
   welt(on)
   await start($)
-  const text = await befehl($, 'visible-compact-hilfe')
+  const text = await befehl($, 'visible-compact:hilfe')
   for (const b of BEFEHLE) expect(text).toContain(`/${b.name} – ${b.description}`)
 })
 
 test('zeigen: Text sofort, Fenster dahinter; vom Handy nur Text; ohne Verdichtung ein Satz', async ($, on) => {
   const w = welt(on)
   await start($)
-  expect(await befehl($, 'visible-compact-zeigen')).toBe('"Verdichtungen des Chats" öffnet sich.')
+  expect(await befehl($, 'visible-compact:zeigen')).toBe('"Verdichtungen des Chats" öffnet sich.')
   expect(w.geoeffnet).toEqual(['visible-compact'])
-  const handy = await befehl($, 'visible-compact-zeigen', '', 'bridge')
+  const handy = await befehl($, 'visible-compact:zeigen', '', 'bridge')
   expect(handy).toContain('Das Fenster geht nur am Rechner.')
   expect(handy).toContain('16k von 763k')
   expect(w.geoeffnet).toEqual(['visible-compact'])
@@ -142,7 +152,7 @@ test('zeigen: Text sofort, Fenster dahinter; vom Handy nur Text; ohne Verdichtun
 test('zeigen ohne Verdichtung sagt, was zu tun ist', async ($, on) => {
   const w = welt(on, { verdichtet: false })
   await start($)
-  expect(await befehl($, 'visible-compact-zeigen')).toBe('In diesem Chat wurde noch nichts verdichtet. Führ zuerst /compact aus.')
+  expect(await befehl($, 'visible-compact:zeigen')).toBe('In diesem Chat wurde noch nichts verdichtet. Führ zuerst /compact aus.')
   expect(w.geoeffnet).toEqual([])
 })
 
@@ -150,13 +160,13 @@ test('uebersetzen-an und -aus wirken wie der Knopf, nur in diesem Chat', async (
   const w = welt(on)
   await start($)
   expect(await knoepfe($)).toContain('Übersetzen')
-  expect(await befehl($, 'visible-compact-uebersetzen-an')).toContain('in diesem Chat an')
+  expect(await befehl($, 'visible-compact:uebersetzen-an')).toContain('in diesem Chat an')
   expect(w.store.get('translate:sitzung-1')).toEqual({ at: Date.UTC(2026, 9, 18), isOn: true })
   expect(await knoepfe($)).toContain('Original zeigen')
   // Noch einmal an bleibt an (setzt, schaltet nicht um).
-  await befehl($, 'visible-compact-uebersetzen-an')
+  await befehl($, 'visible-compact:uebersetzen-an')
   expect(await knoepfe($)).toContain('Original zeigen')
-  expect(await befehl($, 'visible-compact-uebersetzen-aus')).toContain('in diesem Chat aus')
+  expect(await befehl($, 'visible-compact:uebersetzen-aus')).toContain('in diesem Chat aus')
   expect(w.store.get('translate:sitzung-1')).toEqual({ at: Date.UTC(2026, 9, 18), isOn: false })
   expect(await knoepfe($)).toContain('Übersetzen')
   // Der Knopf und der Befehl schalten dasselbe.
@@ -164,7 +174,7 @@ test('uebersetzen-an und -aus wirken wie der Knopf, nur in diesem Chat', async (
   await ui.press({ key: 'translate' })
   await ui.unmount()
   expect((w.store.get('translate:sitzung-1') as { isOn: boolean }).isOn).toBe(true)
-  await befehl($, 'visible-compact-uebersetzen-aus')
+  await befehl($, 'visible-compact:uebersetzen-aus')
   expect(await knoepfe($)).toContain('Übersetzen')
 })
 
@@ -173,7 +183,7 @@ test('ein Fehler wird zu einem schlichten Satz', async ($, on) => {
   welt(on, { kaputt: () => kaputt })
   await start($)
   kaputt = true
-  for (const name of ['visible-compact-uebersetzen-an', 'visible-compact-uebersetzen-aus']) expect(await befehl($, name)).toBe(BEFEHL_FEHLER)
+  for (const name of ['visible-compact:uebersetzen-an', 'visible-compact:uebersetzen-aus']) expect(await befehl($, name)).toBe(BEFEHL_FEHLER)
 })
 
 test('die Antworten der neuen Befehle bekommen den Zusatz statt des Vorsatzes', async ($, on) => {

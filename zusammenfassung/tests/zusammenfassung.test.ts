@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
-import { BEFEHLE, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, relPfad, zeilenUmbruch } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, relPfad, zeilenUmbruch } from '../hooks/register'
 
 const BAND = { plugin: 'zusammenfassung', component: 'AbovePrompt' } as const
 
@@ -679,12 +679,12 @@ test('Zeilen ohne den eigenen Namen bleiben, wie sie sind', async ($, on) => {
 // --- Die Einzelbefehle ---
 
 const NEUE = [
-    'zusammenfassung-hilfe',
-    'zusammenfassung-an',
-    'zusammenfassung-aus',
-    'zusammenfassung-aufklappen',
-    'zusammenfassung-zuklappen',
-    'zusammenfassung-replay',
+    'zusammenfassung:hilfe',
+    'zusammenfassung:an',
+    'zusammenfassung:aus',
+    'zusammenfassung:aufklappen',
+    'zusammenfassung:zuklappen',
+    'zusammenfassung:replay',
 ]
 
 type B$ = { command: { run: (e: never) => Promise<{ text?: unknown }> } }
@@ -699,16 +699,16 @@ test('die Tabelle der Einzelbefehle ist vollstaendig', () => {
 })
 
 for (const b of BEFEHLE) {
-    test(`/${b.name}: registriert, mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
+    test(`/${b.name}: nicht angemeldet (eine Datei in commands/), mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
         mock.clock(on, { now: 1_000_000 })
         mock.store(on, {})
         const { angemeldet } = boden(on, [ANTWORT_MODELL])
         await start($ as never)
-        const eintrag = angemeldet.find(a => a.name === b.name)
-        expect(eintrag?.description).toBe(b.description)
+        // Ein Name mit Doppelpunkt laesst sich nicht anmelden; Claude Code setzt zusammenfassung: vor die Datei.
+        expect(b.name.startsWith('zusammenfassung:')).toBe(true)
+        expect(angemeldet.find(a => a.name === b.name)).toBeUndefined()
         expect(b.description).toMatch(/[äöüÄÖÜß]|^[A-ZÄÖÜ]/)
-        expect(eintrag?.argumentHint).toBe(b.argumentHint)
-        expect(eintrag?.immediate).toBe(true)
+        expect(b.description).not.toContain('(Zusammenfassung)')
         for (const arg of ['hilfe', '?', ' Hilfe ']) {
             const t = await befehl($ as never, b.name, arg)
             expect(t).toBe(hilfeText(b))
@@ -719,26 +719,51 @@ for (const b of BEFEHLE) {
     })
 }
 
-test('/zusammenfassung-hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzformen eingeschlossen', async ($, on) => {
+test('angemeldet sind nur die Kurzformen /zusammenfassung und /replay, kein alter Name', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { angemeldet } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    expect(angemeldet.map(a => a.name)).toEqual(['zusammenfassung', 'replay'])
+    expect(angemeldet.every(a => a.immediate === true)).toBe(true)
+})
+
+test('ein alter Name sagt den neuen und tut sonst nichts', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { fragen, fenster } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    expect([...ALTE_BEFEHLE.keys()]).toEqual(NEUE.map(n => n.replace(':', '-')))
+    expect(await befehl($ as never, 'zusammenfassung-aus')).toBe('Der Befehl heißt jetzt /zusammenfassung:aus.')
+    expect(await befehl($ as never, 'zusammenfassung-hilfe', 'hilfe')).toBe('Der Befehl heißt jetzt /zusammenfassung:hilfe.')
+    expect(await befehl($ as never, 'zusammenfassung-replay')).toBe('Der Befehl heißt jetzt /zusammenfassung:replay.')
+    // Aus ist nichts: die naechste Runde wird zusammengefasst; ein Fenster geht nicht auf.
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+    expect(fenster).toEqual([])
+})
+
+test('/zusammenfassung:hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzformen eingeschlossen', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, [ANTWORT_MODELL])
     await start($ as never)
-    const zeilen = (await befehl($ as never, 'zusammenfassung-hilfe')).split('\n')
+    const zeilen = (await befehl($ as never, 'zusammenfassung:hilfe')).split('\n')
     for (const name of [...NEUE, 'zusammenfassung', 'replay']) {
         expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
     }
     expect(zeilen).toHaveLength(NEUE.length + 3)
 })
 
-test('/zusammenfassung-aus und -an schalten nur diesen Chat, wie /zusammenfassung; das Replay bleibt', async ($, on) => {
+test('/zusammenfassung:aus und :an schalten nur diesen Chat, wie /zusammenfassung; das Replay bleibt', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const { fragen, chat } = boden(on, [ANTWORT_MODELL])
     await start($ as never)
-    expect(await befehl($ as never, 'zusammenfassung-aus')).toBe('Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.')
+    expect(await befehl($ as never, 'zusammenfassung:aus')).toBe('Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.')
     // Zweimal aus bleibt aus, anders als der Umschalter.
-    await befehl($ as never, 'zusammenfassung-aus')
+    await befehl($ as never, 'zusammenfassung:aus')
     await runde($ as never, 't1', 5_000, [EDIT])
     await clock.advance(0)
     expect(fragen).toHaveLength(0)
@@ -752,14 +777,14 @@ test('/zusammenfassung-aus und -an schalten nur diesen Chat, wie /zusammenfassun
     await clock.advance(0)
     expect(fragen).toHaveLength(1)
 
-    // Zurueck in Chat A: aus; /zusammenfassung-an schaltet ihn ein, zweimal an bleibt an.
+    // Zurueck in Chat A: aus; /zusammenfassung:an schaltet ihn ein, zweimal an bleibt an.
     chat.id = 'chat-a'
     await start($ as never)
     await runde($ as never, 't3', 5_000, [EDIT])
     await clock.advance(0)
     expect(fragen).toHaveLength(1)
-    expect(await befehl($ as never, 'zusammenfassung-an')).toBe('Die Zusammenfassung ist in diesem Chat an.')
-    await befehl($ as never, 'zusammenfassung-an')
+    expect(await befehl($ as never, 'zusammenfassung:an')).toBe('Die Zusammenfassung ist in diesem Chat an.')
+    await befehl($ as never, 'zusammenfassung:an')
     await runde($ as never, 't4', 5_000, [EDIT])
     await clock.advance(0)
     expect(fragen).toHaveLength(2)
@@ -767,16 +792,16 @@ test('/zusammenfassung-aus und -an schalten nur diesen Chat, wie /zusammenfassun
     expect(await befehl($ as never, 'zusammenfassung')).toContain('ist aus')
 })
 
-test('/zusammenfassung-aufklappen und -zuklappen wirken wie der Chevron', async ($, on) => {
+test('/zusammenfassung:aufklappen und :zuklappen wirken wie der Chevron', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const { fragen } = boden(on, [ANTWORT_MODELL, 'Ausfuehrlich: Im Test fehlt die Flaeche der App.'])
     await start($ as never)
-    expect(await befehl($ as never, 'zusammenfassung-aufklappen')).toContain('keine Zusammenfassung')
+    expect(await befehl($ as never, 'zusammenfassung:aufklappen')).toContain('keine Zusammenfassung')
 
     await runde($ as never, 't1', 5_000, [EDIT, MULTI])
     await clock.advance(0)
-    expect(await befehl($ as never, 'zusammenfassung-aufklappen')).toBe(
+    expect(await befehl($ as never, 'zusammenfassung:aufklappen')).toBe(
         'Die Zusammenfassung ist aufgeklappt; die Erklärung zum Hinweis kommt gleich.',
     )
     await clock.advance(0)
@@ -787,11 +812,11 @@ test('/zusammenfassung-aufklappen und -zuklappen wirken wie der Chevron', async 
     expect(text).toContain('src/leiste.ts  | +1 |   | −1')
     expect((await ui.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏶')
     // Noch einmal auf: nichts aendert sich, keine zweite Frage.
-    expect(await befehl($ as never, 'zusammenfassung-aufklappen')).toBe('Die Zusammenfassung ist aufgeklappt.')
+    expect(await befehl($ as never, 'zusammenfassung:aufklappen')).toBe('Die Zusammenfassung ist aufgeklappt.')
     await clock.advance(0)
     expect(fragen).toHaveLength(2)
 
-    expect(await befehl($ as never, 'zusammenfassung-zuklappen')).toBe('Die Zusammenfassung ist zugeklappt.')
+    expect(await befehl($ as never, 'zusammenfassung:zuklappen')).toBe('Die Zusammenfassung ist zugeklappt.')
     const zu = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     expect(await leiste(zu as never)).not.toContain('Ausfuehrlich')
     expect((await zu.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏷')
@@ -800,18 +825,18 @@ test('/zusammenfassung-aufklappen und -zuklappen wirken wie der Chevron', async 
     expect((await zu.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏶')
 })
 
-test('/zusammenfassung-replay antwortet erst und oeffnet dann das Fenster, wie der Kreispfeil', async ($, on) => {
+test('/zusammenfassung:replay antwortet erst und oeffnet dann das Fenster, wie der Kreispfeil', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const { fenster } = boden(on, [ANTWORT_MODELL])
     await start($ as never)
-    expect(await befehl($ as never, 'zusammenfassung-replay')).toBe('Replay: keine Dateiänderungen in der letzten Runde.')
+    expect(await befehl($ as never, 'zusammenfassung:replay')).toBe('Replay: keine Dateiänderungen in der letzten Runde.')
     await clock.advance(0)
     expect(fenster).toEqual([])
 
     await runde($ as never, 't1', 5_000, [EDIT, MULTI])
     await clock.advance(0)
-    expect(await befehl($ as never, 'zusammenfassung-replay')).toBe('Replay: 3 Änderungen in 2 Dateien. Das Fenster geht gleich auf.')
+    expect(await befehl($ as never, 'zusammenfassung:replay')).toBe('Replay: 3 Änderungen in 2 Dateien. Das Fenster geht gleich auf.')
     expect(fenster).toEqual([])
     await clock.advance(0)
     expect(fenster).toEqual(['zusammenfassung-replay'])
@@ -819,14 +844,14 @@ test('/zusammenfassung-replay antwortet erst und oeffnet dann das Fenster, wie d
     expect(await leiste(seite as never)).toContain('Schritt 1 von 3')
 })
 
-test('/zusammenfassung-replay vom Handy: die Schritte als Text, kein Fenster', async ($, on) => {
+test('/zusammenfassung:replay vom Handy: die Schritte als Text, kein Fenster', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const { fenster } = boden(on, [ANTWORT_MODELL])
     await start($ as never)
     await runde($ as never, 't1', 5_000, [EDIT, MULTI])
     await clock.advance(0)
-    const t = await befehl($ as never, 'zusammenfassung-replay', '', { kind: 'bridge' })
+    const t = await befehl($ as never, 'zusammenfassung:replay', '', { kind: 'bridge' })
     expect(t).toBe(
         [
             'Replay: 3 Änderungen in 2 Dateien.',
@@ -860,8 +885,8 @@ test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) 
     boden(on, [ANTWORT_MODELL])
     await start($ as never)
     kaputt = true
-    expect(await befehl($ as never, 'zusammenfassung-aus')).toBe(fehlerText('zusammenfassung-aus'))
-    expect(fehlerText('zusammenfassung-aus')).toBe('/zusammenfassung-aus hat nicht geklappt. Versuch es gleich noch einmal.')
+    expect(await befehl($ as never, 'zusammenfassung:aus')).toBe(fehlerText('zusammenfassung:aus'))
+    expect(fehlerText('zusammenfassung:aus')).toBe('/zusammenfassung:aus hat nicht geklappt. Versuch es gleich noch einmal.')
 })
 
 test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', async ($, on) => {

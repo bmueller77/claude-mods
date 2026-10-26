@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { BEFEHLE, EINSCHAETZUNG_MS, HILFE, HINWEIS_OHNE, UEBERNAHME_MS } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, EINSCHAETZUNG_MS, HILFE, HINWEIS_OHNE, UEBERNAHME_MS } from '../hooks/register'
 import { GEMELDET } from '../hooks/logik'
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -161,13 +161,39 @@ const MITTEN_IM_CHAT = [
     { role: 'assistant' as const, text: 'Hier ist sie.', toolUses: [] as never[] },
 ]
 
-test('alle Befehle angemeldet, sofort, mit deutscher Beschreibung und Hinweis', async ($, on) => {
+test('angemeldet ist nur /modellwahl, sofort, mit deutscher Beschreibung und Hinweis; die Langformen nicht', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on)
     await start($)
-    expect(b.angemeldet.map(a => a.name)).toEqual([
+    expect(b.angemeldet.map(a => a.name)).toEqual(['modellwahl'])
+    const a = b.angemeldet[0]
+    expect(a?.immediate).toBe(true)
+    expect(a?.description).toBe('Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft (Modellwahl)')
+    expect(a?.argumentHint).toBe('[Aufgabe | ja | nein]')
+    // Die Langformen liegen als Dateien in commands/: ein Name mit Doppelpunkt laesst sich nicht anmelden.
+    expect(BEFEHLE.map(k => k.name)).toEqual([
         'modellwahl',
+        'modellwahl:uebernehmen',
+        'modellwahl:ablehnen',
+        'modellwahl:zeigen',
+        'modellwahl:hilfe',
+        'modellwahl:auto-an',
+        'modellwahl:auto-aus',
+    ])
+    for (const k of BEFEHLE) {
+        // Den Mod nennt das Menue selbst; beim Grundbefehl haengt ihn erst die Anmeldung an.
+        expect(k.description).not.toContain('(Modellwahl)')
+        expect(k.argumentHint).not.toBe('')
+    }
+})
+
+test('ein alter Name wie /modellwahl-zeigen nennt nur den neuen und tut sonst nichts', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { antworten: [wahlJson('opus', 'high')], nachrichten: MITTEN_IM_CHAT })
+    await start($, 'resume')
+    expect([...ALTE_BEFEHLE.keys()]).toEqual([
         'modellwahl-uebernehmen',
         'modellwahl-ablehnen',
         'modellwahl-zeigen',
@@ -175,11 +201,20 @@ test('alle Befehle angemeldet, sofort, mit deutscher Beschreibung und Hinweis', 
         'modellwahl-auto-an',
         'modellwahl-auto-aus',
     ])
-    for (const a of b.angemeldet) {
-        expect(a.immediate).toBe(true)
-        expect(a.description).toContain('(Modellwahl)')
-        expect(a.argumentHint ?? '').not.toBe('')
+    for (const [alt, neu] of ALTE_BEFEHLE) {
+        expect(neu).toBe(alt.replace('modellwahl-', 'modellwahl:'))
+        expect(await befehl($, alt)).toBe(`Der Befehl heißt jetzt /${neu}.`)
+        expect(await befehl($, alt, 'hilfe')).toBe(`Der Befehl heißt jetzt /${neu}.`)
     }
+    // Nichts ist passiert: keine Einschätzung, kein Vorschlag, die Automatik steht auf dem Standard.
+    expect(b.anfragen).toHaveLength(0)
+    expect(b.status.filter(s => s !== undefined)).toEqual([])
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Automatisch in neuen Chats: an (Standard).')
+    // Auch ein offener Vorschlag bleibt offen.
+    await befehl($, 'modellwahl')
+    expect(await befehl($, 'modellwahl-uebernehmen')).toBe('Der Befehl heißt jetzt /modellwahl:uebernehmen.')
+    expect(b.status.at(-1)).toBe('Modellwahl: Vorschlag Opus · hoch')
+    expect(b.angemeldet.find(k => k.name.startsWith('modellwahl-'))).toBeUndefined()
 })
 
 test('neuer Chat: die erste Nachricht schlägt vor und läuft sofort; nach 15 s gilt der Vorschlag mit voller ID und Aufwand', async ($, on) => {
@@ -229,7 +264,7 @@ test('Desktop-App: kein /model und kein /effort; die Auswahl der App zieht die W
     expect(b.befehle).toEqual([])
     // Die App schickt ihre Auswahl noch einmal, ohne Wechsel: keine Entscheidung der Person.
     await $.classic.PostModelSwitch({ from_model: 'claude-opus-5-5', to_model: 'claude-opus-5-5', requested_model: 'opus', source: 'sdk' } as never)
-    expect(await befehl($, 'modellwahl-zeigen')).toContain('Zurückgezogen: nein.')
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Zurückgezogen: nein.')
     await schritt($, 'claude-opus-5-5', 'xhigh')
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
     expect(b.status.at(-1)).toBe('Modellwahl: Haiku · niedrig')
@@ -365,7 +400,7 @@ test('mitten im Chat gilt auch Opus oder Fable nach 15 s ohne Reaktion', async (
     await schritt($, 'claude-sonnet-5-5', 'medium')
     await befehl($, 'modellwahl')
     await clock.advance(UEBERNAHME_MS - 1000)
-    expect(await befehl($, 'modellwahl-zeigen')).toContain('Offener Vorschlag: Fable · sehr hoch, gilt in 1 s.')
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Offener Vorschlag: Fable · sehr hoch, gilt in 1 s.')
     await clock.advance(1000)
     await schritt($, 'claude-sonnet-5-5', 'medium')
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-fable-5-1', effort: 'xhigh' })
@@ -386,7 +421,7 @@ test('vom Handy: kein Countdown, der Vorschlag wartet zehn Minuten auf ja', asyn
     await clock.advance(5 * MIN)
     await schritt($)
     expect(b.schritte[0]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
-    expect(await befehl($, 'modellwahl-zeigen', '', 'bridge')).toContain('wartet auf ja')
+    expect(await befehl($, 'modellwahl:zeigen', '', 'bridge')).toContain('wartet auf ja')
     await clock.advance(6 * MIN)
     expect(await befehl($, 'modellwahl', 'ja', 'bridge')).toContain('Kein offener Vorschlag')
     await schritt($)
@@ -415,14 +450,14 @@ test('vom Handy: ja, ok oder Okay übernehmen; die Nachricht geht trotzdem an Cl
     expect(b.eingang.at(-1)?.context).toEqual([])
 })
 
-test('/modellwahl nein, /modellwahl-ablehnen und /modellwahl-uebernehmen', async ($, on) => {
+test('/modellwahl nein, /modellwahl:ablehnen und /modellwahl:uebernehmen', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { antworten: [wahlJson('opus', 'high'), wahlJson('haiku', 'low')], nachrichten: MITTEN_IM_CHAT })
     await start($, 'resume')
     await schritt($, 'claude-sonnet-5-5', 'medium')
     await befehl($, 'modellwahl')
-    expect(await befehl($, 'modellwahl-ablehnen')).toBe('Modellwahl: Vorschlag verworfen. Modell und Aufwand bleiben, wie sie sind.')
+    expect(await befehl($, 'modellwahl:ablehnen')).toBe('Modellwahl: Vorschlag verworfen. Modell und Aufwand bleiben, wie sie sind.')
     expect(await befehl($, 'modellwahl', 'nein')).toBe('Modellwahl: Kein offener Vorschlag.')
     expect(b.status.at(-1)).toBeUndefined()
     await clock.advance(UEBERNAHME_MS)
@@ -430,7 +465,7 @@ test('/modellwahl nein, /modellwahl-ablehnen und /modellwahl-uebernehmen', async
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
 
     await befehl($, 'modellwahl')
-    expect(await befehl($, 'modellwahl-uebernehmen')).toBe('Modellwahl: Haiku · niedrig – Umbau über mehrere Dateien. Kontext wird einmal neu gelesen.')
+    expect(await befehl($, 'modellwahl:uebernehmen')).toBe('Modellwahl: Haiku · niedrig – Umbau über mehrere Dateien. Kontext wird einmal neu gelesen.')
     await schritt($, 'claude-sonnet-5-5', 'medium')
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
 })
@@ -530,7 +565,7 @@ test('Modell von Hand gewechselt (App): zurückgezogen, nichts mehr überschrieb
     await schritt($, 'claude-haiku-5-5', 'medium')
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'medium' })
     expect(b.status.at(-1)).toBeUndefined()
-    expect(await befehl($, 'modellwahl-zeigen')).toContain('Zurückgezogen: Du hast Modell oder Aufwand selbst umgestellt.')
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Zurückgezogen: Du hast Modell oder Aufwand selbst umgestellt.')
 })
 
 test('von Hand umgestellt, solange der Vorschlag läuft: er ist verworfen', async ($, on) => {
@@ -593,26 +628,26 @@ test('Automatik je Chat: aus, dann an; der Standard kommt aus den Einstellungen'
     mock.store(on, {})
     const b = boden(on, { antworten: [wahlJson('haiku', 'low')] })
     await start($)
-    expect(await befehl($, 'modellwahl-auto-aus')).toBe('Modellwahl: Automatik in neuen Chats aus, nur für diesen Chat.')
+    expect(await befehl($, 'modellwahl:auto-aus')).toBe('Modellwahl: Automatik in neuen Chats aus, nur für diesen Chat.')
     await sende($, 'Erste Nachricht.')
     expect(b.anfragen).toHaveLength(0)
-    expect(await befehl($, 'modellwahl-zeigen')).toContain('Automatisch in neuen Chats: aus (nur dieser Chat).')
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Automatisch in neuen Chats: aus (nur dieser Chat).')
     // Nach /clear gilt der Schalter weiter: dasselbe Fenster.
     await $.session.end({ reason: 'clear', sessionId: 'sitzung-1', resume: { id: 'sitzung-1' } } as never)
     b.stand.sid = 'sitzung-2'
     await $.classic.SessionStart({ source: 'clear' } as never)
     await sende($, 'Nach clear.')
     expect(b.anfragen).toHaveLength(0)
-    expect(await befehl($, 'modellwahl-auto-an')).toBe('Modellwahl: Automatik in neuen Chats an, nur für diesen Chat.')
+    expect(await befehl($, 'modellwahl:auto-an')).toBe('Modellwahl: Automatik in neuen Chats an, nur für diesen Chat.')
 })
 
-test('Standard aus: keine automatische Wahl, bis /modellwahl-auto-an', { options: { autoBeiNeuemChat: false } }, async ($, on) => {
+test('Standard aus: keine automatische Wahl, bis /modellwahl:auto-an', { options: { autoBeiNeuemChat: false } }, async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { antworten: [wahlJson('haiku', 'low')] })
     await start($)
-    expect(await befehl($, 'modellwahl-zeigen')).toContain('Automatisch in neuen Chats: aus (Standard).')
-    await befehl($, 'modellwahl-auto-an')
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Automatisch in neuen Chats: aus (Standard).')
+    await befehl($, 'modellwahl:auto-an')
     await sende($, 'Erste Nachricht.')
     expect(b.anfragen).toHaveLength(1)
 })
@@ -636,7 +671,7 @@ test('jeder Befehl versteht hilfe und ?, ohne etwas zu tun', async ($, on) => {
             expect(await befehl($, k.name, wort)).toBe(k.hilfe)
         }
     }
-    expect(await befehl($, 'modellwahl-hilfe')).toBe(HILFE)
+    expect(await befehl($, 'modellwahl:hilfe')).toBe(HILFE)
     expect(b.anfragen).toHaveLength(0)
 })
 
@@ -645,7 +680,7 @@ test('ein Fehler im Befehl wird ein schlichter Satz', async ($, on) => {
     mock.store(on, {})
     boden(on, { sid: 'kaputt' })
     await $.session.start({ cwd: '/projekt', surface: null, isInteractive: false } as never)
-    expect(await befehl($, 'modellwahl-zeigen')).toBe('Modellwahl: Das hat nicht geklappt. Modell und Aufwand bleiben, wie sie sind.')
+    expect(await befehl($, 'modellwahl:zeigen')).toBe('Modellwahl: Das hat nicht geklappt. Modell und Aufwand bleiben, wie sie sind.')
 })
 
 test('Vorsatz: der eigene Name fällt weg, am Ende steht, von wem es kommt', async ($, on) => {
@@ -685,5 +720,5 @@ test('Kalibrierung über die Runden: aus Limit-Anstieg und Tokens wird eine Quot
     // Hauptrunde: 1 Mio. Cache-Lesen auf Opus = 100k; zusammen 600k fuer einen Anstieg um 0,6 Punkte.
     b.stand.limits = [{ kind: 'five_hour', percentUsed: 10.6, resetsAt: '2026-10-19T15:00:00Z' }]
     await rundeEnde($, { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' })
-    expect(await befehl($, 'modellwahl-zeigen')).toContain('Kalibrierung: 1 Messung, 1 % des 5-Stunden-Limits ≈ 1 Mio. Opus-Tokens.')
+    expect(await befehl($, 'modellwahl:zeigen')).toContain('Kalibrierung: 1 Messung, 1 % des 5-Stunden-Limits ≈ 1 Mio. Opus-Tokens.')
 })

@@ -67,11 +67,16 @@ export const ZEILE = 'modellwahl'
 /** Der Standardsatz, wenn ein Befehl scheitert. */
 export const BEFEHL_FEHLER = 'Modellwahl: Das hat nicht geklappt. Modell und Aufwand bleiben, wie sie sind.'
 
-/** Die Befehle mit Beschreibung, Hinweis und Hilfe. */
+/**
+ * Die Befehle mit Beschreibung, Hinweis und Hilfe. Angemeldet wird nur /modellwahl;
+ * die Langformen /modellwahl:<funktion> liegen als Dateien in commands/ des Mods,
+ * Claude Code setzt modellwahl: davor. Einen Namen mit Doppelpunkt nimmt
+ * `$.command.register` nicht, den Lauf beantwortet trotzdem dieser Mod.
+ */
 export const BEFEHLE = [
     {
         name: 'modellwahl',
-        description: 'Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft (Modellwahl)',
+        description: 'Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft',
         argumentHint: '[Aufgabe | ja | nein]',
         hilfe:
             '/modellwahl schlägt Modell und Aufwand für diesen Chat vor. Mit einer Aufgabe dahinter wird diese eingeschätzt, ohne die letzten Nachrichten. ' +
@@ -80,52 +85,69 @@ export const BEFEHLE = [
             'Im leeren Chat ohne Aufgabe schlägt er bei deiner nächsten Nachricht vor.',
     },
     {
-        name: 'modellwahl-uebernehmen',
-        description: 'Den offenen Vorschlag der Modellwahl sofort übernehmen (Modellwahl)',
+        name: 'modellwahl:uebernehmen',
+        description: 'Den offenen Vorschlag der Modellwahl sofort übernehmen',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl-uebernehmen übernimmt den offenen Vorschlag sofort, wie der Knopf Übernehmen über der Eingabe oder /modellwahl ja.',
+        hilfe: '/modellwahl:uebernehmen übernimmt den offenen Vorschlag sofort, wie der Knopf Übernehmen über der Eingabe oder /modellwahl ja.',
     },
     {
-        name: 'modellwahl-ablehnen',
-        description: 'Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben (Modellwahl)',
+        name: 'modellwahl:ablehnen',
+        description: 'Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl-ablehnen verwirft den offenen Vorschlag, wie der Knopf Nein über der Eingabe oder /modellwahl nein. Modell und Aufwand bleiben, wie sie sind.',
+        hilfe: '/modellwahl:ablehnen verwirft den offenen Vorschlag, wie der Knopf Nein über der Eingabe oder /modellwahl nein. Modell und Aufwand bleiben, wie sie sind.',
     },
     {
-        name: 'modellwahl-zeigen',
-        description: 'Aktuelle Modellwahl mit Grund, ob sie zurückgezogen ist, und den Stand der Kalibrierung zeigen (Modellwahl)',
+        name: 'modellwahl:zeigen',
+        description: 'Aktuelle Modellwahl mit Grund, ob sie zurückgezogen ist, und den Stand der Kalibrierung zeigen',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl-zeigen nennt die Wahl dieses Chats, ihren Grund, ob sie zurückgezogen ist, die Automatik und den Stand der Kalibrierung.',
+        hilfe: '/modellwahl:zeigen nennt die Wahl dieses Chats, ihren Grund, ob sie zurückgezogen ist, die Automatik und den Stand der Kalibrierung.',
     },
     {
-        name: 'modellwahl-hilfe',
-        description: 'Kurz erklären, was die Modellwahl tut und welche Befehle es gibt (Modellwahl)',
+        name: 'modellwahl:hilfe',
+        description: 'Kurz erklären, was die Modellwahl tut und welche Befehle es gibt',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl-hilfe erklärt die Modellwahl und ihre Befehle.',
+        hilfe: '/modellwahl:hilfe erklärt die Modellwahl und ihre Befehle.',
     },
     {
-        name: 'modellwahl-auto-an',
-        description: 'Automatische Modellwahl bei der ersten Nachricht eines neuen Chats einschalten, nur für diesen Chat (Modellwahl)',
+        name: 'modellwahl:auto-an',
+        description: 'Automatische Modellwahl bei der ersten Nachricht eines neuen Chats einschalten, nur für diesen Chat',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl-auto-an schaltet die automatische Wahl bei der ersten Nachricht eines neuen Chats ein, nur für diesen Chat (auch nach /clear).',
+        hilfe: '/modellwahl:auto-an schaltet die automatische Wahl bei der ersten Nachricht eines neuen Chats ein, nur für diesen Chat (auch nach /clear).',
     },
     {
-        name: 'modellwahl-auto-aus',
-        description: 'Automatische Modellwahl bei der ersten Nachricht eines neuen Chats ausschalten, nur für diesen Chat (Modellwahl)',
+        name: 'modellwahl:auto-aus',
+        description: 'Automatische Modellwahl bei der ersten Nachricht eines neuen Chats ausschalten, nur für diesen Chat',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl-auto-aus schaltet die automatische Wahl bei der ersten Nachricht eines neuen Chats aus, nur für diesen Chat (auch nach /clear).',
+        hilfe: '/modellwahl:auto-aus schaltet die automatische Wahl bei der ersten Nachricht eines neuen Chats aus, nur für diesen Chat (auch nach /clear).',
     },
 ] as const
 
 type Befehl = (typeof BEFEHLE)[number]['name']
 
-/** Was /modellwahl-hilfe antwortet. */
+/** Der einzige angemeldete Befehl; das Menue nennt dahinter den Mod. */
+export const GRUNDBEFEHL = BEFEHLE[0]
+
+/**
+ * Die alten Namen bis modellwahl 0.2: /modellwahl-zeigen statt /modellwahl:zeigen.
+ * Sie stehen nicht mehr im Menue; wer einen tippt (eine alte Datei in
+ * ~/.claude/commands), erfaehrt den neuen. Jeder mit dem vollen neuen Namen.
+ */
+export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map(
+    BEFEHLE.filter(b => b.name.includes(':')).map(b => [b.name.replace(':', '-'), b.name] as const),
+)
+
+/** Was ein alter Name antwortet: wie der Befehl jetzt heisst. */
+export function neuerName(name: string): string {
+    return `Der Befehl heißt jetzt /${name}.`
+}
+
+/** Was /modellwahl:hilfe antwortet. */
 export const HILFE = [
     'Modellwahl: Schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch bei der ersten Nachricht eines neuen Chats.',
     'Am Rechner gilt der Vorschlag nach 15 Sekunden von selbst (Übernehmen und Nein über der Eingabe); vom Handy erst auf ja oder ok.',
-    '/modellwahl [Aufgabe]: jetzt vorschlagen. /modellwahl ja oder /modellwahl-uebernehmen übernimmt, /modellwahl nein oder /modellwahl-ablehnen verwirft.',
-    '/modellwahl-zeigen: aktuelle Wahl, offener Vorschlag und Kalibrierung.',
-    '/modellwahl-auto-an, /modellwahl-auto-aus: Automatik nur für diesen Chat.',
+    '/modellwahl [Aufgabe]: jetzt vorschlagen. /modellwahl ja oder /modellwahl:uebernehmen übernimmt, /modellwahl nein oder /modellwahl:ablehnen verwirft.',
+    '/modellwahl:zeigen: aktuelle Wahl, offener Vorschlag und Kalibrierung.',
+    '/modellwahl:auto-an, /modellwahl:auto-aus: Automatik nur für diesen Chat.',
     'Stellst du Modell oder Aufwand selbst um, zieht sich der Mod in diesem Chat zurück.',
 ].join('\n')
 
@@ -477,7 +499,7 @@ async function vorschlagText($: EngineInterface, w: Einschaetzung, modellAendert
 /** Die Wahl mit Grund, als Satzteil. */
 const mitGrund = (w: Einschaetzung) => `${wahlText(w)}${w.grund ? ` – ${w.grund}` : ''}`
 
-/** /modellwahl [Aufgabe | ja | nein], auch hinter /modellwahl-uebernehmen und /modellwahl-ablehnen. */
+/** /modellwahl [Aufgabe | ja | nein], auch hinter /modellwahl:uebernehmen und /modellwahl:ablehnen. */
 async function befehlWahl($: EngineInterface, args: string, vomHandy: boolean): Promise<string> {
     await sitzung($)
     const a = args.trim()
@@ -518,7 +540,7 @@ async function befehlWahl($: EngineInterface, args: string, vomHandy: boolean): 
     return vorschlagText($, r.wahl, modellAendert, vomHandy)
 }
 
-/** /modellwahl-zeigen. */
+/** /modellwahl:zeigen. */
 async function befehlZeigen($: EngineInterface): Promise<string> {
     await sitzung($)
     const jetzt = await $.clock.now()
@@ -552,7 +574,7 @@ async function befehlZeigen($: EngineInterface): Promise<string> {
     return zeilen.join('\n')
 }
 
-/** /modellwahl-auto-an und -aus. */
+/** /modellwahl:auto-an und :auto-aus. */
 async function befehlAuto($: EngineInterface, an: boolean): Promise<string> {
     await sitzung($)
     z.auto = an
@@ -566,17 +588,17 @@ async function wirke($: EngineInterface, name: Befehl, args: string, vomHandy: b
     switch (name) {
         case 'modellwahl':
             return befehlWahl($, args, vomHandy)
-        case 'modellwahl-uebernehmen':
+        case 'modellwahl:uebernehmen':
             return befehlWahl($, 'ja', vomHandy)
-        case 'modellwahl-ablehnen':
+        case 'modellwahl:ablehnen':
             return befehlWahl($, 'nein', vomHandy)
-        case 'modellwahl-zeigen':
+        case 'modellwahl:zeigen':
             return befehlZeigen($)
-        case 'modellwahl-hilfe':
+        case 'modellwahl:hilfe':
             return HILFE
-        case 'modellwahl-auto-an':
+        case 'modellwahl:auto-an':
             return befehlAuto($, true)
-        case 'modellwahl-auto-aus':
+        case 'modellwahl:auto-aus':
             return befehlAuto($, false)
     }
 }
@@ -609,11 +631,15 @@ export const register: Register = (on, options) => {
         if (z.quelle === null) {
             z.neu = (await $.session.turns().catch(() => 1)) === 0
         }
-        for (const b of BEFEHLE) {
-            await $.command
-                .register({ name: b.name, description: b.description, argumentHint: b.argumentHint, immediate: true })
-                .catch(() => {})
-        }
+        // Nur der Grundbefehl; die Langformen /modellwahl:… kommen aus commands/ des Mods.
+        await $.command
+            .register({
+                name: GRUNDBEFEHL.name,
+                description: `${GRUNDBEFEHL.description} (Modellwahl)`,
+                argumentHint: GRUNDBEFEHL.argumentHint,
+                immediate: true,
+            })
+            .catch(() => {})
         await raeumeAuf($).catch(() => {})
         zeigeStatus($)
         return r
@@ -798,6 +824,12 @@ export const register: Register = (on, options) => {
             }
         }).catch(() => ({ text: BEFEHL_FEHLER }))
     }
+
+    // Ein alter Name wie /modellwahl-zeigen sagt nur, wie der Befehl jetzt heisst, und tut sonst nichts.
+    on('command.run', { command: [...ALTE_BEFEHLE.keys()] }, async ($, e) => {
+        const jetzt = ALTE_BEFEHLE.get(e.command)
+        return { text: jetzt === undefined ? BEFEHL_FEHLER : neuerName(jetzt) }
+    }).catch(() => ({ text: BEFEHL_FEHLER }))
 }
 
 /** Nach /clear: neuer Chat, keine Wahl; die Automatik dieses Fensters geht mit. */

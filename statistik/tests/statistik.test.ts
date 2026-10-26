@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionContextBreakdown } from 'claude-code'
 
-import { BEFEHLE, dauer, fableAus, fehlerText, hilfeText, leseDauer, restUhr, tokenMenge, uhrZeichen, warmRest, wochentagZeit } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, dauer, fableAus, fehlerText, hilfeText, leseDauer, restUhr, tokenMenge, uhrZeichen, warmRest, wochentagZeit } from '../hooks/register'
 
 const FLAECHEN = ['terminal', 'desktop'] as const
 const BAND = { plugin: 'statistik', component: 'AbovePrompt' } as const
@@ -1526,14 +1526,14 @@ test('Zeilen ohne den eigenen Namen bleiben, wie sie sind', async ($, on) => {
 // --- Die Einzelbefehle ---
 
 const NEUE = [
-    'statistik-hilfe',
-    'statistik-zeigen',
-    'statistik-kontext-zeigen',
-    'statistik-warmhalten-an',
-    'statistik-warmhalten-immer',
-    'statistik-warmhalten-aus',
-    'statistik-chat-aufraeumen',
-    'statistik-verdichten',
+    'statistik:hilfe',
+    'statistik:zeigen',
+    'statistik:kontext-zeigen',
+    'statistik:warmhalten-an',
+    'statistik:warmhalten-immer',
+    'statistik:warmhalten-aus',
+    'statistik:chat-aufraeumen',
+    'statistik:verdichten',
 ]
 
 const STAND: Stand = { tokens: 40_000, fenster: 200_000, schwelle: 166_000 }
@@ -1548,16 +1548,16 @@ test('die Tabelle der Einzelbefehle ist vollstaendig', () => {
 })
 
 for (const b of BEFEHLE) {
-    test(`/${b.name}: registriert, mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
+    test(`/${b.name}: nicht angemeldet (eine Datei in commands/), mit deutscher Beschreibung, und hilfe wie ? erklaert ihn`, async ($, on) => {
         mock.clock(on, { now: 1_000_000 })
         mock.store(on, {})
         const { angemeldet } = boden(on, STAND)
         await start($ as never)
-        const eintrag = angemeldet.find(a => a.name === b.name)
-        expect(eintrag?.description).toBe(b.description)
+        // Ein Name mit Doppelpunkt laesst sich nicht anmelden; Claude Code setzt statistik: vor die Datei.
+        expect(b.name.startsWith('statistik:')).toBe(true)
+        expect(angemeldet.find(a => a.name === b.name)).toBeUndefined()
         expect(b.description).toMatch(/[äöüÄÖÜß]|^[A-ZÄÖÜ]/)
-        expect(eintrag?.argumentHint).toBe(b.argumentHint)
-        expect(eintrag?.immediate).toBe(true)
+        expect(b.description).not.toContain('(Statistik)')
         for (const arg of ['hilfe', '?', ' Hilfe ']) {
             const t = await befehl($ as never, b.name, arg)
             expect(t).toBe(hilfeText(b))
@@ -1568,43 +1568,84 @@ for (const b of BEFEHLE) {
     })
 }
 
-test('nur /statistik-warmhalten-an nimmt ein Argument und sagt das im Hinweis', () => {
+test('nur /statistik:warmhalten-an nimmt ein Argument und sagt das im Hinweis', () => {
     expect(BEFEHLE.filter(b => b.argumentHint).map(b => [b.name, b.argumentHint])).toEqual([
-        ['statistik-warmhalten-an', '[Dauer, z. B. 3h oder 90m]'],
+        ['statistik:warmhalten-an', '[Dauer, z. B. 3h oder 90m]'],
     ])
 })
 
-test('/statistik-hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzformen eingeschlossen', async ($, on) => {
+test('angemeldet sind nur die Kurzformen /warmhalten und /statistik, kein alter Name', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const { angemeldet } = boden(on, STAND)
+    await start($ as never)
+    expect(angemeldet.map(a => a.name)).toEqual(['warmhalten', 'statistik'])
+    expect(angemeldet.every(a => a.immediate === true)).toBe(true)
+    expect(angemeldet.find(a => a.name === 'warmhalten')?.argumentHint).toBe('[6h | 90m | immer | aus | status]')
+})
+
+test('ein alter Name sagt den neuen und tut sonst nichts', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect([...ALTE_BEFEHLE.keys()]).toEqual(NEUE.map(n => n.replace(':', '-')))
+    expect(await befehl($ as never, 'statistik-warmhalten-an', '3h')).toBe('Der Befehl heißt jetzt /statistik:warmhalten-an.')
+    expect(await befehl($ as never, 'statistik-hilfe', 'hilfe')).toBe('Der Befehl heißt jetzt /statistik:hilfe.')
+    expect(await befehl($ as never, 'statistik-verdichten')).toBe('Der Befehl heißt jetzt /statistik:verdichten.')
+    await clock.advance(0)
+    expect(b.befehle).toEqual([])
+    expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
+    expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
+})
+
+test('die eigenen Befehle /statistik:… zaehlen beim Aufraeumen nicht als Leitstand oder GlanceFlow', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    const eigene = BEFEHLE.map(one => ({ name: one.name, description: one.description, source: 'plugin' }))
+    // Auch ein eigener Name, der wie eine Kopie endet, zaehlt nicht.
+    on('command.list', () => ({ value: [...eigene, { name: 'statistik:leitstand', description: '', source: 'plugin' }] }) as never)
+    await start($ as never)
+    await runde($ as never)
+    expect(await befehl($ as never, 'statistik:chat-aufraeumen')).toBe('Der Chat wird jetzt aufgeräumt.')
+    await clock.advance(0)
+    expect(b.befehle).toEqual(['compact'])
+})
+
+test('/statistik:hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzformen eingeschlossen', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, STAND)
     await start($ as never)
-    const zeilen = (await befehl($ as never, 'statistik-hilfe')).split('\n')
+    const zeilen = (await befehl($ as never, 'statistik:hilfe')).split('\n')
     for (const name of [...NEUE, 'statistik', 'warmhalten']) {
         expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
     }
     expect(zeilen).toHaveLength(NEUE.length + 3)
 })
 
-test('/statistik-zeigen zeigt dasselbe wie /statistik', async ($, on) => {
+test('/statistik:zeigen zeigt dasselbe wie /statistik', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, STAND)
     await start($ as never)
     await runde($ as never)
-    const k = await befehl($ as never, 'statistik-zeigen')
+    const k = await befehl($ as never, 'statistik:zeigen')
     expect(k).toContain('Modell        claude-opus-5')
     expect(k).toBe(await befehl($ as never, 'statistik'))
 })
 
-test('/statistik-kontext-zeigen antwortet erst und ruft dann /context, wie 📊', async ($, on) => {
+test('/statistik:kontext-zeigen antwortet erst und ruft dann /context, wie 📊', async ($, on) => {
     const clock = mock.clock(on, { now: JETZT })
     mock.store(on, {})
     const b = boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000 })
     const geoeffnet = fensterZaehler(on)
     await start($ as never)
     await runde($ as never)
-    expect(await befehl($ as never, 'statistik-kontext-zeigen')).toBe('Die Kontext-Anzeige (/context) geht gleich auf.')
+    expect(await befehl($ as never, 'statistik:kontext-zeigen')).toBe('Die Kontext-Anzeige (/context) geht gleich auf.')
     expect(b.befehle).toEqual([])
     await clock.advance(0)
     expect(b.befehle).toEqual(['context'])
@@ -1615,20 +1656,20 @@ test('/statistik-kontext-zeigen antwortet erst und ruft dann /context, wie 📊'
     expect(geoeffnet).toEqual([])
 })
 
-test('/statistik-kontext-zeigen vom Handy: eine Zeile Text statt der Anzeige', async ($, on) => {
+test('/statistik:kontext-zeigen vom Handy: eine Zeile Text statt der Anzeige', async ($, on) => {
     const clock = mock.clock(on, { now: JETZT })
     mock.store(on, {})
     const b = boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000 })
     await start($ as never)
     await runde($ as never)
-    expect(await vomHandy($ as never, 'statistik-kontext-zeigen')).toBe(
+    expect(await vomHandy($ as never, 'statistik:kontext-zeigen')).toBe(
         'Kontext: 68k von 200k Tokens belegt (34 %), verdichtet wird bei 166k. Die ausführliche Kontext-Anzeige gibt es nur am Rechner.',
     )
     await clock.advance(0)
     expect(b.befehle).toEqual([])
 })
 
-test('/statistik-warmhalten-an: ohne Angabe 6 h wie /warmhalten, mit Dauer so lange; der Schalter zeigt es', async ($, on) => {
+test('/statistik:warmhalten-an: ohne Angabe 6 h wie /warmhalten, mit Dauer so lange; der Schalter zeigt es', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, STAND)
@@ -1636,20 +1677,20 @@ test('/statistik-warmhalten-an: ohne Angabe 6 h wie /warmhalten, mit Dauer so la
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
 
-    expect(await befehl($ as never, 'statistik-warmhalten-an')).toBe('Warmhalten an für 6 h. Kurz vor jedem Ablauf hält ein Ping den Cache warm.')
+    expect(await befehl($ as never, 'statistik:warmhalten-an')).toBe('Warmhalten an für 6 h. Kurz vor jedem Ablauf hält ein Ping den Cache warm.')
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 6:00', variant: 'primary', kreuz: true })
-    expect(await befehl($ as never, 'statistik-warmhalten-an', '90m')).toContain('Warmhalten an für 1 h 30 min')
+    expect(await befehl($ as never, 'statistik:warmhalten-an', '90m')).toContain('Warmhalten an für 1 h 30 min')
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 1:30', variant: 'primary', kreuz: true })
     expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten an, noch 1 h 30 min.')
-    expect(await befehl($ as never, 'statistik-warmhalten-an', '3h')).toContain('Warmhalten an für 3 h')
+    expect(await befehl($ as never, 'statistik:warmhalten-an', '3h')).toContain('Warmhalten an für 3 h')
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 3:00', variant: 'primary', kreuz: true })
-    expect(await befehl($ as never, 'statistik-warmhalten-an', 'bald')).toBe(
-        '/statistik-warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.',
+    expect(await befehl($ as never, 'statistik:warmhalten-an', 'bald')).toBe(
+        '/statistik:warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.',
     )
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 3:00', variant: 'primary', kreuz: true })
 })
 
-test('/statistik-warmhalten-immer und -aus wirken wie der Schalter an der Grenze und das Kreuz', async ($, on) => {
+test('/statistik:warmhalten-immer und :warmhalten-aus wirken wie der Schalter an der Grenze und das Kreuz', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, STAND)
@@ -1657,20 +1698,20 @@ test('/statistik-warmhalten-immer und -aus wirken wie der Schalter an der Grenze
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
 
-    expect(await befehl($ as never, 'statistik-warmhalten-immer')).toBe('Warmhalten an, ohne Ende in diesem Chat.')
+    expect(await befehl($ as never, 'statistik:warmhalten-immer')).toBe('Warmhalten an, ohne Ende in diesem Chat.')
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 immer', variant: 'primary', kreuz: true })
     expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten an, ohne Ende in diesem Chat.')
 
-    expect(await befehl($ as never, 'statistik-warmhalten-aus')).toBe('Warmhalten ist aus.')
+    expect(await befehl($ as never, 'statistik:warmhalten-aus')).toBe('Warmhalten ist aus.')
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
     // Das Kreuz: derselbe Zustand.
-    await befehl($ as never, 'statistik-warmhalten-an')
+    await befehl($ as never, 'statistik:warmhalten-an')
     await ui.press({ key: 'warmhalten-aus' })
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
     expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
 })
 
-test('/statistik-chat-aufraeumen raeumt sofort auf, ohne Countdown, wie 🧽 nach seinem Countdown', async ($, on) => {
+test('/statistik:chat-aufraeumen raeumt sofort auf, ohne Countdown, wie 🧽 nach seinem Countdown', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, STAND)
@@ -1678,31 +1719,31 @@ test('/statistik-chat-aufraeumen raeumt sofort auf, ohne Countdown, wie 🧽 nac
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    expect(await befehl($ as never, 'statistik-chat-aufraeumen')).toBe('Der Chat wird jetzt aufgeräumt.')
+    expect(await befehl($ as never, 'statistik:chat-aufraeumen')).toBe('Der Chat wird jetzt aufgeräumt.')
     await clock.advance(0)
     expect(b.befehle).toEqual(['compact'])
     expect(toasts).toEqual([])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('⏳')
     expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
     // Wartet schon ein Verdichten, geschieht nichts zweimal.
-    expect(await befehl($ as never, 'statistik-chat-aufraeumen')).toBe('Es wartet schon ein Verdichten; es läuft, sobald Claude fertig ist.')
+    expect(await befehl($ as never, 'statistik:chat-aufraeumen')).toBe('Es wartet schon ein Verdichten; es läuft, sobald Claude fertig ist.')
     await clock.advance(2 * COUNTDOWN)
     expect(b.befehle).toEqual(['compact'])
 })
 
-test('/statistik-chat-aufraeumen nimmt wie 🧽 den Leitstand, wenn es ihn gibt', async ($, on) => {
+test('/statistik:chat-aufraeumen nimmt wie 🧽 den Leitstand, wenn es ihn gibt', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, STAND)
     on('command.list', () => ({ value: [{ name: 'glanceflow', description: '', source: 'plugin' }, { name: 'leitstand', description: '', source: 'plugin' }] }) as never)
     await start($ as never)
     await runde($ as never)
-    await befehl($ as never, 'statistik-chat-aufraeumen')
+    await befehl($ as never, 'statistik:chat-aufraeumen')
     await clock.advance(0)
     expect(b.befehle).toEqual(['leitstand tidy'])
 })
 
-test('/statistik-verdichten verdichtet sofort, ohne Countdown, wie 🔻 nach seinem Countdown', async ($, on) => {
+test('/statistik:verdichten verdichtet sofort, ohne Countdown, wie 🔻 nach seinem Countdown', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, STAND)
@@ -1711,7 +1752,7 @@ test('/statistik-verdichten verdichtet sofort, ohne Countdown, wie 🔻 nach sei
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    expect(await befehl($ as never, 'statistik-verdichten')).toBe('Der Kontext wird jetzt verdichtet.')
+    expect(await befehl($ as never, 'statistik:verdichten')).toBe('Der Kontext wird jetzt verdichtet.')
     await clock.advance(0)
     // Schlicht verdichten, auch mit Leitstand: wie der Pfeil.
     expect(b.befehle).toEqual(['compact'])
@@ -1730,7 +1771,7 @@ test('laeuft der Countdown eines Knopfs, endet er beim Befehl; gehandelt wird ge
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     await ui.press({ key: 'compact' })
     await clock.advance(3_000)
-    expect(await befehl($ as never, 'statistik-verdichten')).toBe('Der Kontext wird jetzt verdichtet.')
+    expect(await befehl($ as never, 'statistik:verdichten')).toBe('Der Kontext wird jetzt verdichtet.')
     await clock.advance(0)
     expect(b.befehle).toEqual(['compact'])
     expect(await ui.find({ type: 'Button', key: 'countdown-abbrechen' })).toBeFalsy()
@@ -1758,8 +1799,8 @@ test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) 
     boden(on, STAND)
     await start($ as never)
     kaputt = true
-    expect(await befehl($ as never, 'statistik-warmhalten-an', '3h')).toBe(fehlerText('statistik-warmhalten-an'))
-    expect(fehlerText('statistik-warmhalten-an')).toBe('/statistik-warmhalten-an hat nicht geklappt. Versuch es gleich noch einmal.')
+    expect(await befehl($ as never, 'statistik:warmhalten-an', '3h')).toBe(fehlerText('statistik:warmhalten-an'))
+    expect(fehlerText('statistik:warmhalten-an')).toBe('/statistik:warmhalten-an hat nicht geklappt. Versuch es gleich noch einmal.')
 })
 
 test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', async ($, on) => {

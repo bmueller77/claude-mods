@@ -1,6 +1,6 @@
 {
   "name": "prompt-upgrade",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Macht aus einem groben Prompt einen guten, bevor er rausgeht: bis zu drei schnelle Rückfragen, dann Original und Upgrade nebeneinander im Seitenfenster. Gesendet wird erst mit Ausführen. /better <Prompt>, /better an|aus, /better verlauf.",
   "author": {
     "name": "Björn Müller"

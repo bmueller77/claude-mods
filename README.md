@@ -17,18 +17,20 @@ In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/stati
 ## Befehle für jeden Knopf
 
 Alles, was sich per Knopf schalten oder auslösen lässt, geht auch per Befehl, damit es auch vom Handy aus
-geht. Die Namen folgen dem Muster `/<mod>-<funktion>[-<wert>]`, zum Beispiel `/statistik-warmhalten-aus`,
-`/autopilot-an`, `/reflect-speichern-global 2`. Jeder Mod hat `/<mod>-hilfe` mit allen Befehlen, und jeder Befehl
-erklärt sich mit `hilfe` dahinter (`/statistik-warmhalten-aus hilfe`). Der Leitstand folgt seit 0.56.0 Anthropics
-Schreibweise für Befehle eines Plugins, `/leitstand:<funktion>`, etwa `/leitstand:arbeitsmodus-gruppenarbeit` oder
-`/leitstand:hilfe`, und hat dazu Kurzformen ohne `leitstand:`, etwa `/pause`, `/verdecken-an` oder `/kurzantworten-an`.
-Ohne Kurzform bleiben `an`, `aus`, `hilfe` und `vermenschlichen`: Die ersten drei sagen allein nicht, welcher Mod
-gemeint ist, und `/vermenschlichen` ist der Skill selbst. Ein alter Name wie `/leitstand-pause` nennt nur noch den neuen.
-Befehle, die wie ein doppelter Knopfdruck etwas Größeres auslösen (`/neuer-chat`, `/abschliessen`,
-`/geheimnisse-sichern`), wollen ein `ja` dahinter. Die alten Kurzformen (`/leitstand …`, `/better`, `/reflect …`,
-`/autopilot`, `/warmhalten`) gehen weiter. In `commands/` liegt für jeden Befehl eine kleine Datei, damit die
-Desktop-App ihn schon in der ersten Nachricht eines Chats kennt; die Langformen des Leitstands bringt er in
-`leitstand/commands/` selbst mit.
+geht. Die Namen folgen Anthropics Schreibweise für Befehle eines Plugins, `/<mod>:<funktion>[-<wert>]`, zum
+Beispiel `/statistik:warmhalten-aus`, `/autopilot:an`, `/reflect:speichern-global 2`,
+`/leitstand:arbeitsmodus-gruppenarbeit`. Jeder Mod hat `/<mod>:hilfe` mit allen Befehlen, und jeder Befehl erklärt
+sich mit `hilfe` dahinter (`/statistik:warmhalten-aus hilfe`). Jeder Mod bringt die Dateien für diese Befehle in
+seinem Ordner `commands/` selbst mit. Der Leitstand hat dazu Kurzformen ohne `leitstand:`, etwa `/pause`,
+`/verdecken-an` oder `/kurzantworten-an`; ohne Kurzform bleiben `an`, `aus`, `hilfe` und `vermenschlichen`, weil die
+ersten drei allein nicht sagen, welcher Mod gemeint ist, und `/vermenschlichen` der Skill selbst ist. Ein alter Name
+wie `/leitstand-pause` oder `/statistik-zeigen` nennt nur noch den neuen. Befehle, die wie ein doppelter Knopfdruck
+etwas Größeres auslösen (`/neuer-chat`, `/abschliessen`, `/geheimnisse-sichern`), wollen ein `ja` dahinter. Die
+Grundbefehle (`/leitstand …`, `/better`, `/reflect`, `/autopilot an|aus`, `/statistik`, `/warmhalten`,
+`/zusammenfassung`, `/replay`, `/modellwahl`, `/filetree`) gehen weiter. Für sie und die Kurzformen des Leitstands
+liegt in `commands/` eine kleine Datei, damit die Desktop-App sie schon in der ersten Nachricht eines Chats kennt.
+Mitten in einer Runde wirken sofort die Kurzformen und Grundbefehle (`/pause`, `/autopilot aus`, `/modellwahl nein`);
+ob die Langformen mit Doppelpunkt bis zum Rundenende warten, ist ungeprüft.
 
 ## Installiert install.sh
 

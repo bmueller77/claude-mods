@@ -11,10 +11,14 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Ein Ordner je Mod: `.claude-plugin/plugin.json` (mit Version), `hooks/`, `types/`, `tests/`.
 - `.claude-plugin/marketplace.json` ist der Katalog. `i-have-adhd` ist fremd und kommt direkt aus
   `ayghri/i-have-adhd`.
-- `commands/` hält eine kleine Datei je Befehl (`/<mod>-<funktion>[-<wert>]`, `/<mod>-hilfe` usw.;
-  beim Leitstand nur die Kurzformen, seine Langformen `/leitstand:…` liegen in `leitstand/commands/`).
-  Kopiert nach `~/.claude/commands/`, kennt die Desktop-App die Befehle schon in der ersten
-  Nachricht. Bekommt ein Mod einen Befehl dazu oder verliert er einen, muss die Datei mitziehen.
+- Befehle heißen seit 2026-10-26 `/<mod>:<funktion>[-<wert>]` (Anthropics Schreibweise), `/<mod>:hilfe`
+  listet sie. Jeder Mod hat dafür `<mod>/commands/<funktion>.md`; die App setzt `<mod>:` davor, der
+  `command.run`-Hook des Mods beantwortet `e.command === '<mod>:<funktion>'`. Registriert
+  (`$.command.register`) sind nur Grundbefehle ohne Doppelpunkt (`/statistik`, `/modellwahl`, …)
+  und die Kurzformen des Leitstands. Für genau diese hält das Wurzel-`commands/` eine Datei; kopiert
+  nach `~/.claude/commands/`, kennt die Desktop-App sie schon in der ersten Nachricht. Alte Namen
+  `<mod>-<funktion>` nennen im Hook nur noch den neuen. Bekommt ein Mod einen Befehl dazu oder
+  verliert er einen, müssen die Dateien mitziehen.
 - `README.md` sagt, was jeder Mod tut. `UMSTIEG.md` ist der Prompt für andere Instanzen,
   `install.sh` installiert alles.
 
@@ -66,9 +70,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   (`lookUpCommand`) übergeht `leitstand:…`, sonst fände `:vermenschlichen` den eigenen Befehl.
   Ungeprüft: ob `/leitstand:pause` mitten in einer Runde sofort wirkt (Markdown-Befehle haben kein
   `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten, Knopf 📖 (aus) und 📝 (an), seit 0.56.1.
-  Unter `claude -p` greifen per `$.command.register` angemeldete Befehle im Prompt nicht, sie gehen
-  ans Modell (`/leitstand hilfe`, `/statistik-zeigen`, `/pause`); Markdown-Befehle aus dem
-  Plugin-Ordner laufen dort (`/leitstand:verdecken-an hilfe`, geprüft 2026-10-26).
+  `claude -p "/befehl"` in Git Bash: MSYS macht aus einem Argument, das mit `/` beginnt, einen
+  Windows-Pfad (`/pause` wird `C:/Program Files/Git/pause`), dann geht der Prompt ans Modell; Namen
+  mit Doppelpunkt bleiben heil. Deshalb `MSYS_NO_PATHCONV=1` davor (oder PowerShell); dann laufen
+  registrierte Befehle und Markdown-Befehle aus dem Plugin-Ordner (geprüft 2026-10-26).
 - Den Vorsatz der App vor Befehlsantworten („leitstand: …") streicht ein `session.append`-Hook;
   dafür steht „(gemeldet vom Mod …)" am Ende.
 - Herkunft einer Nachricht (`origin.kind`): Desktop-App `sdk`, Handy über Remote Control `bridge`,
@@ -107,7 +112,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Desktop-App: Ihre Modellauswahl folgt einem `/model` oder `/effort` eines Mods nicht ("for this
   session only"), im Test blieb sie auf Opus · Extra hoch. Danach galt die Modellwahl als von Hand
   zurückgezogen. Seit modellwahl 0.1.1 stellt der Mod deshalb nur noch je Anfrage über `turn.step` um;
-  was gerade antwortet, zeigen die Statuszeile und `/modellwahl-zeigen`. Auch das Werkzeug der App
+  was gerade antwortet, zeigen die Statuszeile und `/modellwahl:zeigen`. Auch das Werkzeug der App
   (`set_session_model`) lehnt die eigene Sitzung ab ("a session must not silently re-price its own turns").
 - Modellwahl seit 0.2.0 (Björns Wunsch): Sie schlägt vor. Am Rechner gilt der Vorschlag nach 15 s von
   selbst, für jedes Modell; die Zeile im Band (Schlüssel `modellwahl`) hat Übernehmen und Nein, der

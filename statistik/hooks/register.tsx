@@ -1190,7 +1190,8 @@ async function wische($: EngineInterface, istBeschaeftigt: boolean, flaeche: Ren
     }
     let aufraeumer: string | undefined
     try {
-        const namen = (await $.command.list()).map(b => b.name)
+        // Die eigenen Befehle /statistik:… zaehlen nie, auch wenn einer auf :leitstand enden sollte.
+        const namen = (await $.command.list()).map(b => b.name).filter(name => !name.startsWith('statistik:'))
         // Zuerst der Leitstand, sonst GlanceFlow; je unter eigenem Namen oder als Kopie eines Plugins.
         for (const mod of ['leitstand', 'glanceflow']) {
             aufraeumer = namen.find(name => name === mod || name.endsWith(`:${mod}`))
@@ -1430,17 +1431,17 @@ async function warmFenster($: EngineInterface, ms: number): Promise<string> {
         : `Warmhalten an für ${dauer(ms)}. Kurz vor jedem Ablauf hält ein Ping den Cache warm.`
 }
 
-/** /statistik-warmhalten-an: ohne Angabe 6 h wie /warmhalten, sonst die Dauer. */
+/** /statistik:warmhalten-an: ohne Angabe 6 h wie /warmhalten, sonst die Dauer. */
 async function warmhaltenAn($: EngineInterface, args: string): Promise<string> {
     const wort = args.trim().toLowerCase()
     const ms = wort === '' ? FENSTER_MS : leseDauer(wort)
     if (ms == null) {
-        return '/statistik-warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.'
+        return '/statistik:warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.'
     }
     return warmFenster($, ms)
 }
 
-/** /statistik-warmhalten-immer: warm ohne Ende in diesem Chat. */
+/** /statistik:warmhalten-immer: warm ohne Ende in diesem Chat. */
 async function warmhaltenImmer($: EngineInterface): Promise<string> {
     const jetzt = await $.clock.now()
     await starteImmer($)
@@ -1449,7 +1450,7 @@ async function warmhaltenImmer($: EngineInterface): Promise<string> {
         : 'Warmhalten an, ohne Ende in diesem Chat.'
 }
 
-/** /statistik-warmhalten-aus: wie das Kreuz neben dem Schalter. */
+/** /statistik:warmhalten-aus: wie das Kreuz neben dem Schalter. */
 async function warmhaltenAus($: EngineInterface): Promise<string> {
     await stoppe($, null)
     return 'Warmhalten ist aus.'
@@ -1516,81 +1517,97 @@ const KURZFORMEN: readonly { name: string; description: string }[] = [
     { name: 'warmhalten', description: 'Warmhalten mit Dauer, immer, aus oder status (Kurzform)' },
 ]
 
+/**
+ * Die Einzelbefehle, in der Reihenfolge der Uebersicht. Jeder ist eine Datei in commands/ des Mods
+ * (commands/hilfe.md wird /statistik:hilfe); ein Name mit Doppelpunkt laesst sich nicht anmelden.
+ * Den Lauf beantwortet trotzdem dieser Mod, die Datei kommt nie beim Modell an.
+ */
 export const BEFEHLE: readonly Befehl[] = [
     {
-        name: 'statistik-hilfe',
-        description: 'Alle Befehle der Statistik mit einer Zeile Erklärung (Statistik)',
+        name: 'statistik:hilfe',
+        description: 'Alle Befehle der Statistik mit einer Zeile Erklärung',
         was: 'Listet alle Befehle der Statistik mit einer Zeile Erklärung.',
         knopf: 'keiner',
         gilt: 'zeigt nur Text, ändert nichts',
         argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/statistik-hilfe',
+        beispiel: '/statistik:hilfe',
     },
     {
-        name: 'statistik-zeigen',
-        description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick, wie /statistik (Statistik)',
+        name: 'statistik:zeigen',
+        description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick, wie /statistik',
         was: 'Zeigt Modell, Cache, Kontext, Kosten, Nutzungslimits und Warmhalten dieser Sitzung als Text, wie /statistik.',
         knopf: 'keiner; dasselbe wie /statistik',
         gilt: 'für diesen Chat; ändert nichts',
         argumente: 'keine',
-        beispiel: '/statistik-zeigen',
+        beispiel: '/statistik:zeigen',
     },
     {
-        name: 'statistik-kontext-zeigen',
-        description: 'Den Kontext im Detail zeigen: /context, die Anzeige der App (Statistik)',
+        name: 'statistik:kontext-zeigen',
+        description: 'Den Kontext im Detail zeigen: /context, die Anzeige der App',
         was: 'Öffnet die Kontext-Anzeige über /context, sobald die Sitzung still ist. Vom Handy kommt stattdessen eine Zeile mit belegtem Kontext und Schwelle.',
         knopf: '📊 in der Statistik-Leiste',
         gilt: 'für diesen Chat; ändert nichts',
         argumente: 'keine',
-        beispiel: '/statistik-kontext-zeigen',
+        beispiel: '/statistik:kontext-zeigen',
     },
     {
-        name: 'statistik-warmhalten-an',
-        description: 'Prompt-Cache warm halten, ohne Angabe 6 h, sonst so lange wie angegeben (Statistik)',
+        name: 'statistik:warmhalten-an',
+        description: 'Prompt-Cache warm halten, ohne Angabe 6 h, sonst so lange wie angegeben',
         argumentHint: '[Dauer, z. B. 3h oder 90m]',
         was: 'Hält den Prompt-Cache warm: Kurz vor jedem Ablauf stellt ein Ping eine winzige Anfrage. Ohne Angabe 6 h wie /warmhalten, sonst die angegebene Dauer.',
         knopf: '🔥 bzw. ❄️ in der Statistik-Leiste; der Knopf legt je Druck 3 h drauf',
         gilt: 'nur in diesem Chat',
         argumente: 'eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe 6 h',
-        beispiel: '/statistik-warmhalten-an 3h',
+        beispiel: '/statistik:warmhalten-an 3h',
     },
     {
-        name: 'statistik-warmhalten-immer',
-        description: 'Prompt-Cache ohne Ende warm halten, bis dieser Chat endet (Statistik)',
+        name: 'statistik:warmhalten-immer',
+        description: 'Prompt-Cache ohne Ende warm halten, bis dieser Chat endet',
         was: 'Hält den Prompt-Cache ohne Ende warm, bis der Chat endet.',
         knopf: '🔥 in der Statistik-Leiste, bei 12:00 noch einmal gedrückt',
         gilt: 'nur in diesem Chat, bis er endet',
         argumente: 'keine',
-        beispiel: '/statistik-warmhalten-immer',
+        beispiel: '/statistik:warmhalten-immer',
     },
     {
-        name: 'statistik-warmhalten-aus',
-        description: 'Warmhalten des Prompt-Caches sofort ausschalten (Statistik)',
+        name: 'statistik:warmhalten-aus',
+        description: 'Warmhalten des Prompt-Caches sofort ausschalten',
         was: 'Schaltet das Warmhalten sofort aus, ob mit Frist oder ohne Ende.',
         knopf: '✖️ neben dem Warmhalten-Schalter',
         gilt: 'nur in diesem Chat',
         argumente: 'keine',
-        beispiel: '/statistik-warmhalten-aus',
+        beispiel: '/statistik:warmhalten-aus',
     },
     {
-        name: 'statistik-chat-aufraeumen',
-        description: 'Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown (Statistik)',
+        name: 'statistik:chat-aufraeumen',
+        description: 'Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown',
         was: 'Räumt den Chat auf: mit dem Leitstand über /leitstand tidy (erst ein Sicherungspunkt der Arbeit, dann verdichten), sonst mit GlanceFlow über /glanceflow tidy, sonst ein schlichtes /compact. Sofort, ohne Countdown; ein laufender Countdown endet dabei.',
         knopf: '🧽 neben der Chatlänge, aber ohne die zehn Sekunden Countdown',
         gilt: 'für diesen Chat',
         argumente: 'keine',
-        beispiel: '/statistik-chat-aufraeumen',
+        beispiel: '/statistik:chat-aufraeumen',
     },
     {
-        name: 'statistik-verdichten',
-        description: 'Den Kontext verdichten (/compact), sofort ohne Countdown (Statistik)',
+        name: 'statistik:verdichten',
+        description: 'Den Kontext verdichten (/compact), sofort ohne Countdown',
         was: 'Verdichtet den Kontext mit /compact, zwischen zwei Runden sofort, sonst sobald Claude fertig ist. Ohne Countdown; ein laufender Countdown endet dabei.',
         knopf: '🔻 am Kontext, aber ohne die zehn Sekunden Countdown',
         gilt: 'für diesen Chat',
         argumente: 'keine',
-        beispiel: '/statistik-verdichten',
+        beispiel: '/statistik:verdichten',
     },
 ]
+
+/**
+ * Die alten Namen bis statistik 0.16: /statistik-warmhalten-an statt /statistik:warmhalten-an. Sie stehen
+ * nicht mehr im Menue; wer einen tippt (eine alte Datei in ~/.claude/commands), erfaehrt den neuen.
+ */
+export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map(BEFEHLE.map(b => [b.name.replace(':', '-'), b.name] as const))
+
+/** Was ein alter Name antwortet: wie der Befehl jetzt heisst. */
+export function neuerName(name: string): string {
+    return `Der Befehl heißt jetzt /${name}.`
+}
 
 /** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
 export function istHilfe(args: string): boolean {
@@ -1610,28 +1627,28 @@ export function fehlerText(name: string): string {
 
 /** Alle Befehle des Mods, je eine Zeile. */
 export function uebersicht(): string {
-    const zeilen = [...BEFEHLE.map(b => ({ name: b.name, description: b.description.replace(/ \(Statistik\)$/, '') })), ...KURZFORMEN]
+    const zeilen = [...BEFEHLE, ...KURZFORMEN]
     return ['Befehle der Statistik (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
 }
 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
 async function wirke($: EngineInterface, name: string, args: string, vomHandy: boolean): Promise<string> {
     switch (name) {
-        case 'statistik-hilfe':
+        case 'statistik:hilfe':
             return uebersicht()
-        case 'statistik-zeigen':
+        case 'statistik:zeigen':
             return karte(await $.clock.now(), await read($, cache), await read($, context), await read($, nutzung))
-        case 'statistik-kontext-zeigen':
+        case 'statistik:kontext-zeigen':
             return kontextBefehl($, vomHandy)
-        case 'statistik-warmhalten-an':
+        case 'statistik:warmhalten-an':
             return warmhaltenAn($, args)
-        case 'statistik-warmhalten-immer':
+        case 'statistik:warmhalten-immer':
             return warmhaltenImmer($)
-        case 'statistik-warmhalten-aus':
+        case 'statistik:warmhalten-aus':
             return warmhaltenAus($)
-        case 'statistik-chat-aufraeumen':
+        case 'statistik:chat-aufraeumen':
             return sofort($, 'wischen')
-        case 'statistik-verdichten':
+        case 'statistik:verdichten':
             return sofort($, 'compact')
         default:
             throw new Error(`kein Befehl ${name}`)
@@ -1692,7 +1709,8 @@ export const register: Register = (on, options) => {
         // Die Desktop-App holt ihre Befehlsliste, bevor dieser Hook laeuft. Damit
         // die Befehle als erste Nachricht nicht als unbekannt gelten, liegen
         // gleichnamige Befehlsdateien in ~/.claude/commands; den Lauf beantwortet
-        // trotzdem dieser Mod.
+        // trotzdem dieser Mod. Angemeldet werden nur die Kurzformen; die
+        // Einzelbefehle /statistik:… sind Dateien in commands/ des Mods.
         await $.command
             .register({
                 name: 'warmhalten',
@@ -1708,17 +1726,6 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
-        // Je Knopf ein eigener Befehl, dazu die Hilfe.
-        for (const b of BEFEHLE) {
-            await $.command
-                .register({
-                    name: b.name,
-                    description: b.description,
-                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
-                    immediate: true,
-                })
-                .catch(() => {})
-        }
 
         // Jede Minute neu zeichnen: die Uhr laeuft mit der Zeit ab, ohne Ereignis.
         $.clock.every(60_000, () => {
@@ -1986,6 +1993,10 @@ export const register: Register = (on, options) => {
             }
         }).catch(() => ({ text: fehlerText(b.name) }))
     }
+
+    // Ein alter Name (/statistik-warmhalten-an, aus einer alten Datei in ~/.claude/commands) sagt nur den neuen.
+    const alterName = (e: { command: string }) => ({ text: neuerName(ALTE_BEFEHLE.get(e.command) ?? e.command) })
+    on('command.run', { command: [...ALTE_BEFEHLE.keys()] }, async (_$, e) => alterName(e)).catch((_$, e) => alterName(e))
 
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
         if (e.props.hasSurvey) {

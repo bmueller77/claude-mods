@@ -3,7 +3,7 @@ import type { CommandRunInput, EngineInterface, Register } from 'claude-code'
 
 import type { Chunk, CompactMeta, Side, ViewMode } from '../types'
 import { chunkMessages } from './chunk'
-import { anmeldung, hilfeText, istHilfe, uebersicht, vomHandy } from './knopfbefehle'
+import { alteNamen, heisstJetzt, hilfeText, istHilfe, uebersicht, vomHandy } from './knopfbefehle'
 import type { Knopfbefehl } from './knopfbefehle'
 import { TRANSLATE_SYSTEM, maskCode, needsTranslation, readTranslation, unmask } from './translate'
 
@@ -254,7 +254,7 @@ export const translateShown = async ($: EngineInterface) => {
 }
 
 /**
- * Der Knopf Übersetzen / Original zeigen, und /visible-compact-uebersetzen-an|aus: schaltet um ('um') oder setzt,
+ * Der Knopf Übersetzen / Original zeigen, und /visible-compact:uebersetzen-an|aus: schaltet um ('um') oder setzt,
  * nur für diesen Chat. `imHintergrund` lässt die Übersetzung laufen, ohne auf sie zu warten.
  */
 const schalteUebersetzung = async ($: EngineInterface, wert: boolean | 'um', imHintergrund = false) => {
@@ -330,49 +330,49 @@ export function ohneVorsatz(text: string): string {
   return (m[1] ?? '') + (rest.length ? `${rest.join('+')}: ` : '') + rumpf + trenner + zusatz + ende
 }
 
-export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /visible-compact-hilfe zeigt die Befehle.'
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /visible-compact:hilfe zeigt die Befehle.'
 
 /** Je Knopf ein Befehl; /show-last-compact bleibt als Kurzform. Die Wirkung steht in `befehlAus`. */
 export const BEFEHLE: readonly Knopfbefehl[] = [
   {
-    name: 'visible-compact-hilfe',
+    name: 'visible-compact:hilfe',
     description: 'Listet alle Befehle von Visible Compact',
     tut: 'Listet alle Befehle von Visible Compact mit je einer Zeile.',
     knopf: 'keiner, nur Übersicht',
     geltung: 'überall; ändert nichts',
     argumente: 'keine',
-    beispiel: '/visible-compact-hilfe',
+    beispiel: '/visible-compact:hilfe',
   },
   {
-    name: 'visible-compact-zeigen',
+    name: 'visible-compact:zeigen',
     description: 'Öffnet das Fenster „Verdichtungen des Chats“ (wie /show-last-compact)',
     tut: 'Öffnet das Fenster „Verdichtungen des Chats“ mit der neuesten Verdichtung, wie /show-last-compact. Vom Handy aus kommt sie als kurzer Text, denn das Fenster geht nur am Rechner.',
     knopf: 'keiner; wie /show-last-compact',
     geltung: 'dieser Chat (seine Verdichtungen)',
     argumente: 'keine',
-    beispiel: '/visible-compact-zeigen',
+    beispiel: '/visible-compact:zeigen',
   },
   {
-    name: 'visible-compact-uebersetzen-an',
+    name: 'visible-compact:uebersetzen-an',
     description: 'Zeigt englische Abschnitte im Fenster auf Deutsch, nur in diesem Chat',
     tut: 'Schaltet die Übersetzung ein: Englische Abschnitte im Fenster „Verdichtungen des Chats“ erscheinen auf Deutsch.',
     knopf: '„Übersetzen“ im Fenster',
     geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus den Einstellungen',
     argumente: 'keine',
-    beispiel: '/visible-compact-uebersetzen-an',
+    beispiel: '/visible-compact:uebersetzen-an',
   },
   {
-    name: 'visible-compact-uebersetzen-aus',
+    name: 'visible-compact:uebersetzen-aus',
     description: 'Zeigt die Abschnitte im Fenster wieder im Original, nur in diesem Chat',
     tut: 'Schaltet die Übersetzung aus: Das Fenster „Verdichtungen des Chats“ zeigt die Abschnitte wieder in ihren eigenen Worten.',
     knopf: '„Original zeigen“ im Fenster',
     geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus den Einstellungen',
     argumente: 'keine',
-    beispiel: '/visible-compact-uebersetzen-aus',
+    beispiel: '/visible-compact:uebersetzen-aus',
   },
 ]
 
-/** /visible-compact-zeigen: erst der Text, das Fenster öffnet sich dahinter; vom Handy die neueste Verdichtung als Text. */
+/** /visible-compact:zeigen: erst der Text, das Fenster öffnet sich dahinter; vom Handy die neueste Verdichtung als Text. */
 async function befehlZeigen($: EngineInterface, e: CommandRunInput): Promise<string> {
   const all = await read($, index)
   if (all.length === 0) return 'In diesem Chat wurde noch nichts verdichtet. Führ zuerst /compact aus.'
@@ -389,14 +389,14 @@ async function befehlZeigen($: EngineInterface, e: CommandRunInput): Promise<str
 /** Die Wirkung der Befehle, je wie ihr Knopf; zurück kommt die Antwort in einem Satz. */
 async function befehlAus($: EngineInterface, name: string, e: CommandRunInput): Promise<string> {
   switch (name) {
-    case 'visible-compact-hilfe':
+    case 'visible-compact:hilfe':
       return uebersicht('Visible Compact – die Befehle:', BEFEHLE)
-    case 'visible-compact-zeigen':
+    case 'visible-compact:zeigen':
       return befehlZeigen($, e)
-    case 'visible-compact-uebersetzen-an':
+    case 'visible-compact:uebersetzen-an':
       await schalteUebersetzung($, true, true)
       return 'Die Übersetzung ist in diesem Chat an: Englische Abschnitte im Fenster erscheinen auf Deutsch.'
-    case 'visible-compact-uebersetzen-aus':
+    case 'visible-compact:uebersetzen-aus':
       await schalteUebersetzung($, false, true)
       return 'Die Übersetzung ist in diesem Chat aus: Das Fenster zeigt die Abschnitte im Original.'
     default:
@@ -419,8 +419,7 @@ export const register: Register = (on, options) => {
       name: COMMAND,
       description: 'Öffnet "Verdichtungen des Chats" wieder: was verdichtet wurde, neben dem, was danach übrig blieb',
     })
-    // Je Knopf ein Befehl; einer, der nicht ankommt, hält die anderen nicht auf.
-    for (const b of BEFEHLE) await $.command.register(anmeldung(b)).catch(() => undefined)
+    // Die Befehle je Knopf (/visible-compact:zeigen) sind Dateien in commands/ und brauchen keine Anmeldung.
     // Compactions live on disk under the session id, so a restart or --resume picks them up again.
     const saved = await readIndex($)
     await update($, index, () => saved)
@@ -505,6 +504,13 @@ export const register: Register = (on, options) => {
       }
     }).catch(() => ({ text: BEFEHL_FEHLER }))
   }
+
+  // Die alten Namen bis visible-compact 0.5 (/visible-compact-zeigen): nicht mehr angemeldet, aber eine alte Datei in
+  // ~/.claude/commands ruft sie noch auf. Sie sagen nur, wie der Befehl jetzt heißt.
+  const alte = alteNamen(BEFEHLE)
+  on('command.run', { command: [...alte.keys()] }, async ($, e) => ({ text: heisstJetzt(alte.get(e.command) ?? e.command) })).catch(() => ({
+    text: BEFEHL_FEHLER,
+  }))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const ui = $.ui.resolve(e)

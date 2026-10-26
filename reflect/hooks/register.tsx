@@ -14,7 +14,7 @@ import { atom, read, update } from 'claude-code'
 import type { CommandRunInput, EngineInterface, Register } from 'claude-code'
 
 import type { ReflectEinstellungen, ReflectFund, ReflectReflexion, ReflectZiel } from '../types'
-import { anmeldung, hilfeText, istHilfe, uebersicht, vomHandy } from './knopfbefehle'
+import { alteNamen, heisstJetzt, hilfeText, istHilfe, uebersicht, vomHandy } from './knopfbefehle'
 import type { Knopfbefehl } from './knopfbefehle'
 
 const wartend = atom({ plugin: 'reflect', key: 'wartend' } as const, [] as ReflectFund[])
@@ -873,166 +873,166 @@ async function befehl($: EngineInterface, args: string): Promise<string> {
 // Je Knopf und Schalter ein eigener Befehl; /reflect mit Unterbefehlen bleibt als Kurzform
 // ---------------------------------------------------------------------------
 
-export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect-hilfe zeigt die Befehle.'
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect:hilfe zeigt die Befehle.'
 
 const NUR_CHAT = 'nur in diesem Chat; andere Chats behalten ihre Einstellung, neue starten mit dem Standard aus dem Einstellungsmenü'
-const NR = 'die Nummer der Regel aus /reflect-regeln'
+const NR = 'die Nummer der Regel aus /reflect:regeln'
 
 /** Die Befehle in der Reihenfolge der Hilfe; die Wirkung steht in `befehlAus`. */
 export const BEFEHLE: readonly Knopfbefehl[] = [
   {
-    name: 'reflect-hilfe',
+    name: 'reflect:hilfe',
     description: 'Listet alle Befehle von Reflect',
     tut: 'Listet alle Befehle von Reflect mit je einer Zeile.',
     knopf: 'keiner, nur Übersicht',
     geltung: 'überall; ändert nichts',
     argumente: 'keine',
-    beispiel: '/reflect-hilfe',
+    beispiel: '/reflect:hilfe',
   },
   {
-    name: 'reflect-starten',
+    name: 'reflect:starten',
     description: 'Startet eine Selbstkritik der bisherigen Arbeit, Ergebnis im Fenster „Reflexion“',
     argumentHint: '[Schwerpunkt]',
-    tut: 'Lässt Claude die bisherige Arbeit in diesem Chat kritisch durchsehen, wie /reflect. Die Antwort kommt sofort, die Reflexion läuft im Hintergrund und erscheint im Fenster „Reflexion“; vom Handy aus holt /reflect-zeigen sie als Text.',
+    tut: 'Lässt Claude die bisherige Arbeit in diesem Chat kritisch durchsehen, wie /reflect. Die Antwort kommt sofort, die Reflexion läuft im Hintergrund und erscheint im Fenster „Reflexion“; vom Handy aus holt /reflect:zeigen sie als Text.',
     knopf: 'keiner; wie /reflect [Schwerpunkt]',
     geltung: 'dieser Chat',
     argumente: 'optional ein Schwerpunkt, worauf die Prüfung achten soll (höchstens 300 Zeichen)',
-    beispiel: '/reflect-starten die Tests',
+    beispiel: '/reflect:starten die Tests',
   },
   {
-    name: 'reflect-zeigen',
+    name: 'reflect:zeigen',
     description: 'Gibt die neueste Reflexion als Text aus und öffnet das Fenster',
     tut: 'Gibt die neueste Reflexion als Text aus und öffnet am Rechner dazu das Fenster „Reflexion“, wie /reflect zeigen. Vom Handy aus nur der Text.',
     knopf: 'keiner; wie /reflect zeigen',
     geltung: 'dieser Chat',
     argumente: 'keine',
-    beispiel: '/reflect-zeigen',
+    beispiel: '/reflect:zeigen',
   },
   {
-    name: 'reflect-regeln',
+    name: 'reflect:regeln',
     description: 'Listet die wartenden Regeln mit Nummern',
     tut: 'Listet die gefundenen Regeln, die auf eine Entscheidung warten, mit Nummern, dazu die Regeln, die nur in diesem Chat gelten. Die Nummern nehmen die Befehle zum Speichern, Bearbeiten und Verwerfen.',
     knopf: 'keiner; zeigt, was das Band über dem Eingabefeld zeigt',
     geltung: 'dieses Projekt und globale Regeln',
     argumente: 'keine',
-    beispiel: '/reflect-regeln',
+    beispiel: '/reflect:regeln',
   },
   {
-    name: 'reflect-speichern-global',
+    name: 'reflect:speichern-global',
     description: 'Speichert eine wartende Regel in die globale CLAUDE.md (alle Projekte)',
     argumentHint: '<Nr>',
     tut: 'Speichert die wartende Regel mit dieser Nummer in die globale CLAUDE.md; sie gilt dann in allen Projekten.',
     knopf: '„Alle Projekte“ im Band',
     geltung: 'alle Projekte und Chats',
     argumente: NR,
-    beispiel: '/reflect-speichern-global 1',
+    beispiel: '/reflect:speichern-global 1',
   },
   {
-    name: 'reflect-speichern-projekt',
+    name: 'reflect:speichern-projekt',
     description: 'Speichert eine wartende Regel in die CLAUDE.md dieses Projekts',
     argumentHint: '<Nr>',
     tut: 'Speichert die wartende Regel mit dieser Nummer in die CLAUDE.md dieses Projekts.',
     knopf: '„Dieses Projekt“ im Band',
     geltung: 'dieses Projekt, alle Chats darin',
     argumente: NR,
-    beispiel: '/reflect-speichern-projekt 1',
+    beispiel: '/reflect:speichern-projekt 1',
   },
   {
-    name: 'reflect-speichern-chat',
+    name: 'reflect:speichern-chat',
     description: 'Übernimmt eine wartende Regel nur für diesen Chat',
     argumentHint: '<Nr>',
     tut: 'Übernimmt die wartende Regel mit dieser Nummer nur für diesen Chat; keine CLAUDE.md wird geändert.',
     knopf: '„Nur dieser Chat“ im Band',
     geltung: 'nur in diesem Chat',
     argumente: NR,
-    beispiel: '/reflect-speichern-chat 1',
+    beispiel: '/reflect:speichern-chat 1',
   },
   {
-    name: 'reflect-bearbeiten',
+    name: 'reflect:bearbeiten',
     description: 'Legt eine wartende Regel als „merke: …“ ins Eingabefeld zum Umformulieren',
     argumentHint: '<Nr>',
     tut: 'Legt die wartende Regel mit dieser Nummer als „merke: …“ ins leere Eingabefeld. Umformuliert und abgeschickt kommt sie als neue Regel zurück; die alte wird verworfen. Steht schon etwas im Feld, bleibt alles, wie es ist.',
     knopf: '„Bearbeiten“ im Band',
     geltung: 'dieses Projekt und globale Regeln',
     argumente: NR,
-    beispiel: '/reflect-bearbeiten 2',
+    beispiel: '/reflect:bearbeiten 2',
   },
   {
-    name: 'reflect-verwerfen',
+    name: 'reflect:verwerfen',
     description: 'Verwirft eine wartende Regel',
     argumentHint: '<Nr>',
     tut: 'Verwirft die wartende Regel mit dieser Nummer; sie wird nicht mehr vorgeschlagen.',
     knopf: '„Verwerfen“ im Band',
     geltung: 'dieses Projekt und globale Regeln',
     argumente: NR,
-    beispiel: '/reflect-verwerfen 3',
+    beispiel: '/reflect:verwerfen 3',
   },
   {
-    name: 'reflect-beheben',
+    name: 'reflect:beheben',
     description: 'Legt die Punkte der neuesten Reflexion als Auftrag ins Eingabefeld',
     tut: 'Legt die Abschnitte „Könnte falsch sein oder fehlen“ und „Als Nächstes prüfen“ der neuesten fertigen Reflexion als Auftrag ins Eingabefeld; ein Entwurf dort bleibt, der Auftrag kommt dahinter. Abgeschickt wird nichts.',
     knopf: '„Claude soll das beheben“ im Fenster „Reflexion“',
     geltung: 'dieser Chat',
     argumente: 'keine',
-    beispiel: '/reflect-beheben',
+    beispiel: '/reflect:beheben',
   },
   {
-    name: 'reflect-kopieren',
+    name: 'reflect:kopieren',
     description: 'Kopiert die neueste Reflexion in die Zwischenablage',
     tut: 'Kopiert die neueste fertige Reflexion in die Zwischenablage. Vom Handy aus kommt sie als Text zum Kopieren.',
     knopf: '„Kopieren“ im Fenster „Reflexion“',
     geltung: 'dieser Chat',
     argumente: 'keine',
-    beispiel: '/reflect-kopieren',
+    beispiel: '/reflect:kopieren',
   },
   {
-    name: 'reflect-pruefung-an',
+    name: 'reflect:pruefung-an',
     description: 'Kurze Nachrichten auf Regeln prüfen, nur in diesem Chat',
     tut: 'Schaltet die Prüfung ein: Kurze Nachrichten gehen an ein kleines Modell, das darin wiederverwendbare Regeln sucht.',
     knopf: 'keiner im Fenster; wie /reflect pruefung an und der Schalter „Korrekturen prüfen“ im Einstellungsmenü',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/reflect-pruefung-an',
+    beispiel: '/reflect:pruefung-an',
   },
   {
-    name: 'reflect-pruefung-aus',
+    name: 'reflect:pruefung-aus',
     description: 'Kurze Nachrichten nicht mehr auf Regeln prüfen, nur in diesem Chat',
     tut: 'Schaltet die Prüfung aus; „merke: <Regel>“ geht weiter.',
     knopf: 'keiner im Fenster; wie /reflect pruefung aus und der Schalter „Korrekturen prüfen“ im Einstellungsmenü',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/reflect-pruefung-aus',
+    beispiel: '/reflect:pruefung-aus',
   },
   {
-    name: 'reflect-auto-an',
+    name: 'reflect:auto-an',
     description: 'Selbstkritik nach jeder Runde mit Dateiänderungen, nur in diesem Chat',
     tut: 'Schaltet die automatische Selbstkritik ein: Nach jeder Runde, in der Dateien geändert wurden, läuft eine Reflexion im Hintergrund.',
     knopf: 'keiner im Fenster; wie /reflect auto an und der Schalter „Selbstkritik nach Dateiänderungen“ im Einstellungsmenü',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/reflect-auto-an',
+    beispiel: '/reflect:auto-an',
   },
   {
-    name: 'reflect-auto-aus',
+    name: 'reflect:auto-aus',
     description: 'Keine automatische Selbstkritik mehr, nur in diesem Chat',
-    tut: 'Schaltet die automatische Selbstkritik aus; /reflect-starten geht weiter von Hand.',
+    tut: 'Schaltet die automatische Selbstkritik aus; /reflect:starten geht weiter von Hand.',
     knopf: 'keiner im Fenster; wie /reflect auto aus und der Schalter „Selbstkritik nach Dateiänderungen“ im Einstellungsmenü',
     geltung: NUR_CHAT,
     argumente: 'keine',
-    beispiel: '/reflect-auto-aus',
+    beispiel: '/reflect:auto-aus',
   },
 ]
 
-/** /reflect-starten: wie /reflect; vom Handy ohne Fenster. */
+/** /reflect:starten: wie /reflect; vom Handy ohne Fenster. */
 async function befehlStarten($: EngineInterface, schwerpunkt: string, e: CommandRunInput) {
   const sauber = schwerpunkt.replace(/\s+/g, ' ').trim().slice(0, MAX_SCHWERPUNKT)
   const id = await starteReflexion($, sauber, 'befehl')
   const handy = vomHandy(e)
   if (!handy) oeffneFenster($)
-  if (id === undefined) return 'Es läuft schon eine Reflexion. /reflect-zeigen gibt sie aus, sobald sie fertig ist.'
+  if (id === undefined) return 'Es läuft schon eine Reflexion. /reflect:zeigen gibt sie aus, sobald sie fertig ist.'
   return handy
-    ? 'Reflexion läuft … Das Fenster geht nur am Rechner; /reflect-zeigen gibt das Ergebnis hier als Text aus.'
-    : 'Reflexion läuft … Das Ergebnis erscheint im Fenster „Reflexion“; /reflect-zeigen gibt es als Text aus.'
+    ? 'Reflexion läuft … Das Fenster geht nur am Rechner; /reflect:zeigen gibt das Ergebnis hier als Text aus.'
+    : 'Reflexion läuft … Das Ergebnis erscheint im Fenster „Reflexion“; /reflect:zeigen gibt es als Text aus.'
 }
 
 /** Speichern, Bearbeiten, Verwerfen: die Regel zur Nummer, oder ein Satz, warum nicht. */
@@ -1056,49 +1056,49 @@ async function neuesteFertige($: EngineInterface) {
 
 async function befehlBeheben($: EngineInterface) {
   const r = await neuesteFertige($)
-  if (r === undefined) return 'Noch keine fertige Reflexion. /reflect-starten startet eine.'
-  return (await uebergib($, r.id)) ?? 'Noch keine fertige Reflexion. /reflect-starten startet eine.'
+  if (r === undefined) return 'Noch keine fertige Reflexion. /reflect:starten startet eine.'
+  return (await uebergib($, r.id)) ?? 'Noch keine fertige Reflexion. /reflect:starten startet eine.'
 }
 
 async function befehlKopieren($: EngineInterface, e: CommandRunInput) {
   const r = await neuesteFertige($)
-  if (r === undefined) return 'Noch keine fertige Reflexion. /reflect-starten startet eine.'
+  if (r === undefined) return 'Noch keine fertige Reflexion. /reflect:starten startet eine.'
   if (vomHandy(e)) return `Kopieren geht nur am Rechner. Hier ist die Reflexion zum Kopieren:\n\n${kopfzeile(r)}\n\n${r.text}`
-  return (await kopiere($, r.id, undefined)) ?? 'Noch keine fertige Reflexion. /reflect-starten startet eine.'
+  return (await kopiere($, r.id, undefined)) ?? 'Noch keine fertige Reflexion. /reflect:starten startet eine.'
 }
 
 /** Die Wirkung der Befehle, je wie ihr Knopf; zurück kommt die Antwort. */
 async function befehlAus($: EngineInterface, name: string, args: string, e: CommandRunInput): Promise<string> {
   switch (name) {
-    case 'reflect-hilfe':
+    case 'reflect:hilfe':
       return uebersicht('Reflect – die Befehle (Einstellungen gelten nur im Chat):', BEFEHLE)
-    case 'reflect-starten':
+    case 'reflect:starten':
       return befehlStarten($, args, e)
-    case 'reflect-zeigen':
+    case 'reflect:zeigen':
       return befehlZeigen($, !vomHandy(e))
-    case 'reflect-regeln':
+    case 'reflect:regeln':
       return befehlRegeln($)
-    case 'reflect-speichern-global':
+    case 'reflect:speichern-global':
       return befehlRegelNr($, args, 'global')
-    case 'reflect-speichern-projekt':
+    case 'reflect:speichern-projekt':
       return befehlRegelNr($, args, 'project')
-    case 'reflect-speichern-chat':
+    case 'reflect:speichern-chat':
       return befehlRegelNr($, args, 'chat')
-    case 'reflect-bearbeiten':
+    case 'reflect:bearbeiten':
       return befehlRegelNr($, args, 'bearbeiten')
-    case 'reflect-verwerfen':
+    case 'reflect:verwerfen':
       return befehlRegelNr($, args, 'verwerfen')
-    case 'reflect-beheben':
+    case 'reflect:beheben':
       return befehlBeheben($)
-    case 'reflect-kopieren':
+    case 'reflect:kopieren':
       return befehlKopieren($, e)
-    case 'reflect-pruefung-an':
+    case 'reflect:pruefung-an':
       return befehlPruefung($, 'an')
-    case 'reflect-pruefung-aus':
+    case 'reflect:pruefung-aus':
       return befehlPruefung($, 'aus')
-    case 'reflect-auto-an':
+    case 'reflect:auto-an':
       return befehlAuto($, 'an')
-    case 'reflect-auto-aus':
+    case 'reflect:auto-aus':
       return befehlAuto($, 'aus')
     default:
       return BEFEHL_FEHLER
@@ -1150,8 +1150,7 @@ export const register: Register = (on, options) => {
         immediate: true,
       })
       .catch(() => undefined)
-    // Je Knopf und Schalter ein Befehl; einer, der nicht ankommt, hält die anderen nicht auf.
-    for (const b of BEFEHLE) await $.command.register(anmeldung(b)).catch(() => undefined)
+    // Die Befehle je Knopf und Schalter (/reflect:zeigen) sind Dateien in commands/ und brauchen keine Anmeldung.
     // Ein Neuladen beginnt das Modul von vorn: Was noch als laufend gilt, kommt nie mehr an.
     try {
       if ((await read($, reflexionen)).some(r => r.status === 'laeuft')) {
@@ -1248,6 +1247,13 @@ export const register: Register = (on, options) => {
       }
     }).catch(() => ({ text: BEFEHL_FEHLER }))
   }
+
+  // Die alten Namen bis reflect 0.2 (/reflect-zeigen): nicht mehr angemeldet, aber eine alte Datei in ~/.claude/commands
+  // ruft sie noch auf. Sie sagen nur, wie der Befehl jetzt heißt.
+  const alte = alteNamen(BEFEHLE)
+  on('command.run', { command: [...alte.keys()] }, async ($, e) => ({ text: heisstJetzt(alte.get(e.command) ?? e.command) })).catch(() => ({
+    text: BEFEHL_FEHLER,
+  }))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)

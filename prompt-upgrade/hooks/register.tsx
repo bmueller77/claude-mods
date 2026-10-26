@@ -16,7 +16,7 @@ import type { CommandRunInput, EngineInterface, PromptOrigin, Register, UiOpenRe
 
 import type { PromptUpgradeAblauf, PromptUpgradeAntwort, PromptUpgradeEintrag } from '../types'
 import { zeichne } from './ansicht'
-import { anmeldung, hilfeText, istHilfe, uebersicht } from './knopfbefehle'
+import { alteNamen, heisstJetzt, hilfeText, istHilfe, uebersicht } from './knopfbefehle'
 import type { Knopfbefehl } from './knopfbefehle'
 import type { Aktionen, Kit } from './ansicht'
 import {
@@ -685,105 +685,105 @@ async function starteMitFenster($: EngineInterface, text: string): Promise<strin
 
 // --- Je Knopf und Schalter ein Befehl; /better bleibt als Kurzform ---
 
-export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Gesendet wurde nichts; /prompt-upgrade-hilfe zeigt die Befehle.'
-export const TEXT_KEIN_DURCHLAUF = 'Gerade läuft kein Prompt-Upgrade; /prompt-upgrade-starten <Prompt> beginnt eins.'
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Gesendet wurde nichts; /prompt-upgrade:hilfe zeigt die Befehle.'
+export const TEXT_KEIN_DURCHLAUF = 'Gerade läuft kein Prompt-Upgrade; /prompt-upgrade:starten <Prompt> beginnt eins.'
 export const TEXT_HANDY_BEFEHLE =
-    'Prompt-Upgrade braucht das Seitenfenster am Rechner. Vom Handy aus gehen /prompt-upgrade-automatik-an, /prompt-upgrade-automatik-aus und /prompt-upgrade-verlauf. Gesendet wurde nichts.'
+    'Prompt-Upgrade braucht das Seitenfenster am Rechner. Vom Handy aus gehen /prompt-upgrade:automatik-an, /prompt-upgrade:automatik-aus und /prompt-upgrade:verlauf. Gesendet wurde nichts.'
 
 const DURCHLAUF = 'der offene Durchlauf im Seitenfenster; ohne offenen Durchlauf sagt der Befehl das'
 
 /** Die Befehle in der Reihenfolge der Hilfe; die Wirkung steht in `befehlAus`. */
 export const BEFEHLE: readonly Knopfbefehl[] = [
     {
-        name: 'prompt-upgrade-hilfe',
+        name: 'prompt-upgrade:hilfe',
         description: 'Listet alle Befehle von Prompt-Upgrade',
         tut: 'Listet alle Befehle von Prompt-Upgrade mit je einer Zeile.',
         knopf: 'keiner, nur Übersicht',
         geltung: 'überall; ändert nichts',
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-hilfe',
+        beispiel: '/prompt-upgrade:hilfe',
     },
     {
-        name: 'prompt-upgrade-starten',
+        name: 'prompt-upgrade:starten',
         description: 'Verbessert einen Prompt im Seitenfenster, bevor er rausgeht (wie /better <Prompt>)',
         argumentHint: '<Prompt>',
         tut: 'Öffnet das Seitenfenster mit diesem Prompt: Rückfragen, Umschreiben, Prüfen, gesendet wird erst mit Ausführen. Ohne Prompt öffnet sich ein Feld zum Eintippen. Geht nur am Rechner.',
         knopf: 'keiner; wie /better <Prompt>',
         geltung: 'dieser Chat',
         argumente: 'der Prompt, der verbessert werden soll; alles nach dem Befehl zählt als Prompt',
-        beispiel: '/prompt-upgrade-starten Mach die Login-Seite schneller',
+        beispiel: '/prompt-upgrade:starten Mach die Login-Seite schneller',
     },
     {
-        name: 'prompt-upgrade-automatik-an',
+        name: 'prompt-upgrade:automatik-an',
         description: 'Getippte Prompts erst ins Seitenfenster, nur in diesem Chat',
         tut: 'Schaltet die Automatik ein: Am Rechner getippte Prompts gehen erst ins Seitenfenster; mit > am Anfang gehen sie direkt raus.',
         knopf: 'keiner im Fenster; wie /better an und der Schalter „Automatik“ im Einstellungsmenü',
         geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü',
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-automatik-an',
+        beispiel: '/prompt-upgrade:automatik-an',
     },
     {
-        name: 'prompt-upgrade-automatik-aus',
+        name: 'prompt-upgrade:automatik-aus',
         description: 'Getippte Prompts gehen direkt raus, nur in diesem Chat',
         tut: 'Schaltet die Automatik aus: Getippte Prompts gehen unverändert raus.',
         knopf: 'keiner im Fenster; wie /better aus und der Schalter „Automatik“ im Einstellungsmenü',
         geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü',
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-automatik-aus',
+        beispiel: '/prompt-upgrade:automatik-aus',
     },
     {
-        name: 'prompt-upgrade-verlauf',
+        name: 'prompt-upgrade:verlauf',
         description: 'Zeigt die letzten Upgrades als Text, am Rechner auch im Fenster',
         tut: 'Gibt die letzten 20 Upgrades als Text aus, neueste zuerst; am Rechner öffnet sich dahinter das Fenster mit der Liste, wie /better verlauf.',
         knopf: '„Verlauf“ im Seitenfenster',
         geltung: 'alle Chats (ein gemeinsamer Verlauf)',
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-verlauf',
+        beispiel: '/prompt-upgrade:verlauf',
     },
     {
-        name: 'prompt-upgrade-jetzt-verbessern',
+        name: 'prompt-upgrade:jetzt-verbessern',
         description: 'Überspringt die übrigen Rückfragen und verbessert jetzt',
         tut: 'Überspringt die Rückfragen, die noch offen sind, und lässt den Prompt jetzt umschreiben.',
         knopf: '„Rest überspringen, jetzt verbessern“ im Seitenfenster',
         geltung: DURCHLAUF,
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-jetzt-verbessern',
+        beispiel: '/prompt-upgrade:jetzt-verbessern',
     },
     {
-        name: 'prompt-upgrade-ausfuehren',
+        name: 'prompt-upgrade:ausfuehren',
         description: 'Schickt den verbesserten Prompt ab',
         tut: 'Schickt den verbesserten Prompt ab, so wie er im Seitenfenster steht (auch bearbeitet), und schließt das Fenster.',
         knopf: '„Ausführen“ im Seitenfenster',
         geltung: DURCHLAUF,
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-ausfuehren',
+        beispiel: '/prompt-upgrade:ausfuehren',
     },
     {
-        name: 'prompt-upgrade-original-senden',
+        name: 'prompt-upgrade:original-senden',
         description: 'Schickt nach einem Fehler den Original-Prompt unverändert ab',
         tut: 'Schickt den Original-Prompt unverändert ab, wenn das Upgrade gescheitert ist, und schließt das Fenster.',
         knopf: '„Original senden“ auf der Fehlerkarte im Seitenfenster',
         geltung: DURCHLAUF,
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-original-senden',
+        beispiel: '/prompt-upgrade:original-senden',
     },
     {
-        name: 'prompt-upgrade-kopieren',
+        name: 'prompt-upgrade:kopieren',
         description: 'Kopiert den verbesserten Prompt in die Zwischenablage',
         tut: 'Kopiert den verbesserten Prompt in die Zwischenablage. Vom Handy aus kommt er als Text zum Kopieren.',
         knopf: '„Kopieren“ im Seitenfenster',
         geltung: DURCHLAUF,
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-kopieren',
+        beispiel: '/prompt-upgrade:kopieren',
     },
     {
-        name: 'prompt-upgrade-abbrechen',
+        name: 'prompt-upgrade:abbrechen',
         description: 'Bricht ab, schließt das Fenster und legt den Prompt zurück ins Eingabefeld',
         tut: 'Bricht den Durchlauf ab: Das Fenster geht zu, laufende Anfragen stoppen, der Original-Prompt steht wieder im Eingabefeld. Gesendet wird nichts.',
         knopf: '„Abbrechen“ im Seitenfenster',
         geltung: DURCHLAUF,
         argumente: 'keine',
-        beispiel: '/prompt-upgrade-abbrechen',
+        beispiel: '/prompt-upgrade:abbrechen',
     },
 ]
 
@@ -820,7 +820,7 @@ async function befehlOriginalSenden($: EngineInterface): Promise<string> {
         return TEXT_KEIN_DURCHLAUF
     }
     if (a.schritt !== 'fehler') {
-        return 'Original senden gibt es nur, wenn das Upgrade gescheitert ist; /prompt-upgrade-abbrechen legt den Prompt zurück ins Eingabefeld.'
+        return 'Original senden gibt es nur, wenn das Upgrade gescheitert ist; /prompt-upgrade:abbrechen legt den Prompt zurück ins Eingabefeld.'
     }
     void sendeOriginal($).catch(err => $.ui.log(`Prompt-Upgrade: ${fehlerText(err)}`, { to: 'debug' }))
     return 'Der Original-Prompt geht unverändert raus; das Fenster schließt sich.'
@@ -854,27 +854,27 @@ async function befehlAbbrechen($: EngineInterface): Promise<string> {
 async function befehlAus($: EngineInterface, name: string, args: string, e: CommandRunInput): Promise<string> {
     const amPlatz = amRechner(e.origin)
     switch (name) {
-        case 'prompt-upgrade-hilfe':
+        case 'prompt-upgrade:hilfe':
             return uebersicht('Prompt-Upgrade – die Befehle:', BEFEHLE)
-        case 'prompt-upgrade-starten':
+        case 'prompt-upgrade:starten':
             return amPlatz ? starteMitFenster($, args) : TEXT_HANDY_BEFEHLE
-        case 'prompt-upgrade-automatik-an':
+        case 'prompt-upgrade:automatik-an':
             await setzeAutomatik($, true)
             return TEXT_AN
-        case 'prompt-upgrade-automatik-aus':
+        case 'prompt-upgrade:automatik-aus':
             await setzeAutomatik($, false)
             return TEXT_AUS
-        case 'prompt-upgrade-verlauf':
+        case 'prompt-upgrade:verlauf':
             return zeigeDenVerlauf($, amPlatz)
-        case 'prompt-upgrade-jetzt-verbessern':
+        case 'prompt-upgrade:jetzt-verbessern':
             return befehlJetztVerbessern($)
-        case 'prompt-upgrade-ausfuehren':
+        case 'prompt-upgrade:ausfuehren':
             return befehlAusfuehren($)
-        case 'prompt-upgrade-original-senden':
+        case 'prompt-upgrade:original-senden':
             return befehlOriginalSenden($)
-        case 'prompt-upgrade-kopieren':
+        case 'prompt-upgrade:kopieren':
             return befehlKopieren($, amPlatz)
-        case 'prompt-upgrade-abbrechen':
+        case 'prompt-upgrade:abbrechen':
             return befehlAbbrechen($)
         default:
             return BEFEHL_FEHLER
@@ -925,10 +925,7 @@ export const register: Register = (on, options) => {
         } catch (err) {
             $.ui.log(`Prompt-Upgrade: /better ließ sich nicht anmelden: ${fehlerText(err)}`, { to: 'debug' })
         }
-        // Je Knopf und Schalter ein Befehl; einer, der nicht ankommt, hält die anderen nicht auf.
-        for (const k of BEFEHLE) {
-            await $.command.register(anmeldung(k)).catch(() => undefined)
-        }
+        // Die Befehle je Knopf und Schalter (/prompt-upgrade:starten) sind Dateien in commands/ und brauchen keine Anmeldung.
         try {
             const liste = await ladeVerlauf($)
             await update($, verlauf, () => liste)
@@ -982,6 +979,13 @@ export const register: Register = (on, options) => {
             }
         }).catch(() => ({ text: BEFEHL_FEHLER }))
     }
+
+    // Die alten Namen bis prompt-upgrade 0.3 (/prompt-upgrade-starten): nicht mehr angemeldet, aber eine alte Datei in
+    // ~/.claude/commands ruft sie noch auf. Sie sagen nur, wie der Befehl jetzt heißt.
+    const alte = alteNamen(BEFEHLE)
+    on('command.run', { command: [...alte.keys()] }, async ($, e) => ({ text: heisstJetzt(alte.get(e.command) ?? e.command) })).catch(() => ({
+        text: BEFEHL_FEHLER,
+    }))
 
     on('prompt.submit', async ($, e, next) => {
         // Billige Pruefungen zuerst: Handy, Plugins, Befehle gehen ohne Speicherzugriff durch.

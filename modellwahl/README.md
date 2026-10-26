@@ -33,12 +33,14 @@ Stellst du Modell oder Aufwand selbst um, zieht sich der Mod in diesem Chat zur�
 ## Befehle
 
 - `/modellwahl [Aufgabe | ja | nein]`: jetzt vorschlagen, übernehmen oder verwerfen.
-- `/modellwahl-uebernehmen`, `/modellwahl-ablehnen`: wie die Knöpfe.
-- `/modellwahl-zeigen`: Wahl, Grund, ob zurückgezogen, offener Vorschlag, Kalibrierung.
-- `/modellwahl-hilfe`: kurze Erklärung.
-- `/modellwahl-auto-an`, `/modellwahl-auto-aus`: Automatik nur für diesen Chat.
+- `/modellwahl:uebernehmen`, `/modellwahl:ablehnen`: wie die Knöpfe.
+- `/modellwahl:zeigen`: Wahl, Grund, ob zurückgezogen, offener Vorschlag, Kalibrierung.
+- `/modellwahl:hilfe`: kurze Erklärung.
+- `/modellwahl:auto-an`, `/modellwahl:auto-aus`: Automatik nur für diesen Chat.
 
-Jeder Befehl versteht `hilfe` und `?`.
+Jeder Befehl versteht `hilfe` und `?`. Die Befehle mit Doppelpunkt liegen als
+Dateien in `commands/` des Mods, Claude Code setzt `modellwahl:` davor. Wer noch
+einen alten Namen wie `/modellwahl-zeigen` tippt, bekommt den neuen genannt.
 
 ## Einstellungen
 
@@ -50,7 +52,7 @@ Jeder Befehl versteht `hilfe` und `?`.
 Jede Anfrage der Hauptschleife geht mit dem gewählten Modell und Aufwand
 (`turn.step`). Die Modellauswahl der App und `/model` zeigen dabei weiter das
 Modell der Sitzung; welches gerade antwortet, steht in der Statuszeile
-(„Modellwahl: …“) und bei `/modellwahl-zeigen`. Selbst stellen kann der Mod die
+(„Modellwahl: …“) und bei `/modellwahl:zeigen`. Selbst stellen kann der Mod die
 Auswahl der App nicht: Ein `/model` übernimmt sie nicht, und ihr Werkzeug dafür
 lehnt die eigene Sitzung ab. Deshalb schlägt er vor, und du kannst im Menü
 selbst wählen.

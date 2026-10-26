@@ -1,4 +1,4 @@
-/** One slash command per header button: registered, with help, doing what the button does. */
+/** One slash command /filetree:… per header button: with help, doing what the button does; the old names say the new one. */
 import { expect, mock, test } from 'claude-code/testing'
 import type { SessionAppendInput } from 'claude-code'
 
@@ -6,14 +6,14 @@ import { BEFEHLE, BEFEHL_FEHLER, TEXT_NICHT_OFFEN } from '../hooks/register'
 
 const ROOT = '/home/k/proj'
 const NAMEN = [
-  'filetree-hilfe',
-  'filetree-zeigen',
-  'filetree-versteckte-an',
-  'filetree-versteckte-aus',
-  'filetree-groessen-an',
-  'filetree-groessen-aus',
-  'filetree-neu-laden',
-  'filetree-einklappen',
+  'filetree:hilfe',
+  'filetree:zeigen',
+  'filetree:versteckte-an',
+  'filetree:versteckte-aus',
+  'filetree:groessen-an',
+  'filetree:groessen-aus',
+  'filetree:neu-laden',
+  'filetree:einklappen',
 ]
 
 type Dirs = Record<string, [string, 'file' | 'dir'][]>
@@ -100,18 +100,30 @@ async function started($: any, on: any, dirs: Dirs = { ...DIRS }) {
   return w
 }
 
-test('exactly the approved commands, all registered, each with a description', { timeoutMs: 20_000 }, async ($, on) => {
+test('exactly the approved commands, each with a description; only /filetree is registered', { timeoutMs: 20_000 }, async ($, on) => {
   const w = await started($, on)
   expect(BEFEHLE.map(b => b.name)).toEqual(NAMEN)
   for (const b of BEFEHLE) {
-    const spec = w.angemeldet.find(s => s.name === b.name)
-    expect(spec).toBeDefined()
-    expect(String(spec?.description ?? '').length).toBeGreaterThan(10)
-    expect(spec?.immediate).toBe(true)
-    expect(spec?.argumentHint).toBe(b.argumentHint)
+    expect(b.description.length).toBeGreaterThan(10)
+    // The long form is a file in commands/: $.command.register takes no name with a colon.
+    expect(w.angemeldet.find(s => s.name === b.name)).toBeUndefined()
   }
-  expect(w.angemeldet.find(s => s.name === 'filetree-zeigen')?.argumentHint).toBe('[Pfad]')
-  expect(w.angemeldet.some(s => s.name === 'filetree')).toBe(true)
+  expect(BEFEHLE.find(b => b.name === 'filetree:zeigen')?.argumentHint).toBe('[Pfad]')
+  // The short form stays; the old names with a hyphen are no longer registered.
+  expect(w.angemeldet.map(s => s.name)).toEqual(['filetree'])
+})
+
+test('an old name like /filetree-zeigen only says what the command is called now', { timeoutMs: 20_000 }, async ($, on) => {
+  const w = await started($, on)
+  const before = w.opens.length
+  const shown = await texts($)
+  for (const name of NAMEN) {
+    const alt = name.replace('filetree:', 'filetree-')
+    for (const arg of ['', 'src', 'hilfe']) expect(await run($, alt, arg)).toBe(`Der Befehl heißt jetzt /${name}.`)
+  }
+  await w.clock.settle()
+  expect(w.opens.length).toBe(before)
+  expect(await texts($)).toBe(shown)
 })
 
 test('every command explains itself with hilfe and ?, changing nothing', { timeoutMs: 20_000 }, async ($, on) => {
@@ -130,26 +142,26 @@ test('every command explains itself with hilfe and ?, changing nothing', { timeo
   expect(await texts($)).toBe(shown)
 })
 
-test('/filetree-hilfe lists every command on one line', { timeoutMs: 20_000 }, async ($, on) => {
+test('/filetree:hilfe lists every command on one line', { timeoutMs: 20_000 }, async ($, on) => {
   await started($, on)
-  const text = await run($, 'filetree-hilfe')
+  const text = await run($, 'filetree:hilfe')
   for (const b of BEFEHLE) expect(text).toContain(`/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} – ${b.description}`)
 })
 
 test('zeigen: like /filetree, the answer first and the pane behind it; the phone gets a hint', { timeoutMs: 20_000 }, async ($, on) => {
   const w = await started($, on)
   const before = w.opens.length
-  expect(await run($, 'filetree-zeigen')).toBe(`Dateibaum für ${ROOT.replace('/home/k', '~')} (folgt dem Arbeitsordner).`)
+  expect(await run($, 'filetree:zeigen')).toBe(`Dateibaum für ${ROOT.replace('/home/k', '~')} (folgt dem Arbeitsordner).`)
   await w.clock.settle()
   expect(w.opens.length).toBe(before + 1)
   expect(w.opens.at(-1)).toMatchObject({ id: 'filetree', focus: true })
-  expect(await run($, 'filetree-zeigen', 'src')).toBe('Dateibaum für ~/proj/src.')
+  expect(await run($, 'filetree:zeigen', 'src')).toBe('Dateibaum für ~/proj/src.')
   await w.clock.settle()
   expect(await texts($)).toContain('a.ts')
 
   const count = w.opens.length
-  expect(await run($, 'filetree-zeigen', '', 'bridge')).toBe('Der Dateibaum geht nur am Rechner; dort öffnet /filetree-zeigen ihn in der Seitenleiste.')
-  expect(await run($, 'filetree-zeigen', '', 'composer', { isFullscreen: false, columns: 200 })).toContain('/tui fullscreen aus, dann /filetree-zeigen.')
+  expect(await run($, 'filetree:zeigen', '', 'bridge')).toBe('Der Dateibaum geht nur am Rechner; dort öffnet /filetree:zeigen ihn in der Seitenleiste.')
+  expect(await run($, 'filetree:zeigen', '', 'composer', { isFullscreen: false, columns: 200 })).toContain('/tui fullscreen aus, dann /filetree:zeigen.')
   await w.clock.settle()
   expect(w.opens.length).toBe(count)
 })
@@ -162,14 +174,14 @@ test('before the tree was ever opened the buttons commands say so', { timeoutMs:
 test('versteckte-an and -aus do what ◉ and ○ do', { timeoutMs: 20_000 }, async ($, on) => {
   const w = await started($, on)
   expect(await texts($)).toContain('.env')
-  expect(await run($, 'filetree-versteckte-aus')).toBe('Versteckte Dateien sind im Dateibaum jetzt ausgeblendet.')
+  expect(await run($, 'filetree:versteckte-aus')).toBe('Versteckte Dateien sind im Dateibaum jetzt ausgeblendet.')
   await w.clock.settle()
   expect(await texts($)).not.toContain('.env')
   expect((await knopf($, 'hidden'))?.props.label).toBe('○')
   // Twice off stays off: the command sets, the button flips.
-  await run($, 'filetree-versteckte-aus')
+  await run($, 'filetree:versteckte-aus')
   expect(await texts($)).not.toContain('.env')
-  expect(await run($, 'filetree-versteckte-an')).toBe('Versteckte Dateien sind im Dateibaum jetzt zu sehen.')
+  expect(await run($, 'filetree:versteckte-an')).toBe('Versteckte Dateien sind im Dateibaum jetzt zu sehen.')
   await w.clock.settle()
   expect(await texts($)).toContain('.env')
   expect((await knopf($, 'hidden'))?.props.label).toBe('◉')
@@ -178,10 +190,10 @@ test('versteckte-an and -aus do what ◉ and ○ do', { timeoutMs: 20_000 }, asy
 test('groessen-an and -aus do what Σ does', { timeoutMs: 20_000 }, async ($, on) => {
   const w = await started($, on)
   expect((await knopf($, 'size'))?.props.dimColor).toBe(true)
-  expect(await run($, 'filetree-groessen-an')).toBe('Der Dateibaum zeigt jetzt Größen statt Datum.')
+  expect(await run($, 'filetree:groessen-an')).toBe('Der Dateibaum zeigt jetzt Größen statt Datum.')
   await w.clock.settle()
   expect((await knopf($, 'size'))?.props.dimColor).toBe(false)
-  expect(await run($, 'filetree-groessen-aus')).toBe('Der Dateibaum zeigt jetzt das Datum statt der Größen.')
+  expect(await run($, 'filetree:groessen-aus')).toBe('Der Dateibaum zeigt jetzt das Datum statt der Größen.')
   await w.clock.settle()
   expect((await knopf($, 'size'))?.props.dimColor).toBe(true)
 })
@@ -194,13 +206,13 @@ test('einklappen does what ⊟ does, neu-laden what ↻ does', { timeoutMs: 20_0
   await w.clock.settle()
   await ui.unmount()
   expect(await texts($)).toContain(`"id":"${ROOT}/src/a.ts"`)
-  expect(await run($, 'filetree-einklappen')).toBe('Alle Ordner im Dateibaum sind eingeklappt.')
+  expect(await run($, 'filetree:einklappen')).toBe('Alle Ordner im Dateibaum sind eingeklappt.')
   await w.clock.settle()
   expect(await texts($)).not.toContain(`"id":"${ROOT}/src/a.ts"`)
 
   dirs[ROOT] = [...(dirs[ROOT] ?? []), ['neu.md', 'file']]
   expect(await texts($)).not.toContain('neu.md')
-  expect(await run($, 'filetree-neu-laden')).toBe('Der Dateibaum wird neu eingelesen.')
+  expect(await run($, 'filetree:neu-laden')).toBe('Der Dateibaum wird neu eingelesen.')
   await w.clock.settle()
   expect(await texts($)).toContain('neu.md')
 })
@@ -211,7 +223,7 @@ test('an error becomes one plain sentence', { timeoutMs: 20_000 }, async ($, on)
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
   await w.clock.settle()
   kaputt = true
-  expect(await run($, 'filetree-zeigen')).toBe(BEFEHL_FEHLER)
+  expect(await run($, 'filetree:zeigen')).toBe(BEFEHL_FEHLER)
 })
 
 test('the answers of the new commands get the note instead of the prefix', { timeoutMs: 20_000 }, async ($, on) => {

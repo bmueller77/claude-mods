@@ -10,6 +10,8 @@ und Upgrade nebeneinander. Gesendet wird erst mit **Ausführen**.
 - `/better`: Fenster mit einem Feld zum Eintippen.
 - `/better an` / `/better aus` (auch `on` / `off`): Automatik in diesem Chat.
 - `/better verlauf` (auch `history`): die letzten 20 Upgrades; ein Klick im Fenster öffnet die Prüfung wieder.
+- Jeder Knopf und Schalter hat einen eigenen Befehl, etwa `/prompt-upgrade:ausfuehren` oder
+  `/prompt-upgrade:automatik-an`. `/prompt-upgrade:hilfe` listet sie alle, `hilfe` hinter einem Befehl erklärt ihn.
 
 ## Automatik
 

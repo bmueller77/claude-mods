@@ -42,6 +42,9 @@ In der Android-App sind Band, Fenster und Hinweise nicht zu sehen. Dort geht all
 /reflect zeigen                              neueste Reflexion als Text
 ```
 
+Jeder Knopf und Schalter hat außerdem einen eigenen Befehl, etwa `/reflect:speichern-projekt 1` oder
+`/reflect:zeigen`. `/reflect:hilfe` listet sie alle, `hilfe` hinter einem Befehl erklärt ihn.
+
 Nachrichten vom Handy werden genauso geprüft wie getippte. Gefundene Regeln warten einfach, bis du entscheidest.
 
 ## Einstellungen

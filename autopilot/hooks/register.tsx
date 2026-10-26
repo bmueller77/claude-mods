@@ -446,53 +446,70 @@ const KURZFORMEN: readonly { name: string; description: string }[] = [
     { name: 'autopilot', description: 'schaltet den Autopiloten ein oder aus (Kurzform, versteht an und aus)' },
 ]
 
+/**
+ * Die Einzelbefehle in der Langform /autopilot:<funktion>. Jeder liegt als Datei
+ * in commands/ dieses Mods; Claude Code setzt autopilot: davor. Anmelden laesst
+ * sich ein Name mit Doppelpunkt nicht, den Lauf beantwortet trotzdem dieser Mod.
+ */
 export const BEFEHLE: readonly Befehl[] = [
     {
-        name: 'autopilot-hilfe',
-        description: 'Alle Befehle des Autopiloten mit einer Zeile Erklärung (Autopilot)',
+        name: 'autopilot:hilfe',
+        description: 'Alle Befehle des Autopiloten mit einer Zeile Erklärung',
         was: 'Listet alle Befehle des Autopiloten mit einer Zeile Erklärung.',
         knopf: 'keiner',
         gilt: 'zeigt nur Text, ändert nichts',
         argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/autopilot-hilfe',
+        beispiel: '/autopilot:hilfe',
     },
     {
-        name: 'autopilot-an',
-        description: 'Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist (Autopilot)',
+        name: 'autopilot:an',
+        description: 'Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist',
         was: 'Schaltet den Autopiloten ein, wie /autopilot an. Claude stellt keine Rückfragen mehr, schiebt Runden ohne Abschluss an und schreibt am Ende eine Übergabe. Ein angehaltener Autopilot läuft wieder.',
         knopf: 'keiner in der Autopilot-Zeile; dasselbe wie /autopilot an',
         gilt: 'nur in diesem Chat',
         argumente: 'keine',
-        beispiel: '/autopilot-an',
+        beispiel: '/autopilot:an',
     },
     {
-        name: 'autopilot-aus',
-        description: 'Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld (Autopilot)',
+        name: 'autopilot:aus',
+        description: 'Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld',
         was: 'Beendet den Autopiloten und zeigt seinen Bericht, wie /autopilot aus.',
         knopf: 'Beenden in der Autopilot-Zeile',
         gilt: 'nur in diesem Chat',
         argumente: 'keine',
-        beispiel: '/autopilot-aus',
+        beispiel: '/autopilot:aus',
     },
     {
-        name: 'autopilot-fragen-zeigen',
-        description: 'Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text (Autopilot)',
+        name: 'autopilot:fragen-zeigen',
+        description: 'Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text',
         was: 'Zeigt die Rückfragen, die Claude während des Autopiloten selbst entschieden hat, als Liste im Chat.',
         knopf: 'Fragen in der Autopilot-Zeile, hier als Text statt aufgeklappt',
         gilt: 'nur in diesem Chat; ändert nichts',
         argumente: 'keine',
-        beispiel: '/autopilot-fragen-zeigen',
+        beispiel: '/autopilot:fragen-zeigen',
     },
     {
-        name: 'autopilot-bericht-weg',
-        description: 'Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen (Autopilot)',
+        name: 'autopilot:bericht-weg',
+        description: 'Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen',
         was: 'Räumt den Bericht des beendeten Autopiloten über dem Eingabefeld weg.',
         knopf: 'Weg in der Autopilot-Zeile',
         gilt: 'nur in diesem Chat',
         argumente: 'keine',
-        beispiel: '/autopilot-bericht-weg',
+        beispiel: '/autopilot:bericht-weg',
     },
 ]
+
+/**
+ * Die alten Namen bis autopilot 0.7: /autopilot-an statt /autopilot:an. Sie stehen
+ * nicht mehr im Menue; wer einen tippt (eine alte Datei in ~/.claude/commands),
+ * erfaehrt den neuen. Jeder mit dem vollen neuen Namen.
+ */
+export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map(BEFEHLE.map(b => [b.name.replace(':', '-'), b.name] as const))
+
+/** Was ein alter Name antwortet: wie der Befehl jetzt heisst. */
+export function neuerName(name: string): string {
+    return `Der Befehl heißt jetzt /${name}.`
+}
 
 /** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
 export function istHilfe(args: string): boolean {
@@ -512,22 +529,22 @@ export function fehlerText(name: string): string {
 
 /** Alle Befehle des Mods, je eine Zeile. */
 export function uebersicht(): string {
-    const zeilen = [...BEFEHLE.map(b => ({ name: b.name, description: b.description.replace(/ \(Autopilot\)$/, '') })), ...KURZFORMEN]
+    const zeilen = [...BEFEHLE, ...KURZFORMEN]
     return ['Befehle des Autopiloten (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
 }
 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
 async function wirke($: EngineInterface, name: string): Promise<string> {
     switch (name) {
-        case 'autopilot-hilfe':
+        case 'autopilot:hilfe':
             return uebersicht()
-        case 'autopilot-an':
+        case 'autopilot:an':
             return schalte($, true)
-        case 'autopilot-aus':
+        case 'autopilot:aus':
             return schalte($, false)
-        case 'autopilot-fragen-zeigen':
+        case 'autopilot:fragen-zeigen':
             return fragenAlsText($)
-        case 'autopilot-bericht-weg':
+        case 'autopilot:bericht-weg':
             return berichtWegText($)
         default:
             throw new Error(`kein Befehl ${name}`)
@@ -540,7 +557,8 @@ export const register: Register = (on, options) => {
     // Die Desktop-App holt ihre Befehlsliste, bevor dieser Hook laeuft, und haelt
     // /autopilot als erste Nachricht sonst fuer unbekannt. Dafuer liegt dieselbe
     // Befehlsdatei in ~/.claude/commands; den Lauf beantwortet trotzdem dieser Mod.
-    // `immediate`: Einschalten geht auch, waehrend Claude arbeitet.
+    // `immediate`: Einschalten geht auch, waehrend Claude arbeitet. Die Einzelbefehle
+    // /autopilot:an und so weiter sind Dateien in commands/ des Mods, nicht angemeldet.
     on('session.start', async ($, e, next) => {
         await $.command
             .register({
@@ -550,17 +568,6 @@ export const register: Register = (on, options) => {
                 immediate: true,
             })
             .catch(() => {})
-        // Je Knopf ein eigener Befehl, dazu die Hilfe.
-        for (const b of BEFEHLE) {
-            await $.command
-                .register({
-                    name: b.name,
-                    description: b.description,
-                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
-                    immediate: true,
-                })
-                .catch(() => {})
-        }
         return next(e)
     })
 
@@ -591,6 +598,12 @@ export const register: Register = (on, options) => {
             }
         }).catch(() => ({ text: fehlerText(b.name) }))
     }
+
+    // Ein alter Name wie /autopilot-an sagt nur, wie der Befehl jetzt heisst, und tut sonst nichts.
+    on('command.run', { command: [...ALTE_BEFEHLE.keys()] }, async ($, e) => {
+        const jetzt = ALTE_BEFEHLE.get(e.command)
+        return { text: jetzt === undefined ? fehlerText(e.command) : neuerName(jetzt) }
+    }).catch(($, e) => ({ text: fehlerText(e.command) }))
 
     on('prompt.submit', async ($, e, next) => {
         const s = await read($, schicht)

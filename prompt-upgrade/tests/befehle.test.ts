@@ -1,4 +1,4 @@
-/** Je Knopf und Schalter ein Befehl: angemeldet, mit Hilfe, mit derselben Wirkung wie der Knopf. */
+/** Je Knopf und Schalter ein Befehl /prompt-upgrade:…: mit Hilfe, mit derselben Wirkung wie der Knopf; die alten Namen nennen den neuen. */
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, SessionAppendInput } from 'claude-code'
@@ -23,18 +23,18 @@ const UPGRADE = 'Mach die Login-Seite für Kunden schneller. Fertig ist es, wenn
 const UMSCHRIFT = `<upgrade>\n${UPGRADE}\n</upgrade>\n<ergaenzt>\n- Ziel: Ladezeit\n</ergaenzt>`
 
 const NAMEN = [
-    'prompt-upgrade-hilfe',
-    'prompt-upgrade-starten',
-    'prompt-upgrade-automatik-an',
-    'prompt-upgrade-automatik-aus',
-    'prompt-upgrade-verlauf',
-    'prompt-upgrade-jetzt-verbessern',
-    'prompt-upgrade-ausfuehren',
-    'prompt-upgrade-original-senden',
-    'prompt-upgrade-kopieren',
-    'prompt-upgrade-abbrechen',
+    'prompt-upgrade:hilfe',
+    'prompt-upgrade:starten',
+    'prompt-upgrade:automatik-an',
+    'prompt-upgrade:automatik-aus',
+    'prompt-upgrade:verlauf',
+    'prompt-upgrade:jetzt-verbessern',
+    'prompt-upgrade:ausfuehren',
+    'prompt-upgrade:original-senden',
+    'prompt-upgrade:kopieren',
+    'prompt-upgrade:abbrechen',
 ]
-const DURCHLAUF = ['prompt-upgrade-jetzt-verbessern', 'prompt-upgrade-ausfuehren', 'prompt-upgrade-original-senden', 'prompt-upgrade-kopieren', 'prompt-upgrade-abbrechen']
+const DURCHLAUF = ['prompt-upgrade:jetzt-verbessern', 'prompt-upgrade:ausfuehren', 'prompt-upgrade:original-senden', 'prompt-upgrade:kopieren', 'prompt-upgrade:abbrechen']
 
 type Antwort = string | { grund: 'api-error' }
 
@@ -112,27 +112,45 @@ async function run($: Engine, command: string, args = '', kind = 'composer'): Pr
 
 /** Bis zur Pruefung: starten, die Rueckfrage ueberspringen, umschreiben lassen. */
 async function bisZurPruefung($: Engine, clock: MockClock) {
-    expect(await run($, 'prompt-upgrade-starten', ORIGINAL)).toBe(TEXT_OFFEN)
+    expect(await run($, 'prompt-upgrade:starten', ORIGINAL)).toBe(TEXT_OFFEN)
     await clock.settle()
-    expect(await run($, 'prompt-upgrade-jetzt-verbessern')).toBe('Die übrigen Rückfragen sind übersprungen; der Prompt wird jetzt verbessert.')
+    expect(await run($, 'prompt-upgrade:jetzt-verbessern')).toBe('Die übrigen Rückfragen sind übersprungen; der Prompt wird jetzt verbessert.')
     await clock.settle()
 }
 
-test('genau die freigegebenen Befehle, alle angemeldet, mit Beschreibung', async ($, on) => {
+test('genau die freigegebenen Befehle, mit Beschreibung; angemeldet ist nur /better', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, clock)
     await start($)
     expect(BEFEHLE.map(k => k.name)).toEqual(NAMEN)
     for (const k of BEFEHLE) {
-        const spec = b.angemeldet.find(s => s.name === k.name)
-        expect(spec).toBeDefined()
-        expect((spec?.description ?? '').length).toBeGreaterThan(10)
-        expect(spec?.immediate).toBe(true)
-        expect(spec?.argumentHint).toBe(k.argumentHint)
+        expect(k.description.length).toBeGreaterThan(10)
+        // Die Langform ist eine Datei in commands/: Einen Namen mit Doppelpunkt nimmt $.command.register nicht.
+        expect(b.angemeldet.find(s => s.name === k.name)).toBeUndefined()
     }
-    expect(b.angemeldet.find(s => s.name === 'prompt-upgrade-starten')?.argumentHint).toBe('<Prompt>')
-    expect(b.angemeldet.some(s => s.name === 'better')).toBe(true)
+    expect(BEFEHLE.find(k => k.name === 'prompt-upgrade:starten')?.argumentHint).toBe('<Prompt>')
+    // Die Kurzform bleibt, die alten Namen mit Bindestrich sind nicht mehr angemeldet.
+    expect(b.angemeldet.map(s => s.name)).toEqual(['better'])
+})
+
+test('ein alter Name wie /prompt-upgrade-starten sagt nur, wie der Befehl jetzt heißt', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, clock)
+    await start($)
+    for (const name of NAMEN) {
+        const alt = name.replace('prompt-upgrade:', 'prompt-upgrade-')
+        for (const arg of ['', ORIGINAL, 'hilfe']) {
+            expect(await run($, alt, arg)).toBe(`Der Befehl heißt jetzt /${name}.`)
+        }
+    }
+    await clock.settle()
+    expect(b.geoeffnet).toEqual([])
+    expect(b.modell).toEqual([])
+    expect(b.eingang).toEqual([])
+    expect(b.gefuellt).toEqual([])
+    expect(b.kopiert).toEqual([])
 })
 
 test('jeder Befehl erklärt sich mit hilfe und mit ?, ohne etwas zu tun', async ($, on) => {
@@ -155,12 +173,12 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, ohne etwas zu tun', async 
     expect(b.eingang).toEqual([])
 })
 
-test('/prompt-upgrade-hilfe listet alle Befehle mit einer Zeile', async ($, on) => {
+test('/prompt-upgrade:hilfe listet alle Befehle mit einer Zeile', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, clock)
     await start($)
-    const text = await run($, 'prompt-upgrade-hilfe')
+    const text = await run($, 'prompt-upgrade:hilfe')
     for (const k of BEFEHLE) {
         expect(text).toContain(`/${k.name}${k.argumentHint ? ` ${k.argumentHint}` : ''} – ${k.description}`)
     }
@@ -183,19 +201,19 @@ test('starten wie /better <Prompt>: Text sofort, Fenster dahinter; ohne Prompt d
     mock.store(on, {})
     const b = boden(on, clock)
     await start($)
-    expect(await run($, 'prompt-upgrade-starten', ORIGINAL)).toBe(TEXT_OFFEN)
+    expect(await run($, 'prompt-upgrade:starten', ORIGINAL)).toBe(TEXT_OFFEN)
     await clock.settle()
     expect(b.geoeffnet).toEqual([PANE])
     expect(b.modell[0]).toContain(`<prompt>\n${ORIGINAL}\n</prompt>`)
-    expect(await run($, 'prompt-upgrade-starten')).toBe(TEXT_EINGABE)
-    expect(await run($, 'prompt-upgrade-starten', 'an')).toBe(TEXT_OFFEN)
+    expect(await run($, 'prompt-upgrade:starten')).toBe(TEXT_EINGABE)
+    expect(await run($, 'prompt-upgrade:starten', 'an')).toBe(TEXT_OFFEN)
     await clock.settle()
     expect(b.modell.at(-1)).toContain('\nan\n')
     // Die Automatik blieb dabei aus.
     expect((await $.prompt.submit({ text: 'Bau den Export neu', wait: false, origin: { kind: 'composer' } } as never)).drop).toBeUndefined()
 
     const vorher = b.geoeffnet.length
-    expect(await run($, 'prompt-upgrade-starten', ORIGINAL, 'bridge')).toBe(TEXT_HANDY_BEFEHLE)
+    expect(await run($, 'prompt-upgrade:starten', ORIGINAL, 'bridge')).toBe(TEXT_HANDY_BEFEHLE)
     await clock.settle()
     expect(b.geoeffnet).toHaveLength(vorher)
 })
@@ -206,14 +224,14 @@ test('automatik-an und -aus: wie /better an|aus, nur in diesem Chat', async ($, 
     const b = boden(on, clock)
     await start($)
     const tippe = async (text: string) => ((await $.prompt.submit({ text, wait: false, origin: { kind: 'composer' } } as never)) as { drop?: string }).drop
-    expect(await run($, 'prompt-upgrade-automatik-an')).toBe(TEXT_AN)
+    expect(await run($, 'prompt-upgrade:automatik-an')).toBe(TEXT_AN)
     expect(await tippe(ORIGINAL)).toBe(GRUND_ABGEFANGEN)
     await clock.settle()
     b.chat = 'chat-b'
     expect(await tippe('Bau den Export neu')).toBeUndefined()
     b.chat = 'chat-a'
     // Vom Handy geht der Schalter auch.
-    expect(await run($, 'prompt-upgrade-automatik-aus', '', 'bridge')).toBe(TEXT_AUS)
+    expect(await run($, 'prompt-upgrade:automatik-aus', '', 'bridge')).toBe(TEXT_AUS)
     expect(await tippe('Bau den Export neu')).toBeUndefined()
 })
 
@@ -224,7 +242,7 @@ test('Automatik: in der Desktop-App Getipptes (sdk) wird abgefangen, Handy und M
     await start($)
     const sende = async (origin: Record<string, unknown>) =>
         ((await $.prompt.submit({ text: ORIGINAL, wait: false, origin } as never)) as { drop?: string }).drop
-    expect(await run($, 'prompt-upgrade-automatik-an')).toBe(TEXT_AN)
+    expect(await run($, 'prompt-upgrade:automatik-an')).toBe(TEXT_AN)
     expect(await sende({ kind: 'bridge' })).toBeUndefined()
     expect(await sende({ kind: 'plugin', name: 'leitstand', asUser: true })).toBeUndefined()
     expect(await sende({ kind: 'sdk' })).toBe(GRUND_ABGEFANGEN)
@@ -236,9 +254,9 @@ test('verlauf: wie „Verlauf“, Text sofort; vom Handy ohne Fenster', async ($
     mock.store(on, {})
     const b = boden(on, clock)
     await start($)
-    expect(await run($, 'prompt-upgrade-verlauf', '', 'bridge')).toBe('Noch keine Upgrades.')
+    expect(await run($, 'prompt-upgrade:verlauf', '', 'bridge')).toBe('Noch keine Upgrades.')
     expect(b.geoeffnet).toEqual([])
-    expect(await run($, 'prompt-upgrade-verlauf')).toBe('Noch keine Upgrades.')
+    expect(await run($, 'prompt-upgrade:verlauf')).toBe('Noch keine Upgrades.')
     await clock.settle()
     expect(b.geoeffnet).toEqual([PANE])
 })
@@ -248,30 +266,30 @@ test('jetzt-verbessern, kopieren und ausfuehren wirken wie ihre Knöpfe', async 
     mock.store(on, {})
     const b = boden(on, clock)
     await start($)
-    expect(await run($, 'prompt-upgrade-starten', ORIGINAL)).toBe(TEXT_OFFEN)
+    expect(await run($, 'prompt-upgrade:starten', ORIGINAL)).toBe(TEXT_OFFEN)
     // Waehrend die Rueckfragen noch geholt werden: nichts zum Ausfuehren.
-    expect(await run($, 'prompt-upgrade-ausfuehren')).toBe('Noch nichts zum Ausführen: Das Upgrade ist noch nicht fertig.')
+    expect(await run($, 'prompt-upgrade:ausfuehren')).toBe('Noch nichts zum Ausführen: Das Upgrade ist noch nicht fertig.')
     await clock.settle()
-    expect(await run($, 'prompt-upgrade-original-senden')).toContain('Original senden gibt es nur, wenn das Upgrade gescheitert ist')
-    expect(await run($, 'prompt-upgrade-jetzt-verbessern')).toBe('Die übrigen Rückfragen sind übersprungen; der Prompt wird jetzt verbessert.')
+    expect(await run($, 'prompt-upgrade:original-senden')).toContain('Original senden gibt es nur, wenn das Upgrade gescheitert ist')
+    expect(await run($, 'prompt-upgrade:jetzt-verbessern')).toBe('Die übrigen Rückfragen sind übersprungen; der Prompt wird jetzt verbessert.')
     await clock.settle()
     expect(b.modell).toHaveLength(2)
     // Umgeschrieben, die Rueckfrage ohne Antwort.
     expect(b.modell[1]).toContain(`<original>\n${ORIGINAL}\n</original>\n\n<antworten>\n(keine)`)
-    expect(await run($, 'prompt-upgrade-jetzt-verbessern')).toBe('Gerade stehen keine Rückfragen offen.')
+    expect(await run($, 'prompt-upgrade:jetzt-verbessern')).toBe('Gerade stehen keine Rückfragen offen.')
 
-    expect(await run($, 'prompt-upgrade-kopieren')).toBe('Das Upgrade ist kopiert.')
+    expect(await run($, 'prompt-upgrade:kopieren')).toBe('Das Upgrade ist kopiert.')
     expect(b.kopiert).toEqual([UPGRADE])
-    const handy = await run($, 'prompt-upgrade-kopieren', '', 'bridge')
+    const handy = await run($, 'prompt-upgrade:kopieren', '', 'bridge')
     expect(handy).toBe(`Kopieren geht nur am Rechner. Hier ist das Upgrade zum Kopieren:\n\n${UPGRADE}`)
     expect(b.kopiert).toHaveLength(1)
 
-    expect(await run($, 'prompt-upgrade-ausfuehren')).toBe('Der verbesserte Prompt geht raus; das Fenster schließt sich.')
+    expect(await run($, 'prompt-upgrade:ausfuehren')).toBe('Der verbesserte Prompt geht raus; das Fenster schließt sich.')
     await clock.settle()
     expect(b.eingang).toEqual([{ text: UPGRADE, origin: 'plugin:prompt-upgrade' }])
     expect(b.geschlossen.at(-1)).toBe(PANE)
-    expect(await run($, 'prompt-upgrade-ausfuehren')).toBe(TEXT_KEIN_DURCHLAUF)
-    expect(await run($, 'prompt-upgrade-verlauf')).toContain(ORIGINAL)
+    expect(await run($, 'prompt-upgrade:ausfuehren')).toBe(TEXT_KEIN_DURCHLAUF)
+    expect(await run($, 'prompt-upgrade:verlauf')).toContain(ORIGINAL)
 })
 
 test('original-senden: wie „Original senden“ auf der Fehlerkarte', async ($, on) => {
@@ -279,9 +297,9 @@ test('original-senden: wie „Original senden“ auf der Fehlerkarte', async ($,
     mock.store(on, {})
     const b = boden(on, clock, { antworten: [{ grund: 'api-error' }] })
     await start($)
-    await run($, 'prompt-upgrade-starten', ORIGINAL)
+    await run($, 'prompt-upgrade:starten', ORIGINAL)
     await clock.settle()
-    expect(await run($, 'prompt-upgrade-original-senden')).toBe('Der Original-Prompt geht unverändert raus; das Fenster schließt sich.')
+    expect(await run($, 'prompt-upgrade:original-senden')).toBe('Der Original-Prompt geht unverändert raus; das Fenster schließt sich.')
     await clock.settle()
     expect(b.eingang).toEqual([{ text: ORIGINAL, origin: 'plugin:prompt-upgrade' }])
     expect(b.geschlossen.at(-1)).toBe(PANE)
@@ -293,13 +311,13 @@ test('abbrechen: wie „Abbrechen“, der Prompt kommt zurück ins Eingabefeld',
     const b = boden(on, clock)
     await start($)
     await bisZurPruefung($, clock)
-    expect(await run($, 'prompt-upgrade-abbrechen')).toBe('Abgebrochen: Das Fenster ist zu, dein Prompt steht wieder im Eingabefeld. Gesendet wurde nichts.')
+    expect(await run($, 'prompt-upgrade:abbrechen')).toBe('Abgebrochen: Das Fenster ist zu, dein Prompt steht wieder im Eingabefeld. Gesendet wurde nichts.')
     expect(b.gefuellt).toEqual([{ text: ORIGINAL, mode: 'replace' }])
     expect(b.geschlossen.at(-1)).toBe(PANE)
     expect(b.eingang).toEqual([])
     // Das leere Eingabefeld zum Eintippen: nichts zurueckzulegen.
-    expect(await run($, 'prompt-upgrade-starten')).toBe(TEXT_EINGABE)
-    expect(await run($, 'prompt-upgrade-abbrechen')).toBe('Abgebrochen: Das Fenster ist zu. Gesendet wurde nichts.')
+    expect(await run($, 'prompt-upgrade:starten')).toBe(TEXT_EINGABE)
+    expect(await run($, 'prompt-upgrade:abbrechen')).toBe('Abgebrochen: Das Fenster ist zu. Gesendet wurde nichts.')
     expect(b.gefuellt).toHaveLength(1)
 })
 
@@ -310,8 +328,8 @@ test('ein Fehler wird zu einem schlichten Satz', async ($, on) => {
     boden(on, clock, { kaputt: () => kaputt })
     await start($)
     kaputt = true
-    expect(await run($, 'prompt-upgrade-automatik-an')).toBe(BEFEHL_FEHLER)
-    expect(await run($, 'prompt-upgrade-automatik-aus')).toBe(BEFEHL_FEHLER)
+    expect(await run($, 'prompt-upgrade:automatik-an')).toBe(BEFEHL_FEHLER)
+    expect(await run($, 'prompt-upgrade:automatik-aus')).toBe(BEFEHL_FEHLER)
 })
 
 test('die Antworten der neuen Befehle bekommen den Zusatz statt des Vorsatzes', async ($, on) => {

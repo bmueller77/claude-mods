@@ -83,42 +83,58 @@ export type Befehl = {
     beispiel: string
 }
 
-/** Ein Befehl je Vorschlag: /naechste-schritte-1 bis -3. */
+/** Ein Befehl je Vorschlag: /naechste-schritte:1 bis :3. */
 function vorschlagBefehl(n: number): Befehl {
     return {
-        name: `naechste-schritte-${n}`,
-        description: `Den ${n}. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken (Nächste Schritte)`,
+        name: `naechste-schritte:${n}`,
+        description: `Den ${n}. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken`,
         was: `Schickt den ${n}. Vorschlag unter „Als Nächstes“ gleich als deine Nachricht ab. Gibt es ihn nicht, sagt der Befehl das und schickt nichts.`,
         knopf: `${n}️⃣ in der App, im Terminal die Ziffer ${n} im leeren Eingabefeld; die holen den Vorschlag erst als Entwurf, der Befehl schickt ihn sofort ab`,
         gilt: 'für die Vorschläge nach der letzten Antwort in diesem Chat',
         argumente: 'keine',
-        beispiel: `/naechste-schritte-${n}`,
+        beispiel: `/naechste-schritte:${n}`,
     }
 }
 
+/**
+ * Die eigenen Befehle, in der Reihenfolge der Uebersicht. Jeder ist eine Datei in commands/ des Mods
+ * (commands/hilfe.md wird /naechste-schritte:hilfe); ein Name mit Doppelpunkt laesst sich nicht anmelden.
+ * Den Lauf beantwortet trotzdem dieser Mod, die Datei kommt nie beim Modell an.
+ */
 export const BEFEHLE: readonly Befehl[] = [
     {
-        name: 'naechste-schritte-hilfe',
-        description: 'Alle Befehle von Nächste Schritte mit einer Zeile Erklärung (Nächste Schritte)',
+        name: 'naechste-schritte:hilfe',
+        description: 'Alle Befehle von Nächste Schritte mit einer Zeile Erklärung',
         was: 'Listet alle Befehle von Nächste Schritte mit einer Zeile Erklärung.',
         knopf: 'keiner',
         gilt: 'zeigt nur Text, ändert nichts',
         argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/naechste-schritte-hilfe',
+        beispiel: '/naechste-schritte:hilfe',
     },
     {
-        name: 'naechste-schritte-zeigen',
-        description: 'Die aktuellen Vorschläge für den nächsten Schritt nummeriert als Text (Nächste Schritte)',
+        name: 'naechste-schritte:zeigen',
+        description: 'Die aktuellen Vorschläge für den nächsten Schritt nummeriert als Text',
         was: 'Zeigt die Vorschläge nach der letzten Antwort nummeriert als Text, etwa wenn das Band über dem Eingabefeld nicht zu sehen ist.',
         knopf: 'keiner; dieselben Vorschläge stehen unter „Als Nächstes“ über dem Eingabefeld',
         gilt: 'für die Vorschläge nach der letzten Antwort in diesem Chat; ändert nichts',
         argumente: 'keine',
-        beispiel: '/naechste-schritte-zeigen',
+        beispiel: '/naechste-schritte:zeigen',
     },
     vorschlagBefehl(1),
     vorschlagBefehl(2),
     vorschlagBefehl(3),
 ]
+
+/**
+ * Die alten Namen bis naechste-schritte 0.3: /naechste-schritte-zeigen statt /naechste-schritte:zeigen.
+ * Sie stehen nicht mehr im Menue; wer einen tippt (eine alte Datei in ~/.claude/commands), erfaehrt den neuen.
+ */
+export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map(BEFEHLE.map(b => [b.name.replace(':', '-'), b.name] as const))
+
+/** Was ein alter Name antwortet: wie der Befehl jetzt heisst. */
+export function neuerName(name: string): string {
+    return `Der Befehl heißt jetzt /${name}.`
+}
 
 /** Ob das Argument nach der Hilfe fragt: hilfe oder ?. */
 export function istHilfe(args: string): boolean {
@@ -140,7 +156,7 @@ export function fehlerText(name: string): string {
 export function uebersicht(): string {
     return [
         'Befehle von Nächste Schritte (jeder versteht hilfe oder ? als Argument):',
-        ...BEFEHLE.map(b => `/${b.name}: ${b.description.replace(/ \(Nächste Schritte\)$/, '')}`),
+        ...BEFEHLE.map(b => `/${b.name}: ${b.description}`),
     ].join('\n')
 }
 
@@ -171,15 +187,15 @@ async function schickeVorschlag($: EngineInterface, n: number): Promise<string> 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
 async function wirke($: EngineInterface, name: string): Promise<string> {
     switch (name) {
-        case 'naechste-schritte-hilfe':
+        case 'naechste-schritte:hilfe':
             return uebersicht()
-        case 'naechste-schritte-zeigen':
+        case 'naechste-schritte:zeigen':
             return zeigeVorschlaege($)
-        case 'naechste-schritte-1':
+        case 'naechste-schritte:1':
             return schickeVorschlag($, 1)
-        case 'naechste-schritte-2':
+        case 'naechste-schritte:2':
             return schickeVorschlag($, 2)
-        case 'naechste-schritte-3':
+        case 'naechste-schritte:3':
             return schickeVorschlag($, 3)
         default:
             throw new Error(`kein Befehl ${name}`)
@@ -193,21 +209,7 @@ export const register: Register = on => {
     // Eine Umfrage nimmt blanke Ziffern selbst entgegen: dann bleiben sie ihr.
     let hatUmfrage = false
 
-    on('session.start', async ($, e, next) => {
-        const r = await next(e)
-        // Je Knopf ein eigener Befehl, dazu die Hilfe.
-        for (const b of BEFEHLE) {
-            await $.command
-                .register({
-                    name: b.name,
-                    description: b.description,
-                    ...(b.argumentHint ? { argumentHint: b.argumentHint } : {}),
-                    immediate: true,
-                })
-                .catch(() => {})
-        }
-        return r
-    })
+    // Angemeldet wird nichts: Die Befehle /naechste-schritte:… sind Dateien in commands/ des Mods.
 
     // Die Engine setzt die Namen der Mods vor jede Befehlsantwort. Dieser Mod streicht in der
     // gespeicherten Zeile seinen und sagt stattdessen am Ende, dass die Antwort von ihm kommt.
@@ -230,8 +232,12 @@ export const register: Register = on => {
         }).catch(() => ({ text: fehlerText(b.name) }))
     }
 
+    // Ein alter Name (/naechste-schritte-zeigen, aus einer alten Datei in ~/.claude/commands) sagt nur den neuen.
+    const alterName = (e: { command: string }) => ({ text: neuerName(ALTE_BEFEHLE.get(e.command) ?? e.command) })
+    on('command.run', { command: [...ALTE_BEFEHLE.keys()] }, async (_$, e) => alterName(e)).catch((_$, e) => alterName(e))
+
     on('prompt.submit', async ($, e, next) => {
-        // Die eigenen Befehle lassen die Vorschlaege stehen: /naechste-schritte-zeigen soll sie nicht wegraeumen.
+        // Die eigenen Befehle lassen die Vorschlaege stehen: /naechste-schritte:zeigen soll sie nicht wegraeumen.
         if (e.command?.name.startsWith('naechste-schritte')) {
             return next(e)
         }

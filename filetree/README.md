@@ -12,6 +12,7 @@ Das ist die deutsche Fassung von [data-goblin/claude-code-filetree](https://gith
 - `y` oder Rechtsklick kopiert den relativen Pfad, `Y` oder Umschalt+Rechtsklick den absoluten.
 - Das Suchfeld findet auch Dateien in Ordnern, die noch zu sind. Enter springt zum ersten Treffer.
 - Knöpfe oben: ↑ eine Ebene höher, ⌂ zurück zum Arbeitsordner, ↻ neu laden, ◉/○ versteckte Dateien, Σ Datum oder Größe, ⊟ alles zuklappen, ⊘ Auswahl aufheben.
+- Die meisten Knöpfe haben auch einen Befehl, etwa `/filetree:neu-laden` oder `/filetree:versteckte-an`. `/filetree:hilfe` listet sie alle, `hilfe` hinter einem Befehl erklärt ihn.
 - Die ausgewählte Datei geht als Kontext an Claude mit. "das" oder "es" im Prompt meint dann diese Datei.
 
 ## Einstellungen
