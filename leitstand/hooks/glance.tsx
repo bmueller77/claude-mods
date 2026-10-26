@@ -41,6 +41,9 @@ import {
   FACTORY_SETTINGS,
   LEITSTAND_BEFEHLE,
   LEITSTAND_BEFEHL_NAMEN,
+  LEITSTAND_KURZFORMEN,
+  kurzform,
+  vollerBefehl,
   MAX_DETAIL,
   MAX_NAME,
   PLUGIN,
@@ -2655,9 +2658,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // One command of its own for each button and switch; /leitstand stays as the short form. Immediate, like a press:
     // /leitstand-pause has to reach a running turn, and a switch needs no turn at all.
     for (const one of LEITSTAND_BEFEHLE) {
-      await $.command
-        .register({ name: one.name, description: one.description, immediate: true, ...(one.argumentHint === undefined ? {} : { argumentHint: one.argumentHint }) })
-        .catch(() => undefined)
+      const hint = one.argumentHint === undefined ? {} : { argumentHint: one.argumentHint }
+      await $.command.register({ name: one.name, description: one.description, immediate: true, ...hint }).catch(() => undefined)
+      // The short form without leitstand- in front; the menu names the mod, since the name alone does not.
+      const kurz = kurzform(one.name)
+      if (kurz !== undefined) {
+        await $.command.register({ name: kurz, description: `${one.description} (Leitstand)`, immediate: true, ...hint }).catch(() => undefined)
+      }
     }
     // A reload drops the module's timers; pick the animation back up.
     syncTicker($, await read($, checklistAtom))
@@ -2857,8 +2864,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   })
 
   // The own commands /leitstand-…: their answer, like /leitstand's, gets "(gemeldet vom Mod Leitstand)" in its stored row.
-  on('command.run', { command: [...LEITSTAND_BEFEHL_NAMEN] }, async ($, e) => {
-    const text = await leitstandBefehl($, e.command, e.args ?? '', e.origin?.kind === 'bridge')
+  on('command.run', { command: [...LEITSTAND_BEFEHL_NAMEN, ...LEITSTAND_KURZFORMEN.keys()] }, async ($, e) => {
+    const text = await leitstandBefehl($, vollerBefehl(e.command), e.args ?? '', e.origin?.kind === 'bridge')
     lastOwnAnswer = text
     return { text }
   }).catch(() => {

@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 
@@ -8403,6 +8403,20 @@ describe('Eigene Befehle /leitstand-…', () => {
         if (one.gilt !== 'einmal') expect(help).toContain('nur in diesem Chat')
       }
     }
+    // Short forms without leitstand- in front: the same command, the menu names the mod.
+    expect(LEITSTAND_KURZFORMEN.size).toBe(47)
+    for (const name of ['an', 'aus', 'hilfe', 'vermenschlichen']) expect(registered.find(one => one.name === name)).toBeUndefined()
+    for (const [kurz, name] of LEITSTAND_KURZFORMEN) {
+      const one = LEITSTAND_BEFEHLE.find(befehl => befehl.name === name)
+      expect(kurz).toBe(name.slice('leitstand-'.length))
+      const spec = registered.find(r => r.name === kurz)
+      expect(spec?.description).toBe(`${one?.description} (Leitstand)`)
+      expect(spec?.argumentHint).toBe(one?.argumentHint)
+      expect(spec?.immediate).toBe(true)
+      const help = await run($, kurz, 'hilfe')
+      expect(help.startsWith(`/${name}: `)).toBe(true)
+      expect(help.endsWith(`\nKurzform: /${kurz}`)).toBe(true)
+    }
     expect(registered.find(one => one.name === 'leitstand-verlauf-zeigen')?.argumentHint).toBe('[gestern|JJJJ-MM-TT]')
     expect(registered.find(one => one.name === 'leitstand-ausfragen')?.argumentHint).toBe('[Thema]')
     for (const name of ['leitstand-geheimnisse-sichern', 'leitstand-neuer-chat', 'leitstand-abschliessen']) {
@@ -8460,8 +8474,12 @@ describe('Eigene Befehle /leitstand-…', () => {
       expect(await stateOf($, key)).toEqual(value)
       expect((store.get('settings:chat-1') as { values: Record<string, unknown> }).values[field]).toEqual(saved)
     }
-    expect(await run($, 'leitstand-verdecken-aus')).toBe('Verdecken ist jetzt aus (nur in diesem Chat).')
-    await run($, 'leitstand-ruhemodus-an')
+    // The short form does the same.
+    expect(await run($, 'verdecken-an')).toBe('Verdecken ist jetzt an (nur in diesem Chat).')
+    expect(await stateOf($, 'masksPrivate')).toBe(true)
+    expect(await run($, 'verdecken-aus')).toBe('Verdecken ist jetzt aus (nur in diesem Chat).')
+    expect(await stateOf($, 'masksPrivate')).toBe(false)
+    await run($, 'ruhemodus-an')
 
     // Another chat starts with the defaults from the config menu; the first one, opened again, has its own.
     session.id = 'chat-2'

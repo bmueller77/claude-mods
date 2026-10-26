@@ -22,7 +22,9 @@ geht. Die Namen folgen dem Muster `/<mod>-<funktion>[-<wert>]`, zum Beispiel `/l
 `/<mod>-hilfe` mit allen Befehlen, und jeder Befehl erklärt sich mit `hilfe` dahinter (`/leitstand-verdecken-an hilfe`).
 Befehle, die wie ein doppelter Knopfdruck etwas Größeres auslösen (`/leitstand-neuer-chat`, `/leitstand-abschliessen`,
 `/leitstand-geheimnisse-sichern`), wollen ein `ja` dahinter. Die alten Kurzformen (`/leitstand …`, `/better`, `/reflect …`,
-`/autopilot`, `/warmhalten`) gehen weiter. In `commands/` liegt für jeden Befehl eine kleine Datei, damit die Desktop-App
+`/autopilot`, `/warmhalten`) gehen weiter. Die Befehle des Leitstands gehen auch ohne `leitstand-` davor, etwa `/pause`,
+`/verdecken-an` oder `/neuer-chat ja`; nur `an`, `aus`, `hilfe` und `vermenschlichen` nicht, weil diese Namen allein
+nicht sagen, welcher Mod gemeint ist, und `/vermenschlichen` der Skill selbst ist. In `commands/` liegt für jeden Befehl eine kleine Datei, damit die Desktop-App
 ihn schon in der ersten Nachricht eines Chats kennt.
 
 ## Installiert install.sh

@@ -55,6 +55,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Einstellungen gelten je Chat, der Standard kommt aus `userConfig`. Leitstand-Standard: Auto-Modus,
   Verdecken und Passwortschutz an, Ansicht minimal, alles andere aus.
 - Jeder Knopf hat einen Befehl. `hilfe` hinter jedem Befehl erklärt ihn, größere Aktionen wollen `ja`.
+  Seit leitstand 0.55.0 gehen die Leitstand-Befehle auch ohne `leitstand-` davor (`/pause`,
+  `/verdecken-an`), außer `an`, `aus`, `hilfe` und `vermenschlichen` (`OHNE_KURZFORM` in `logic.ts`).
+  Jede Kurzform hat ihre eigene Datei in `commands/`; ein neuer Leitstand-Befehl braucht beide.
 - Den Vorsatz der App vor Befehlsantworten („leitstand: …") streicht ein `session.append`-Hook;
   dafür steht „(gemeldet vom Mod …)" am Ende.
 - Herkunft einer Nachricht (`origin.kind`): Desktop-App `sdk`, Handy über Remote Control `bridge`,

@@ -1694,6 +1694,27 @@ export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
 /** Die Namen aller eigenen Befehle. */
 export const LEITSTAND_BEFEHL_NAMEN: readonly string[] = LEITSTAND_BEFEHLE.map(one => one.name)
 
+/**
+ * Befehle ohne Kurzform: an, aus und hilfe sagen allein nicht, welcher Mod gemeint ist, und /vermenschlichen ist schon
+ * der Skill, den der Befehl startet.
+ */
+const OHNE_KURZFORM: ReadonlySet<string> = new Set(['leitstand-an', 'leitstand-aus', 'leitstand-hilfe', 'leitstand-vermenschlichen'])
+
+/** Die Kurzform eines Befehls ohne leitstand- davor (/pause für /leitstand-pause), oder undefined. */
+export const kurzform = (name: string): string | undefined =>
+  OHNE_KURZFORM.has(name) || !name.startsWith('leitstand-') ? undefined : name.slice('leitstand-'.length)
+
+/** Jede Kurzform mit dem vollen Namen ihres Befehls. */
+export const LEITSTAND_KURZFORMEN: ReadonlyMap<string, string> = new Map(
+  LEITSTAND_BEFEHLE.flatMap(one => {
+    const kurz = kurzform(one.name)
+    return kurz === undefined ? [] : [[kurz, one.name] as const]
+  }),
+)
+
+/** Der volle Name eines Befehls, auch wenn er als Kurzform kam. */
+export const vollerBefehl = (name: string): string => LEITSTAND_KURZFORMEN.get(name) ?? name
+
 /** Ob das Argument eines Befehls nach seiner Hilfe fragt. */
 export const fragtNachHilfe = (args: string) => /^(hilfe|\?|help)$/i.test(args.trim())
 
@@ -1705,6 +1726,7 @@ const GILT: Record<BefehlGilt, string> = {
 
 /** Die Hilfe eines Befehls: was er tut, sein Knopf, wie weit er wirkt, seine Argumente und ein Beispiel. */
 export function befehlsHilfe(one: LeitstandBefehl): string {
+  const kurz = kurzform(one.name)
   return [
     `/${one.name}: ${one.description}`,
     `Was: ${one.tut}`,
@@ -1712,6 +1734,7 @@ export function befehlsHilfe(one: LeitstandBefehl): string {
     `Gilt: ${GILT[one.gilt]}`,
     `Argumente: ${one.argumente === '' ? 'keine' : one.argumente} Mit hilfe (oder ?) zeigt er diese Hilfe.`,
     `Beispiel: ${one.beispiel}`,
+    ...(kurz === undefined ? [] : [`Kurzform: /${kurz}`]),
   ].join('\n')
 }
 
@@ -1726,6 +1749,9 @@ export function befehlsUeberblick(): string {
     }
     lines.push(`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''}: ${one.description}`)
   }
-  lines.push('', 'Einstellungen gelten nur in diesem Chat. /leitstand bleibt als Kurzform.')
+  lines.push(
+    '',
+    'Einstellungen gelten nur in diesem Chat. Fast jeder Befehl geht auch ohne leitstand- davor, etwa /pause oder /verdecken-an; nur an, aus, hilfe und vermenschlichen nicht. /leitstand bleibt als Kurzform.',
+  )
   return lines.join('\n')
 }
