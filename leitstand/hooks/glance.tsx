@@ -169,7 +169,9 @@ const GEAR = '\u2699\uFE0F'
 const GRILL = '\u2668\uFE0F'
 /** The skill buttons beside Grill mich elsewhere than the terminal, as emoji. */
 const HUMANIZE = '\u{1F9CD}'
-const ADHD = '\u{1F9E0}'
+/** Kurzantworten (the i-have-adhd skill) on and off: a memo for short answers, a book for the usual long ones. */
+const SHORT_ANSWERS = '\u{1F4DD}'
+const LONG_ANSWERS = '\u{1F4D6}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
 /** The opener for Filetree's side pane, after ADHD mode: a tree. */
 const FILETREE = '\u{1F333}'
@@ -2162,7 +2164,7 @@ function answerOf(text: string): string {
 const NUR_HIER = '(nur in diesem Chat)'
 const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Knopf im Leitstand.'
 const COMPACTING_WORDS = 'Der Chat wird gerade aufgeräumt. Versuch es gleich noch einmal.'
-// The skill behind 🧠, by either name.
+// The skill behind 📖/📝 (Kurzantworten), by either name.
 const ADHD_NAMES = ['i-have-adhd:i-have-adhd', 'i-have-adhd']
 const ANSICHT_WORTE = { simple: 'Einfach', detailed: 'Ausführlich', minimal: 'Minimal' } as const
 
@@ -4816,7 +4818,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         : {
             beside: [
               <Button key="humanize" variant="secondary" label={HUMANIZE} onPress={() => humanizeLast($)} />,
-              <Button key="adhd" variant={adhd ? 'primary' : 'secondary'} label={ADHD} onPress={() => toggleAdhd($)} />,
+              // A switch whose sign says the state: never drawn as pressed (Björn's wish).
+              <Button key="adhd" variant="secondary" label={adhd ? SHORT_ANSWERS : LONG_ANSWERS} onPress={() => toggleAdhd($)} />,
             ],
             // An opener, not a switch: Filetree keeps its pane to itself, so the button never shows it as on.
             files: [<Button key="filetree" variant="secondary" label={FILETREE} onPress={() => openFiletree($)} />],

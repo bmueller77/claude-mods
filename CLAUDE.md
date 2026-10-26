@@ -65,7 +65,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   (`/leitstand-pause`, `/adhs-an`) nennen nur den neuen (`ALTE_BEFEHLE`). Die Skill-Suche
   (`lookUpCommand`) übergeht `leitstand:…`, sonst fände `:vermenschlichen` den eigenen Befehl.
   Ungeprüft: ob `/leitstand:pause` mitten in einer Runde sofort wirkt (Markdown-Befehle haben kein
-  `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten.
+  `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten, Knopf 📖 (aus) und 📝 (an), seit 0.56.1.
   Unter `claude -p` greifen per `$.command.register` angemeldete Befehle im Prompt nicht, sie gehen
   ans Modell (`/leitstand hilfe`, `/statistik-zeigen`, `/pause`); Markdown-Befehle aus dem
   Plugin-Ordner laufen dort (`/leitstand:verdecken-an hilfe`, geprüft 2026-10-26).

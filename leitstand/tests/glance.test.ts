@@ -5646,7 +5646,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const order = ['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F9E0}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
+    for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4D6}', '\u{1F333}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
     // Review and Usage are gone.
     for (const key of ['review', 'usage']) expect(row).not.toContain(`"key":"${key}"`)
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
@@ -5686,14 +5686,14 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
   })
 
-  test('ADHS (🧠) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
+  test('Kurzantworten (📖) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     expect(row.indexOf('adhd')).toBe(row.indexOf('humanize') + 1)
     expect(row.indexOf('adhd')).toBeLessThan(row.indexOf('dim|'))
   })
 
-  test('Filetree (🌳) steht hinter 🧠 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
+  test('Filetree (🌳) steht hinter 📖 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     const at = row.indexOf('filetree')
@@ -5778,67 +5778,73 @@ describe('Arbeitsweise und Grill mich', () => {
     on('tool.register', () => ({ value: undefined }) as never)
     on('command.register', () => ({ value: undefined }) as never)
     const world = await skillWorld($, on)
-    const variant = async () => {
+    const button = async () => {
       const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-      const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'adhd')
+      const found = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'adhd')
       await ui.unmount()
-      return button?.props.variant
+      return found
     }
-    return { ...world, sent, variant }
+    const variant = async () => (await button())?.props.variant
+    const label = async () => (await button())?.props.label
+    return { ...world, sent, variant, label }
   }
 
-  test('ADHS aus: ein Druck startet den Skill i-have-adhd, danach ist 🧠 hervorgehoben', async ($, on) => {
-    const { state, press, variant } = await adhdWorld($, on)
+  test('Kurzantworten aus: 📖, ein Druck startet den Skill i-have-adhd, danach steht 📝, nie hervorgehoben', async ($, on) => {
+    const { state, press, variant, label } = await adhdWorld($, on)
     expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
     state.commands = [skill('i-have-adhd:i-have-adhd')]
     await press('adhd')
     expect(state.runs).toEqual([{ command: 'i-have-adhd:i-have-adhd', args: undefined }])
-    expect(await variant()).toBe('primary')
+    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4DD}')
   })
 
-  test('ADHS an: ein Druck sagt „stop adhd mode“ als die Person, danach ist 🧠 schlicht', async ($, on) => {
-    const { state, press, sent, variant } = await adhdWorld($, on)
+  test('Kurzantworten an: ein Druck sagt „stop adhd mode“ als die Person, danach steht wieder 📖', async ($, on) => {
+    const { state, press, sent, variant, label } = await adhdWorld($, on)
     state.commands = [skill('i-have-adhd:i-have-adhd')]
     await press('adhd')
-    expect(await variant()).toBe('primary')
+    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4DD}')
     await press('adhd')
     expect(sent).toEqual([{ text: 'stop adhd mode', asUser: true }])
     expect(state.runs).toHaveLength(1)
     expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
   })
 
   test('ADHS folgt dem Getippten: /i-have-adhd:i-have-adhd schaltet an, „Stop ADHD mode“ aus', async ($, on) => {
-    const { variant } = await adhdWorld($, on)
+    const { label } = await adhdWorld($, on)
     const composer = { wait: false, origin: { kind: 'composer' } }
     await $.prompt.submit({ text: '/i-have-adhd:i-have-adhd', ...composer } as never)
-    expect(await variant()).toBe('primary')
+    expect(await label()).toBe('\u{1F4DD}')
     await $.prompt.submit({ text: '  Stop ADHD mode  ', ...composer } as never)
-    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
     // The command as the engine reports it counts too.
     await $.prompt.submit({ text: '/i-have-adhd', command: { name: 'i-have-adhd', args: '' }, ...composer } as never)
-    expect(await variant()).toBe('primary')
+    expect(await label()).toBe('\u{1F4DD}')
     await $.prompt.submit({ text: 'Zurück zum normal mode, bitte', ...composer } as never)
-    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
   })
 
   test('ADHS bleibt aus, wenn der Befehl nur im Eingabefeld wartet', async ($, on) => {
-    const { state, press, variant } = await adhdWorld($, on)
+    const { state, press, label } = await adhdWorld($, on)
     // Not listed: the full name has a prefix, so it waits in the prompt.
     state.commands = []
     await press('adhd')
     expect(state.runs).toEqual([])
     expect(state.filled).toEqual(['/i-have-adhd:i-have-adhd'])
-    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
     // Listed, but the run fails: in the prompt again, still off.
     state.commands = [skill('i-have-adhd:i-have-adhd')]
     state.runFails = true
     await press('adhd')
     expect(state.filled).toHaveLength(2)
-    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
   })
 
   test('ADHS nach dem Neuladen wie im Verlauf: Aufruf, dann „normal mode“ aus; nur Aufruf an', async ($, on) => {
-    const { state, variant } = await adhdWorld($, on)
+    const { state, label } = await adhdWorld($, on)
     const call = { role: 'user' as const, text: '<command-name>/i-have-adhd:i-have-adhd</command-name>', toolUses: [] as never[] }
     // The skill's own text names the words that stop it; it is not the person's.
     const body = { role: 'user' as const, text: 'Base directory for this skill: /x/i-have-adhd\n\nStays on until "stop adhd mode".', toolUses: [] as never[] }
@@ -5846,15 +5852,15 @@ describe('Arbeitsweise und Grill mich', () => {
 
     state.messages = [call, body, answer, { role: 'user', text: 'normal mode', toolUses: [] }, answer]
     await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
-    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
 
     state.messages = [call, body, answer]
     await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
-    expect(await variant()).toBe('primary')
+    expect(await label()).toBe('\u{1F4DD}')
 
     state.messages = []
     await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
-    expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
   })
 
   test('Autopilot startet seinen Befehl; fehlt er, sagt der Leitstand das', async ($, on) => {
@@ -8514,7 +8520,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect((store.get('settings:chat-1') as { values: Record<string, unknown> }).values).toEqual({ workMode: 'dynamisch' })
   })
 
-  test('ADHS an und aus wirken wie 🧠, ausdrücklich: ein zweites an sagt, dass er schon an ist', READS, async ($, on) => {
+  test('Kurzantworten an und aus wirken wie 📖/📝, ausdrücklich: ein zweites an sagt, dass er schon an ist', READS, async ($, on) => {
     const clock = world(on)
     const runs: string[] = []
     const sent: string[] = []

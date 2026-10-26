@@ -79,7 +79,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 | reflect | lernt aus Korrekturen und fragt: Regel für alle Projekte, dieses Projekt oder nur diesen Chat; `/reflect` kritisiert die bisherige Arbeit; Knopf 🪞 im Leitstand |
 | modellwahl | schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch zu Beginn eines neuen Chats oder per `/modellwahl`; am Rechner gilt der Vorschlag nach 15 s, vom Handy auf ja |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
-| i-have-adhd | ADHS-Modus, im Leitstand Kurzantworten mit Knopf 🧠 |
+| i-have-adhd | ADHS-Modus, im Leitstand Kurzantworten mit Knopf 📖/📝 |
 
 ## Reihenfolge über dem Eingabefeld
 

@@ -1661,8 +1661,8 @@ export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Helfer', 'leitstand:reflexion', 'Reflect starten', 'Startet den Befehl des Mods Reflect.', '🪞', 'einmal'),
   befehl('Helfer', 'leitstand:vermenschlichen', 'Letzte Antwort natürlicher umschreiben', 'Claude überarbeitet seine letzte Antwort, damit sie nicht nach KI klingt.', '🧍', 'einmal'),
   befehl('Helfer', 'leitstand:dateibaum', 'Filetree öffnen', 'Öffnet die Seitenleiste des Mods Filetree.', '🌳', 'einmal'),
-  befehl('Helfer', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Claude antwortet mit dem nächsten Schritt zuerst, in nummerierten Schritten und ohne Umwege.', '🧠', 'chat'),
-  befehl('Helfer', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt.', '🧠', 'chat'),
+  befehl('Helfer', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Claude antwortet mit dem nächsten Schritt zuerst, in nummerierten Schritten und ohne Umwege.', '📖 (steht dann auf 📝)', 'chat'),
+  befehl('Helfer', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt.', '📝 (steht dann auf 📖)', 'chat'),
   befehl('Helfer', 'leitstand:fernsteuerung-an', 'Remote Control einschalten', 'Schaltet Remote Control ein, damit du den Chat vom Handy aus steuern kannst.', '🛜', 'chat'),
   befehl('Helfer', 'leitstand:fernsteuerung-aus', 'Remote Control ausschalten', 'Schaltet Remote Control aus.', '🛜', 'chat'),
 
