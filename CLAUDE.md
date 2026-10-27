@@ -123,6 +123,11 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Engine setzt den Mod-Ordner davor, Test-Attrappen müssen das abschneiden.
 - Oberflächen: Das Band über der Eingabe (`AbovePrompt`) zeichnen laut API nur Terminal und
   Desktop-App, ein Fenster (`Pane`) jede Oberfläche.
+- Desktop-App: Jeder Mod-Knopf bekommt denselben Innenabstand (`padding: 0 pad.md`, Höhe `h.control`),
+  `plain` auch. Kein Prop macht ihn schmaler oder quadratisch, eine schmale Box drumherum auch nicht.
+  Die App rechnet Box-Breiten in `ch`, Höhen in `lh` und Lücken in `ch`, Bruchteile gehen (gelesen
+  im Oberflächen-Skript der App, 2026-10-27). Platz schaffen deshalb nur Lücken: Der Leitstand setzt
+  seine Knöpfe seit 0.57.1 eine halbe Zelle auseinander.
 - Am PC kommt bjoern-mods seit 2026-10-19 von GitHub (Klon unter
   `~/.claude/plugins/marketplaces/bjoern-mods`). Der alte Ordner `~/.claude/mods` bleibt liegen,
   wird aber nicht mehr gelesen. Vorher stand der GitHub-Eintrag in `settings.json` eine Ebene zu tief,
