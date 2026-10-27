@@ -39,7 +39,7 @@ export const AUTOPILOT_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen',
     gruppe: GRUPPE,
     tut: 'Räumt den Bericht des beendeten Autopiloten über dem Eingabefeld weg.',
-    knopf: 'Weg in der Autopilot-Zeile',
+    knopf: 'Schließen in der Autopilot-Zeile',
     gilt: 'einmal',
     argumente: '',
     beispiel: '/leitstand:autopilot-bericht-weg',

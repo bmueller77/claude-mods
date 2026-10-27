@@ -321,7 +321,7 @@ test('eine Rückfrage beantwortet die Schicht selbst und merkt sie sich', OHNE_L
   expect(await leiste(ui as never)).toContain('Welche Datenbank?')
 })
 
-test('mit der Marke endet der Autopilot: Bericht mit Weg, eine neue Nachricht schaltet ihn nicht wieder ein', { plugins: [LESER], options: AUS }, async ($, on) => {
+test('mit der Marke endet der Autopilot: Bericht mit Schließen, eine neue Nachricht schaltet ihn nicht wieder ein', { plugins: [LESER], options: AUS }, async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   const eingang = boden(on)
   await start($ as never)
@@ -618,7 +618,7 @@ test('nach einem API-Fehler schiebt die Schicht nach einer Minute an', OHNE_LEIT
   expect(angeschoben(eingang)).toHaveLength(1)
 })
 
-test('wer unterbricht, beendet die Schicht; der Bericht bleibt bis Weg', OHNE_LEITSTAND, async ($, on) => {
+test('wer unterbricht, beendet die Schicht; der Bericht bleibt bis Schließen', OHNE_LEITSTAND, async ($, on) => {
   const clock = mock.clock(on, { now: 1_000_000 })
   boden(on)
   await start($ as never)
@@ -759,7 +759,7 @@ test('Status und Knöpfe stehen in einer Zeile, die Fragen aufgeklappt darunter'
     await ui.press({ key: 'ap-fragen' })
   }
 
-  // Vorbei: Weg steht in derselben Zeile.
+  // Vorbei: Schließen steht in derselben Zeile.
   await clock.advance(60_000)
   await befehl($ as never, 'aus')
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -770,7 +770,7 @@ test('Status und Knöpfe stehen in einer Zeile, die Fragen aufgeklappt darunter'
   }
 })
 
-test('vorbei ohne Fragen: nur Weg in der Knopf-Box, eine Zeile', OHNE_LEITSTAND, async ($, on) => {
+test('vorbei ohne Fragen: nur Schließen in der Knopf-Box, eine Zeile', OHNE_LEITSTAND, async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   boden(on)
   await start($ as never)
@@ -780,6 +780,8 @@ test('vorbei ohne Fragen: nur Weg in der Knopf-Box, eine Zeile', OHNE_LEITSTAND,
     const ui = await $.ui.mount({ ...BAND, surface, props: props() })
     expect((await zeileMit(ui as never, 'ap-weg'))?.knoepfe).toEqual(['ap-weg'])
     expect(await teile(ui as never)).toHaveLength(1)
+    // Björns Wunsch (2026-10-27): "Schließen", nicht "Weg".
+    expect((await ui.find({ type: 'Button', key: 'ap-weg' }))?.props.label).toBe('Schließen')
   }
 })
 
@@ -1165,7 +1167,7 @@ test('/leitstand:autopilot-fragen-zeigen nennt die selbst entschiedenen Fragen a
   expect(await leiste(ui as never)).not.toContain('Welche Datenbank?')
 })
 
-test('/leitstand:autopilot-bericht-weg räumt den Bericht weg wie der Knopf Weg', OHNE_LEITSTAND, async ($, on) => {
+test('/leitstand:autopilot-bericht-weg räumt den Bericht weg wie der Knopf Schließen', OHNE_LEITSTAND, async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   boden(on)
   await start($ as never)

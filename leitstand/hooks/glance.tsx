@@ -197,6 +197,10 @@ const NARROW = 60
 const METER_MIN_COLUMNS = 50
 /** The gap between the buttons in the row under the checklist elsewhere than the terminal, in cells: half of one. */
 const BUTTON_GAP = 0.5
+/** The space over a row of buttons elsewhere than the terminal, in the band's unit there, half a line (10 px). The app
+ * counts a button one line high but draws it 8 px taller, half above and half below; 1.2 leaves 4 px between two
+ * rows of buttons, as much as between two buttons side by side. */
+const BUTTON_ROW_GAP = 1.2
 // Longer plans fold finished and later steps into one line each; the Plan panel has them all.
 const COMPACT_AFTER = 5
 const MAX_SUMMARY = 100
@@ -4562,12 +4566,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       />
       )
     // The work mode, while the Leitstand is on (off, no work mode applies), leads the places at the bottom left
-    // elsewhere than the terminal: one button with the mode's sign, lit in both modes (it shows which, it is never
-    // "off"); a press flips the two. The terminal keeps it in Settings and /leitstand arbeitsweise.
+    // elsewhere than the terminal: one button with the mode's sign, lit in neither mode (its sign shows which; it is
+    // never "on" or "off", Björn's wish 2026-10-27); a press flips the two. The terminal keeps it in Settings and
+    // /leitstand arbeitsweise.
     const workModeItem = !isEnabled || !vector ? null : (
       <Button
         key="workmode"
-        variant="primary"
+        variant="secondary"
         label={WORK_MODE_SIGNS[workMode]}
         onPress={() => void setWorkMode($, workMode === 'dynamisch' ? 'auto' : 'dynamisch')}
       />
@@ -4632,14 +4637,15 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // acts, together: another mod's buttons, Fresh chat, then Pause, Start or Continue, the main one last,
     // as a dialog's buttons sit. In a narrow band the actions wrap onto a line of their own and still keep to the right.
     // The app pads every button alike and no prop narrows one, so the buttons stand half a cell apart (the app takes
-    // gaps in ch, fractions too); that keeps Fresh chat on the row (Björn's wish, 2026-10-27).
+    // gaps in ch, fractions too); that keeps Fresh chat on the row (Björn's wish, 2026-10-27). Over the row, and between
+    // its lines when it wraps, BUTTON_ROW_GAP, so no button touches the gear above or another button.
     const actions =
       actionItems === null ? null : vector ? (
-        <Box key="actions" flexDirection="row" alignItems="center" justifyContent="space-between" columnGap={1} rowGap={1} flexWrap="wrap" width={columns} marginTop={1}>
-          <Box flexDirection="row" alignItems="center" columnGap={BUTTON_GAP} rowGap={1} flexWrap="wrap" flexShrink={1} minWidth={0}>
+        <Box key="actions" flexDirection="row" alignItems="center" justifyContent="space-between" columnGap={1} rowGap={BUTTON_ROW_GAP} flexWrap="wrap" width={columns} marginTop={BUTTON_ROW_GAP}>
+          <Box flexDirection="row" alignItems="center" columnGap={BUTTON_GAP} rowGap={BUTTON_ROW_GAP} flexWrap="wrap" flexShrink={1} minWidth={0}>
             {leftItems}
           </Box>
-          <Box flexDirection="row" alignItems="center" justifyContent="flex-end" columnGap={BUTTON_GAP} rowGap={1} flexWrap="wrap" flexGrow={1} flexShrink={1} minWidth={0}>
+          <Box flexDirection="row" alignItems="center" justifyContent="flex-end" columnGap={BUTTON_GAP} rowGap={BUTTON_ROW_GAP} flexWrap="wrap" flexGrow={1} flexShrink={1} minWidth={0}>
             {lifted.buttons as RenderElement[]}
             {handoffItem}
             {shipItem}
@@ -4710,7 +4716,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             )}
             {line('tour-text', kit.blank(), <Text wrap="wrap">{TOUR_VECTOR[tourStep]}</Text>)}
             {warnings}
-            <Box key="tour" flexDirection="row" alignItems="center" justifyContent="space-between" columnGap={2} rowGap={1} flexWrap="wrap" width={columns} marginTop={1}>
+            <Box key="tour" flexDirection="row" alignItems="center" justifyContent="space-between" columnGap={2} rowGap={BUTTON_ROW_GAP} flexWrap="wrap" width={columns} marginTop={BUTTON_ROW_GAP}>
               <Box flexDirection="row" alignItems="center" columnGap={1}>
                 {action('history', 'history', 'Verlauf', () => showHistory($, dayKey(current), true))}
               </Box>

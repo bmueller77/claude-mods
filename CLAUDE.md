@@ -128,6 +128,12 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Die App rechnet Box-Breiten in `ch`, Höhen in `lh` und Lücken in `ch`, Bruchteile gehen (gelesen
   im Oberflächen-Skript der App, 2026-10-27). Platz schaffen deshalb nur Lücken: Der Leitstand setzt
   seine Knöpfe seit 0.57.1 eine halbe Zelle auseinander.
+- Desktop-App, Band: Senkrechte Zahlen (`marginTop`, `rowGap`, …) zählen halbe Zeilen (10 px), Tokens
+  wie `'xs'` gehen auch. Ein Knopf zählt eine Zeile (20 px), ist aber 28 px hoch und ragt 4 px darüber
+  und darunter (negativer `margin-block`). Zwei Knopfzeilen direkt untereinander berühren sich, eine
+  7-px-Trennlinie daneben verschwindet unter dem Knopf. Seit leitstand 0.57.2, statistik 0.18.2,
+  zusammenfassung 0.7.1 und naechste-schritte 0.4.1: Trennlinien 15 px (Linie in der Mitte), zwischen
+  Knopfzeilen 1.2 halbe Zeilen (4 px frei).
 - Am PC kommt bjoern-mods seit 2026-10-19 von GitHub (Klon unter
   `~/.claude/plugins/marketplaces/bjoern-mods`). Der alte Ordner `~/.claude/mods` bleibt liegen,
   wird aber nicht mehr gelesen. Vorher stand der GitHub-Eintrag in `settings.json` eine Ebene zu tief,

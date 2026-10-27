@@ -5571,6 +5571,25 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(right?.props.columnGap).toBe(0.5)
   })
 
+  test('in der App steht über der unteren Zeile und zwischen ihren Umbrüchen so viel Platz, dass sich keine Knöpfe berühren', async ($, on) => {
+    await skillWorld($, on)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const actions = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
+    await ui.unmount()
+    type Kid = { props: Record<string, unknown> }
+    const [left, right] = ((actions as unknown as { children?: Kid[] } | undefined)?.children ?? []) as Kid[]
+    // In halben Zeilen (10 px): die App zeichnet einen Knopf 8 px höher als seine Zeile, 1.2 lässt 4 px frei.
+    expect(actions?.props.marginTop).toBe(1.2)
+    expect(actions?.props.rowGap).toBe(1.2)
+    expect(left?.props.rowGap).toBe(1.2)
+    expect(right?.props.rowGap).toBe(1.2)
+    // Im Terminal bleibt es bei einer Zeile Abstand.
+    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const row = (await terminal.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
+    await terminal.unmount()
+    expect(row?.props.marginTop).toBeUndefined()
+  })
+
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
     expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
@@ -6258,14 +6277,14 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(bottom).toContain('"key":"workmode"')
     // Erstes Element links, vor Verlauf.
     expect(bottom.indexOf('"key":"history"')).toBeGreaterThan(bottom.indexOf('"key":"workmode"'))
-    // Kein Menü mehr, ein Knopf mit dem Zeichen der Arbeitsweise, hell in beiden.
+    // Kein Menü mehr, ein Knopf mit dem Zeichen der Arbeitsweise, in keiner hell (Björns Wunsch, 2026-10-27).
     expect((await ui.findAll({ type: 'Select' })).some(one => one.props.key === 'workmode')).toBe(false)
     const knopf = async () => (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'workmode')
     expect((await knopf())?.props.label).toBe('\u{1F464}')
-    expect((await knopf())?.props.variant).toBe('primary')
+    expect((await knopf())?.props.variant).toBe('secondary')
     await ui.press({ key: 'workmode' })
     expect((await knopf())?.props.label).toBe('\u{1F465}')
-    expect((await knopf())?.props.variant).toBe('primary')
+    expect((await knopf())?.props.variant).toBe('secondary')
     await ui.unmount()
 
     const asked = await $.command.run({ command: 'leitstand', args: 'arbeitsweise' } as never)
@@ -6301,9 +6320,13 @@ test('über dem Band steht ein Trennstrich: in der App eine dünne Linie, im Ter
   await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
   const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  const alts = (await band.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
+  const svgs = await band.findAll({ type: 'Svg' })
+  const alts = svgs.map(one => String(one.props.alt))
   await band.unmount()
   expect(alts[0]).toBe('Trennlinie')
+  // 7 px Luft über und unter der Linie: ein Knopf daneben ragt 4 px hinein und verdeckt sie nicht.
+  expect(svgs[0]?.props.height).toBe(15)
+  expect(String(svgs[0]?.props.source)).toContain('y="7"')
   expect((await texts($, 'terminal'))[0]).toBe('─'.repeat(80))
 
   // Auch mit Leitstand aus steht der Strich über der kurzen Zeile.

@@ -37,8 +37,8 @@ test('Einschätzung lesen: JSON auch mit Text drumherum, sonst null', () => {
 })
 
 test('Namen und Familien', () => {
-    expect(wahlText({ modell: 'opus', aufwand: 'xhigh' })).toBe('Opus · sehr hoch')
-    expect(wahlText({ modell: 'haiku', aufwand: 'low' })).toBe('Haiku · niedrig')
+    expect(wahlText({ modell: 'opus', aufwand: 'xhigh' })).toBe('Opus · Extra hoch')
+    expect(wahlText({ modell: 'haiku', aufwand: 'low' })).toBe('Haiku · Niedrig')
     expect(familieVon('claude-sonnet-5-5')).toBe('sonnet')
     expect(familieVon('opus[1m]')).toBe('opus')
     expect(familieVon(null)).toBeNull()

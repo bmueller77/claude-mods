@@ -15,8 +15,8 @@ const MARK = 2
  * `preserveAspectRatio="none"` keeps its height.
  */
 const RULE_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="7" viewBox="0 0 4000 7" preserveAspectRatio="none">' +
-  '<rect x="0" y="3" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
+  '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="15" viewBox="0 0 4000 15" preserveAspectRatio="none">' +
+  '<rect x="0" y="7" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
 
 /**
  * The marks every screen draws, from one icon set (look.ts): SVG where the surface draws vectors (the desktop app,
@@ -61,12 +61,12 @@ export function kitOf(table: ElementTable, surface: RenderSurface) {
     blank: () => (Svg ? <Box width={MARK} flexShrink={0} /> : <Text> </Text>),
     /** A slim bar; vector surfaces only. */
     meter: (tone: Tone, percent: number | null, sweep: number, alt: string, width = 96) => draw(meterSvg(tone, width, percent, sweep), alt, width, 6),
-    /** The thin line over the band: on vector surfaces 1 px with 3 px of air above and below, on the terminal a faint
-     * row of dashes. */
+    /** The thin line over the band: on vector surfaces 1 px with 7 px of air above and below (a button beside it
+     * reaches 4 px into that, the app draws buttons taller than their line), on the terminal a faint row of dashes. */
     rule: (columns: number) =>
       Svg ? (
         <Box key="leitstand-trennlinie">
-          <Svg source={RULE_SVG} alt="Trennlinie" height={7} />
+          <Svg source={RULE_SVG} alt="Trennlinie" height={15} />
         </Box>
       ) : (
         <Text key="leitstand-trennlinie" dimColor wrap="truncate-end">

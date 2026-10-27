@@ -65,7 +65,7 @@ export const TIERS: readonly Tier[] = [
     name: 'schwer',
     label: 'schwer',
     model: 'opus',
-    modelLabel: 'Opus, sehr hoher Aufwand',
+    modelLabel: 'Opus, extra hoher Aufwand',
     effort: 'xhigh',
     use: 'Verstehen und finden: unbekannter oder unordentlicher Code, unklare Ursache, nicht offensichtliche Architektur, große Kontexte',
     findsCauses: true,

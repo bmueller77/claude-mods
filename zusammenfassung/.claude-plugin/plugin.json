@@ -1,6 +1,6 @@
 {
   "name": "zusammenfassung",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Nach jeder Arbeitsrunde eine kurze Zusammenfassung über dem Eingabefeld: was getan wurde und was man leicht übersieht. Aufklappbar mit Erklärung und Dateiliste, dazu ein Replay der Dateiänderungen Schritt für Schritt. Ersetzt zweiter-blick und replay-theater.",
   "author": {
     "name": "Björn Müller",

@@ -1366,9 +1366,10 @@ test('zwischen den Mods darueber und der Statistik steht eine Trennlinie', async
 
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     const linie = (await desktop.findAll({ type: 'Svg' })).find(s => s.props.alt === 'Trennlinie')
-    expect(linie?.props.height).toBe(7)
+    // 7 Pixel Luft ueber und unter der Linie: ein Knopf daneben ragt 4 Pixel hinein und verdeckt sie nicht.
+    expect(linie?.props.height).toBe(15)
     expect(linie?.props.width).toBeUndefined()
-    expect(String(linie?.props.source)).toContain('y="3"')
+    expect(String(linie?.props.source)).toContain('y="7"')
     expect(String(linie?.props.source)).toContain('height="1"')
 
     const terminal = await leiste((await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })) as never)

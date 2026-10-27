@@ -27,10 +27,10 @@ const BLOCK = 'naechste-schritte'
 const VORSPANN = 'Als Nächstes:  '
 const LUECKE = ' '.repeat(VORSPANN.length)
 
-/** Wie bei der Statistik: 7 Pixel hoch, die Linie 1 Pixel in der Mitte. */
+/** Wie bei der Statistik: 15 Pixel hoch, die Linie 1 Pixel in der Mitte; so verdeckt ein Knopf daneben sie nicht. */
 const TRENNLINIE_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="7" viewBox="0 0 4000 7" preserveAspectRatio="none">' +
-    '<rect x="0" y="3" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="15" viewBox="0 0 4000 15" preserveAspectRatio="none">' +
+    '<rect x="0" y="7" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
 
 // Beim Host gehalten, so ueberleben die Vorschlaege ein Neuladen des Moduls.
 const vorschlaege = atom({ plugin: 'naechste-schritte', key: 'vorschlaege' } as const, null as Vorschlaege | null)
@@ -345,7 +345,9 @@ export const register: Register = on => {
                     ])}
                 </Box>
             ) : (
-                <Box flexDirection="column" width={breite}>
+                // Die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile: 1.2 halbe Zeilen dazwischen lassen
+                // 4 Pixel frei, sonst schieben sich die Knoepfe uebereinander.
+                <Box flexDirection="column" rowGap={1.2} width={breite}>
                     {v.eintraege.map((t, i) => (
                         <Box flexDirection="row" gap={1} alignItems="center">
                             {knopf(i)}
@@ -379,11 +381,11 @@ export const register: Register = on => {
             )
         }
 
-        // Ein Trennstrich ueber den Vorschlaegen: in der App 1 Pixel mit je 3 Pixeln Luft,
+        // Ein Trennstrich ueber den Vorschlaegen: in der App 1 Pixel mit je 7 Pixeln Luft,
         // im Terminal eine blasse Zeile aus Strichen.
         const trennlinie = Svg ? (
             <Box key="naechste-schritte-trennlinie">
-                <Svg source={TRENNLINIE_SVG} alt="Trennlinie" height={7} />
+                <Svg source={TRENNLINIE_SVG} alt="Trennlinie" height={15} />
             </Box>
         ) : (
             <Text key="naechste-schritte-trennlinie" dimColor wrap="truncate-end">

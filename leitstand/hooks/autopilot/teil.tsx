@@ -393,7 +393,7 @@ async function fragenAlsText($: $): Promise<string> {
   return [kopf, ...fragen.map(f => `- ${f}`)].join('\n')
 }
 
-/** Der Knopf Weg: den Bericht einer beendeten Schicht wegräumen. */
+/** Der Knopf Schließen (bis 0.57.1 "Weg"): den Bericht einer beendeten Schicht wegräumen. */
 async function berichtWegText($: $): Promise<string> {
   if (await read($, schicht)) {
     return 'Der Autopilot läuft noch; einen Bericht gibt es erst, wenn er endet.'
@@ -601,7 +601,7 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
       return r
     }
     fehler = 0
-    // Die Marke beendet den Autopiloten: Der Bericht bleibt bis Weg, eine spätere Nachricht der Person schaltet ihn
+    // Die Marke beendet den Autopiloten: Der Bericht bleibt bis Schließen, eine spätere Nachricht der Person schaltet ihn
     // nicht wieder ein.
     if (istFertig(e.answer)) {
       await beenden($, GRUND_FERTIG)
@@ -682,7 +682,7 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
             {s ? (
               <Button key="ap-beenden" label="Beenden" onPress={() => void beenden($, 'du hast ihn beendet')} />
             ) : (
-              <Button key="ap-weg" label="Weg" role="dismiss" onPress={() => void berichtWeg($)} />
+              <Button key="ap-weg" label="Schließen" role="dismiss" onPress={() => void berichtWeg($)} />
             )}
           </Box>
         </Box>

@@ -152,14 +152,15 @@ export function countdownZeichen(sekunden: number): string {
 }
 
 /**
- * Die Trennlinie ueber der Statistik: 7 Pixel hoch, die Linie 1 Pixel in der
- * Mitte. Breiter als jede Leiste; ohne eigene Breite im Element nimmt die App
+ * Die Trennlinie ueber der Statistik: 15 Pixel hoch, die Linie 1 Pixel in der
+ * Mitte. Die App zeichnet Knoepfe 8 Pixel hoeher als ihre Zeile; ein Knopf
+ * daneben ragt 4 Pixel in die Luft und verdeckt die Linie nicht. Breiter als jede Leiste; ohne eigene Breite im Element nimmt die App
  * sie nur bis zum Rand der Leiste, und `preserveAspectRatio="none"` haelt
  * die Hoehe dabei fest.
  */
 const TRENNLINIE_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="7" viewBox="0 0 4000 7" preserveAspectRatio="none">' +
-    '<rect x="0" y="3" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="15" viewBox="0 0 4000 15" preserveAspectRatio="none">' +
+    '<rect x="0" y="7" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
 
 /** Farben der kleinen Bilder, lesbar in hellem wie dunklem Thema. */
 const GRUEN = '#3a9a5b'
@@ -2529,11 +2530,11 @@ export const register: Register = (on, options) => {
             )
         }
         // Zwischen dem, was andere Mods darueber zeichnen, und der Statistik eine
-        // duenne Linie: in der App 1 Pixel mit je 3 Pixeln Luft darueber und
+        // duenne Linie: in der App 1 Pixel mit je 7 Pixeln Luft darueber und
         // darunter, im Terminal eine blasse Zeile aus Strichen.
         const trennlinie = Svg ? (
             <Box key="statistik-trennlinie">
-                <Svg source={TRENNLINIE_SVG} alt="Trennlinie" height={7} />
+                <Svg source={TRENNLINIE_SVG} alt="Trennlinie" height={15} />
             </Box>
         ) : (
             <Text key="statistik-trennlinie" dimColor wrap="truncate-end">

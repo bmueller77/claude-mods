@@ -91,10 +91,10 @@ const ABSTAND_RAND = 2
 /** Was vor dem Hinweis steht. */
 const BEACHTE = 'Beachte: '
 
-/** Wie bei Statistik und Naechste-Schritte: 7 Pixel hoch, die Linie 1 Pixel in der Mitte. */
+/** Wie bei Statistik und Naechste-Schritte: 15 Pixel hoch, die Linie 1 Pixel in der Mitte; so verdeckt ein Knopf daneben sie nicht. */
 const TRENNLINIE_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="7" viewBox="0 0 4000 7" preserveAspectRatio="none">' +
-    '<rect x="0" y="3" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
+    '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="15" viewBox="0 0 4000 15" preserveAspectRatio="none">' +
+    '<rect x="0" y="7" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
 
 const bericht = atom({ plugin: 'zusammenfassung', key: 'bericht' } as const, null as Bericht | null)
 const schritte = atom({ plugin: 'zusammenfassung', key: 'schritte' } as const, [] as Schritt[])
@@ -954,11 +954,11 @@ export const register: Register = (on, options) => {
             </Box>
         )
 
-        // Ueber der Zusammenfassung ein Trennstrich: in der App 1 Pixel mit je 3 Pixeln Luft,
+        // Ueber der Zusammenfassung ein Trennstrich: in der App 1 Pixel mit je 7 Pixeln Luft,
         // im Terminal eine blasse Zeile aus Strichen.
         const trennlinie = Svg ? (
             <Box key="zf-trennlinie">
-                <Svg source={TRENNLINIE_SVG} alt="Trennlinie" height={7} />
+                <Svg source={TRENNLINIE_SVG} alt="Trennlinie" height={15} />
             </Box>
         ) : (
             <Text key="zf-trennlinie" dimColor wrap="truncate-end">

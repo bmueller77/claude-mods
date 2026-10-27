@@ -90,8 +90,8 @@ describe('naechste-schritte', () => {
         await rundeFertig($)
         const ui = await band($, 160, 'desktop')
         const linie = ((await ui.findAll({ type: 'Svg' })) as { props: Record<string, unknown> }[]).find(s => s.props.alt === 'Trennlinie')
-        expect(linie?.props.height).toBe(7)
-        expect(String(linie?.props.source)).toContain('y="3"')
+        expect(linie?.props.height).toBe(15)
+        expect(String(linie?.props.source)).toContain('y="7"')
         await ui.unmount()
     })
 
@@ -101,6 +101,17 @@ describe('naechste-schritte', () => {
         const ui = await band($, 50)
         expect(await ui.find({ type: 'Text', text: /^ {15}$/ })).toBeDefined()
         await ui.unmount()
+    })
+
+    test('in der App stehen die Knoepfe einer je Zeile so weit auseinander, dass sie sich nicht ueberdecken', async ($, on) => {
+        engine(on, () => MODELL)
+        await rundeFertig($)
+        const ui = await band($, 50, 'desktop')
+        const spalte = ((await ui.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]).find(b => b.props.rowGap !== undefined)
+        await ui.unmount()
+        // In halben Zeilen (10 Pixel): die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile.
+        expect(spalte?.props.rowGap).toBe(1.2)
+        expect(spalte?.props.flexDirection).toBe('column')
     })
 
     test('ein Ergebnis, das nach einer neuen Runde kommt, zaehlt nicht', async ($, on) => {

@@ -11,16 +11,16 @@ export const MODELLE: Record<Modell, { id: string; name: string }> = {
     fable: { id: 'claude-fable-5-1', name: 'Fable' },
 }
 
-/** Die Stufen des Aufwands mit ihrem deutschen Namen. */
+/** Die Stufen des Aufwands mit dem Namen, den die App in ihrer Auswahl zeigt (Björn, 2026-10-27). */
 export const AUFWAENDE: Record<Aufwand, string> = {
-    low: 'niedrig',
-    medium: 'mittel',
-    high: 'hoch',
-    xhigh: 'sehr hoch',
-    max: 'maximal',
+    low: 'Niedrig',
+    medium: 'Mittel',
+    high: 'Hoch',
+    xhigh: 'Extra hoch',
+    max: 'Maximal',
 }
 
-/** "Opus · hoch". */
+/** "Opus · Hoch", wie in der Auswahl der App. */
 export function wahlText(w: { modell: Modell; aufwand: Aufwand }): string {
     return `${MODELLE[w.modell].name} · ${AUFWAENDE[w.aufwand]}`
 }
