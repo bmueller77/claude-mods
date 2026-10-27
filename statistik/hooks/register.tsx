@@ -2476,29 +2476,36 @@ export const register: Register = (on, options) => {
 
         // Alles in einer Zeile, die Gruppen durch | getrennt: ganz links die Chatlaenge mit
         // dem Wisch-Knopf, dann der Kontext mit Verdichten und Details, dann der Cache, warm
-        // oder kalt mit dem Warmhalten-Schalter, dann die Limits.
+        // oder kalt mit dem Warmhalten-Schalter. Die Limits stehen rechtsbuendig am Ende der
+        // Zeile (Bjoerns Wunsch, 2026-10-27); ist sie zu schmal, rutschen sie in eine eigene
+        // Zeile, ebenfalls rechts.
         const eigene = (
-            <Box key="statistik-zeile" alignItems="center">
-                <Text>{SYMBOL_CHAT}</Text>
-                <Text dimColor>{chatText}</Text>
-                {wischen}
-                {abbrechenNach('wischen')}
-                <Text dimColor> | </Text>
-                {kontextBild}
-                <Text color={kontextFarbe}> {kontextText} </Text>
-                {compact}
-                {abbrechenNach('compact')}
-                <Text> </Text>
-                {detailsKnopf}
-                <Text dimColor> | </Text>
-                {uhr}
-                <Text color={farbe}> {restText}</Text>
-                <Text> </Text>
-                {schalter}
-                {ausKnopf ? <Text key="st-aus-luecke"> </Text> : null}
-                {ausKnopf}
-                {fenster.length > 0 ? <Text key="st-strich" dimColor> | </Text> : null}
-                {fenster.flatMap((f, i) => (i === 0 ? [f] : [<Text key={`st-trenner-${i}`} dimColor> · </Text>, f]))}
+            <Box key="statistik-zeile" alignItems="center" justifyContent="space-between" columnGap={2} flexWrap="wrap" width={Math.max(30, e.props.bodyColumns)}>
+                <Box key="st-links" alignItems="center" flexShrink={0}>
+                    <Text>{SYMBOL_CHAT}</Text>
+                    <Text dimColor>{chatText}</Text>
+                    {wischen}
+                    {abbrechenNach('wischen')}
+                    <Text dimColor> | </Text>
+                    {kontextBild}
+                    <Text color={kontextFarbe}> {kontextText} </Text>
+                    {compact}
+                    {abbrechenNach('compact')}
+                    <Text> </Text>
+                    {detailsKnopf}
+                    <Text dimColor> | </Text>
+                    {uhr}
+                    <Text color={farbe}> {restText}</Text>
+                    <Text> </Text>
+                    {schalter}
+                    {ausKnopf ? <Text key="st-aus-luecke"> </Text> : null}
+                    {ausKnopf}
+                </Box>
+                {fenster.length > 0 ? (
+                    <Box key="st-limits" alignItems="center" justifyContent="flex-end" flexGrow={1}>
+                        {fenster.flatMap((f, i) => (i === 0 ? [f] : [<Text key={`st-trenner-${i}`} dimColor> · </Text>, f]))}
+                    </Box>
+                ) : null}
             </Box>
         )
 

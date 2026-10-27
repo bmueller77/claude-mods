@@ -5559,6 +5559,18 @@ describe('Arbeitsweise und Grill mich', () => {
     }
   })
 
+  test('in der App stehen die Knöpfe der unteren Zeile eine halbe Zelle auseinander, damit Neuer Chat mit hineinpasst', async ($, on) => {
+    await skillWorld($, on)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const actions = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
+    await ui.unmount()
+    type Kid = { props: Record<string, unknown> }
+    const [left, right] = ((actions as unknown as { children?: Kid[] } | undefined)?.children ?? []) as Kid[]
+    expect(actions?.props.columnGap).toBe(1)
+    expect(left?.props.columnGap).toBe(0.5)
+    expect(right?.props.columnGap).toBe(0.5)
+  })
+
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
     expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])

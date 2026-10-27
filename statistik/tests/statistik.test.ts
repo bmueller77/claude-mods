@@ -1147,11 +1147,11 @@ test('Nutzungszeile: SL mit Restzeit, WL mit Wochentag; ohne Fable kein FL und k
     expect(text).toContain('WL: 72% (Do 09:00)')
     expect(text).not.toContain('FL')
     expect(text.indexOf('SL')).toBeLessThan(text.indexOf('WL'))
-    // Eine Zeile, die Gruppen durch | getrennt: Chat, Kontext, Cache, dann die Limits.
-    expect(text.split(' | ')).toHaveLength(4)
+    // Eine Zeile, die Gruppen durch | getrennt: Chat, Kontext, Cache; die Limits ohne Strich rechts am Ende.
+    expect(text.split(' | ')).toHaveLength(3)
     expect(text.indexOf(' | ')).toBeLessThan(text.indexOf('%'))
-    expect(text.indexOf('min')).toBeLessThan(text.lastIndexOf(' | '))
-    expect(text.lastIndexOf(' | ')).toBeLessThan(text.indexOf('SL'))
+    expect(text.lastIndexOf(' | ')).toBeLessThan(text.indexOf('min'))
+    expect(text.indexOf('min')).toBeLessThan(text.indexOf('SL'))
     expect(b.abrufe).toEqual([])
 
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
@@ -1164,6 +1164,10 @@ test('Nutzungszeile: SL mit Restzeit, WL mit Wochentag; ohne Fable kein FL und k
     expect(tipps[3]).toContain('am Donnerstag um 09:00 Uhr')
     const knoepfe = (await desktop.findAll({ type: 'Button' })).map(k => k.props.key)
     expect(knoepfe).toEqual(['wischen', 'compact', 'details', 'warmhalten'])
+    // Die Limits stehen in einer eigenen Box rechtsbündig am Ende der Zeile.
+    const kaesten = await desktop.findAll({ type: 'Box' })
+    expect(kaesten.find(k => k.props.key === 'statistik-zeile')?.props.justifyContent).toBe('space-between')
+    expect(kaesten.find(k => k.props.key === 'st-limits')?.props.justifyContent).toBe('flex-end')
 })
 
 test('mit Fable steht FL zwischen SL und WL, im Stil von SL', async ($, on) => {

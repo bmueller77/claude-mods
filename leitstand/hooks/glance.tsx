@@ -195,6 +195,8 @@ const HANDOFF_KEY = 'lastHandoff'
 // Below this width the mode button drops the name; below METER_MIN_COLUMNS the bars go, so step names keep their room.
 const NARROW = 60
 const METER_MIN_COLUMNS = 50
+/** The gap between the buttons in the row under the checklist elsewhere than the terminal, in cells: half of one. */
+const BUTTON_GAP = 0.5
 // Longer plans fold finished and later steps into one line each; the Plan panel has them all.
 const COMPACT_AFTER = 5
 const MAX_SUMMARY = 100
@@ -4629,13 +4631,15 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // The row under the checklist. Elsewhere than the terminal: where to go on the left; on the right everything that
     // acts, together: another mod's buttons, Fresh chat, then Pause, Start or Continue, the main one last,
     // as a dialog's buttons sit. In a narrow band the actions wrap onto a line of their own and still keep to the right.
+    // The app pads every button alike and no prop narrows one, so the buttons stand half a cell apart (the app takes
+    // gaps in ch, fractions too); that keeps Fresh chat on the row (Björn's wish, 2026-10-27).
     const actions =
       actionItems === null ? null : vector ? (
-        <Box key="actions" flexDirection="row" alignItems="center" justifyContent="space-between" columnGap={2} rowGap={1} flexWrap="wrap" width={columns} marginTop={1}>
-          <Box flexDirection="row" alignItems="center" columnGap={1} rowGap={1} flexWrap="wrap" flexShrink={1} minWidth={0}>
+        <Box key="actions" flexDirection="row" alignItems="center" justifyContent="space-between" columnGap={1} rowGap={1} flexWrap="wrap" width={columns} marginTop={1}>
+          <Box flexDirection="row" alignItems="center" columnGap={BUTTON_GAP} rowGap={1} flexWrap="wrap" flexShrink={1} minWidth={0}>
             {leftItems}
           </Box>
-          <Box flexDirection="row" alignItems="center" justifyContent="flex-end" columnGap={1} rowGap={1} flexWrap="wrap" flexGrow={1} flexShrink={1} minWidth={0}>
+          <Box flexDirection="row" alignItems="center" justifyContent="flex-end" columnGap={BUTTON_GAP} rowGap={1} flexWrap="wrap" flexGrow={1} flexShrink={1} minWidth={0}>
             {lifted.buttons as RenderElement[]}
             {handoffItem}
             {shipItem}
