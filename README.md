@@ -11,6 +11,7 @@ Neue Instanz einrichten:
     git clone https://github.com/bmueller77/claude-mods && claude-mods/install.sh
 
 Vorhandene Instanz umstellen (alte Mods raus, aktuelle rein): Prompt in [UMSTIEG.md](UMSTIEG.md).
+Umgestellte Instanz auf den neuesten Stand bringen: Prompt in [UPDATE.md](UPDATE.md).
 
 In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/statistik`, `/warmhalten`, `/zusammenfassung`, `/replay`, `/reflect`, `/better`). Nach `~/.claude/commands/` kopiert, kennt die App diese Befehle schon in der ersten Nachricht einer Sitzung.
 

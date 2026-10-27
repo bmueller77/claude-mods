@@ -4,8 +4,9 @@ Für jede Claude-Code-Instanz, auf den Servern wie in der Desktop-App auf dem La
 unten in einer Sitzung der Instanz abschicken. Er entfernt die alten Mods und richtet die aktuellen
 für alle Chats ein (Scope user).
 
-Quelle ist dieses Repo (`bmueller77/claude-mods`, Katalog "bjoern-mods"). Wer keinen Zugang zum
-Repo hat, bekommt das Zip `bjoern-mods-2026-10-19.zip`; es enthält dasselbe.
+Quelle ist dieses Repo (`bmueller77/claude-mods`, Katalog "bjoern-mods"). Seit 2026-10-27 haben
+alle Instanzen Zugang dazu; das Zip `bjoern-mods-2026-10-19.zip` braucht es nicht mehr. Eine schon
+umgestellte Instanz bringt der Prompt in `UPDATE.md` auf den neuesten Stand.
 
 ## Prompt
 
@@ -117,5 +118,5 @@ deshalb gleiches Bild auf jeder Instanz.
   der Leitstand benennt Aufträge mit Haiku und prüft jede kurze Nachricht mit Haiku auf Regeln
   (je Chat abschaltbar: `/regelpruefung-aus`); Prompt Upgrade braucht zwei Haiku-Aufrufe je
   Upgrade; die Statistik kostet nur beim Warmhalten.
-- Updates: `claude plugin marketplace update bjoern-mods`, dann `claude plugin update <mod>@bjoern-mods`
-  und neu starten.
+- Updates: der Prompt in `UPDATE.md`. Er holt die neuen Versionen, deinstalliert, was nicht mehr
+  im Katalog steht, und gleicht die Befehlsdateien ab.

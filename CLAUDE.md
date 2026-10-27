@@ -27,7 +27,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Sicherungspunkt gehört seit statistik 0.18.0 der Statistik. Fremden Zustand nur lesen (etwa die
   Zeile der Modellwahl im Band) ist kein Aufruf.
 - `README.md` sagt, was jeder Mod tut. `UMSTIEG.md` ist der Prompt für andere Instanzen,
-  `install.sh` installiert alles.
+  `UPDATE.md` der für ihre Updates, `install.sh` installiert alles. Was `UPDATE.md` installiert und
+  deinstalliert, liest die Instanz aus `marketplace.json`. Fällt eine Datei aus `commands/` weg,
+  kommt sie in Schritt 6 und die Tabelle von `UPDATE.md`.
 
 ## Arbeitsweise
 
@@ -50,7 +52,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Pushen auf `main`, wenn Validierung und Tests grün sind (Björns Daueranweisung „pushen, wenn
   fertig"). Läuft der Autopilot, nicht auf `main`, sondern auf einen eigenen Zweig pushen und das
   in der Übergabe vermerken. Ein nur lokaler Commit ginge in der Cloud mit dem Container verloren.
-- Zip für Instanzen ohne Repo-Zugang:
+- Seit 2026-10-27 haben alle Instanzen Zugang zum Repo. Falls doch wieder eine ohne dazukommt, Zip:
   `git archive --format=zip --prefix=bjoern-mods/ -o bjoern-mods-<datum>.zip HEAD`. Datum und
   Zip-Name in `UMSTIEG.md` nachziehen. `.gitattributes` hält `CLAUDE.md` und `docs/` aus dem Zip.
 - In einer Cloud-Sitzung ausprobieren: Mods mit
@@ -176,7 +178,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    "Nutzt eine verbundene App". Im Nachbau zeigt es nach Rundenende richtig "Braucht dich". Ursache
    offen (Helfer als laufend gezählt? `turn.complete` nicht angekommen?); beobachten.
 3. Schild 🛡️ (`/leitstand-geheimnisse-sichern`): Björns Test an einer anderen Instanz steht aus.
-4. Instanzen mit `UMSTIEG.md` und Zip umstellen (Björn).
+4. Instanzen mit `UPDATE.md` aktualisieren (Björn). Alle haben seit 2026-10-27 Zugang zum Repo.
 5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
    und filetree (3). Die Zusammenfassung las das Argument von `/modellwahl <Aufgabe>` als Auftrag
    und meldete, er sei "nicht bearbeitet" worden.
