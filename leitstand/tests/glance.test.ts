@@ -1769,7 +1769,8 @@ test('in the Desktop app the bold words of a header are never cut: a narrow band
     stop_hook_active: false,
     background_tasks: [{ id: 'b1', type: 'shell', status: 'running', description: 'Wait for the checks' }],
   } as never)
-  for (const [width, lead] of [[30, 'Hintergrund'], [40, 'Im Hintergrund'], [60, 'Arbeitet noch im Hintergrund']] as const) {
+  // Seit dem ❓ links neben dem Zahnrad hat der Kopf 5 Zellen weniger: Im Hintergrund passt ab 45 statt 40.
+  for (const [width, lead] of [[30, 'Hintergrund'], [45, 'Im Hintergrund'], [60, 'Arbeitet noch im Hintergrund']] as const) {
     const shown = await texts($, 'desktop', width)
     expect(shown).toContain(lead)
     expect(shown.join('\n')).not.toMatch(/(Arbeitet|Im|Hintergr)\w*…/)
@@ -1911,7 +1912,8 @@ test('in the Desktop app a header keeps whole pieces: what has no room is left o
   await callTool($, { tool: PROGRESS, task: 'Write it', percent: 100 })
   await callTool($, { tool: PROGRESS, task: 'Check it', percent: 100 })
   await $.turn.complete({ answer: 'Done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-  for (const width of [30, 44, 60]) {
+  // 50 statt 44: das ❓ nimmt dem Kopf 5 Zellen.
+  for (const width of [30, 50, 60]) {
     const header = (await texts($, 'desktop', width)).find(one => one.startsWith('Fertig')) ?? ''
     expect(header).not.toContain('…')
   }
@@ -5590,6 +5592,54 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(row?.props.marginTop).toBeUndefined()
   })
 
+  test('in der App steht ❓ links neben dem Zahnrad und öffnet das Fenster Leitstand-Knöpfe; im Terminal fehlt es wie das Zahnrad', async ($, on) => {
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(e.id)
+      return { value: { isPlaced: true } } as never
+    })
+    await skillWorld($, on)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const right = JSON.stringify((await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'header-right') ?? null)
+    expect((await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'help')?.props.label).toBe('\u2753')
+    expect(right.indexOf('"key":"help"')).toBeLessThan(right.indexOf('"key":"settings"'))
+    await ui.press({ key: 'help' })
+    await ui.unmount()
+    expect(opened).toEqual(['leitstand-knoepfe'])
+    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect((await terminal.findAll({ type: 'Button' })).some(one => one.props.key === 'help')).toBe(false)
+    await terminal.unmount()
+  })
+
+  test('das Fenster Leitstand-Knöpfe nennt jeden Knopf, den das Band zeigt, in beiden Arbeitsweisen', async ($, on) => {
+    await skillWorld($, on)
+    const labels = async () => {
+      const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const found = (await ui.findAll({ type: 'Button' })).map(one => String(one.props.label))
+      await ui.unmount()
+      return found
+    }
+    const shown: string[] = [...(await labels())]
+    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    await band.press({ key: 'workmode' })
+    await band.press({ key: 'privacy' })
+    await band.press({ key: 'adhd' })
+    await band.unmount()
+    shown.push(...(await labels()))
+    const pane = await $.ui.mount({
+      plugin: 'leitstand',
+      component: 'Pane',
+      requestId: 'leitstand-knoepfe',
+      surface: 'desktop',
+      props: { title: 'Leitstand-Knöpfe', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} },
+    })
+    const text = (await pane.findAll({ type: 'Text' })).map(one => one.text).join('\n')
+    await pane.unmount()
+    expect(shown.length).toBeGreaterThan(20)
+    for (const label of new Set(shown)) expect(text).toContain(label)
+    expect(text).toContain('/leitstand:knoepfe-zeigen')
+  })
+
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
     expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
@@ -6446,11 +6496,11 @@ describe('Zahnrad für die Einstellungen', () => {
 
     // Noch kein Plan, bei der Arbeit, in Minimal und ganz aus.
     let shown = await top()
-    expect(shown.order).toEqual(['Select', GEAR_LABEL])
+    expect(shown.order).toEqual(['Select', '\u2753', GEAR_LABEL])
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
     shown = await top()
-    expect(shown.order).toEqual(['Select', GEAR_LABEL])
+    expect(shown.order).toEqual(['Select', '\u2753', GEAR_LABEL])
     expect(shown.actions).toContain('Verlauf')
     expect(shown.actions).not.toContain('Einstellungen')
     expect(shown.actions).not.toContain('"key":"settings"')
@@ -6465,10 +6515,10 @@ describe('Zahnrad für die Einstellungen', () => {
     })
     await settings.press({ key: 'view-minimal' })
     await settings.unmount()
-    expect((await top()).order).toEqual(['Select', GEAR_LABEL])
+    expect((await top()).order).toEqual(['Select', '\u2753', GEAR_LABEL])
 
     await $.command.run({ command: 'leitstand', args: 'off' } as never)
-    expect((await top()).order).toEqual(['Select', GEAR_LABEL])
+    expect((await top()).order).toEqual(['Select', '\u2753', GEAR_LABEL])
 
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
     await band.press({ key: 'settings' })
@@ -8095,7 +8145,7 @@ describe('Eigene Befehle /leitstand-…', () => {
 
     const names = LEITSTAND_BEFEHLE.map(one => one.name)
     // Die des Leitstands selbst und die seiner Teile (Selbstkritik und Regeln, Dateien, Autopilot), jeder mit Kurzform.
-    expect(names).toHaveLength(47 + TEIL_BEFEHLE.length)
+    expect(names).toHaveLength(48 + TEIL_BEFEHLE.length)
     expect(new Set(names).size).toBe(names.length)
     const short = registered.find(one => one.name === 'leitstand')
     expect(short).toBeDefined()
@@ -8112,7 +8162,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       }
     }
     // Short forms without leitstand: in front: the same command, the menu names the mod.
-    expect(LEITSTAND_KURZFORMEN.size).toBe(43 + TEIL_BEFEHLE.length)
+    expect(LEITSTAND_KURZFORMEN.size).toBe(44 + TEIL_BEFEHLE.length)
     for (const name of ['an', 'aus', 'hilfe', 'vermenschlichen']) expect(registered.find(one => one.name === name)).toBeUndefined()
     for (const [kurz, name] of LEITSTAND_KURZFORMEN) {
       const one = LEITSTAND_BEFEHLE.find(befehl => befehl.name === name)
@@ -8348,6 +8398,26 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(await run($, 'leitstand:einstellungen-zeigen')).toBe('Die Einstellungen sind in der Seitenleiste.')
     await settle()
     expect(opened.at(-1)).toBe('leitstand-settings')
+  })
+
+  test('/leitstand:knoepfe-zeigen öffnet am Computer das Fenster, vom Handy kommt die Erklärung als Text; jeder genannte Befehl gibt es', async ($, on) => {
+    world(on)
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(String((e as { id?: string }).id))
+      return { value: { isPlaced: true } } as never
+    })
+    expect(await run($, 'leitstand:knoepfe-zeigen')).toBe('Die Erklärung der Knöpfe ist in der Seitenleiste.')
+    await settle()
+    expect(opened).toEqual(['leitstand-knoepfe'])
+    const phone = await run($, 'leitstand:knoepfe-zeigen', '', 'bridge')
+    expect(phone.startsWith('Die Knöpfe des Leitstands:\n\nOben rechts\n')).toBe(true)
+    expect(phone).toContain('\u2753 Knöpfe: Dieses Fenster')
+    expect(phone).toContain('\u{1F468}\u200D\u{1F4BC} Auto-Modus: ')
+    expect(phone).toContain('Neuer Chat: ')
+    const named = [...phone.matchAll(/\((\/leitstand:[a-z-]+)\)/g)].map(one => one[1]?.slice(1))
+    expect(named.length).toBeGreaterThan(20)
+    for (const name of named) expect(LEITSTAND_BEFEHLE.some(one => one.name === name)).toBe(true)
   })
 
   test('Tagesbericht, Wochenbericht und Deine Woche stehen als Text in der Antwort, kopiert wie am Knopf', async ($, on) => {

@@ -163,10 +163,12 @@ const TOUR_LAST = 'Unten unter Einstellungen findest du alle Optionen. Der Verla
 const TOUR = [TOUR_FIRST, tourNeeds('in Gelb'), TOUR_LAST]
 /** Elsewhere than the terminal the words keep the text colour and the yellow is the bell beside them. */
 const TOUR_LAST_VECTOR =
-  'Oben rechts hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
+  'Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR_VECTOR = [TOUR_FIRST, tourNeeds('neben einer gelben Glocke'), TOUR_LAST_VECTOR]
 /** The settings button beside the view elsewhere than the terminal: a gear, drawn as an emoji (U+FE0F), as wide as the other sign buttons. */
 const GEAR = '\u2699\uFE0F'
+/** Left of the gear elsewhere than the terminal: a question mark that opens the pane explaining the buttons. */
+const HELP = '\u2753'
 /** Grill mich elsewhere than the terminal: steam rising, as an emoji. */
 const GRILL = '\u2668\uFE0F'
 /** The skill buttons beside Grill mich elsewhere than the terminal, as emoji. */
@@ -192,6 +194,64 @@ const WORK_MODE_WORDS: Record<WorkMode, string> = { auto: 'Auto-Modus', dynamisc
 /** The work mode on its button: the office worker while Claude decides alone, a family of four for the team. In colour,
  * since the grey silhouettes looked too dark beside the other buttons (Björn, 2026-10-27). */
 const WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F468}\u200D\u{1F4BC}', dynamisch: '\u{1F468}\u200D\u{1F468}\u200D\u{1F467}\u200D\u{1F466}' }
+/** A button of the band as the pane Kn\u00F6pfe explains it: its sign (none for a button with words), its name, what it does,
+ * and the command that sets the same. A switch has one line per state, each with the command for that state. */
+type ButtonHelp = { sign?: string; name: string; does: string; command?: string }
+/** The band's buttons elsewhere than the terminal, where they stand and in their order there (Bj\u00F6rn's wish, 2026-10-27). */
+export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp[] }[] = [
+  {
+    place: 'Oben rechts',
+    buttons: [
+      { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Ausf\u00FChrlich dazu Modelle, Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
+      { sign: HELP, name: 'Kn\u00F6pfe', does: 'Dieses Fenster: was jeder Knopf tut.', command: '/leitstand:knoepfe-zeigen' },
+      { sign: GEAR, name: 'Einstellungen', does: '\u00D6ffnet die Einstellungen des Leitstands.', command: '/leitstand:einstellungen-zeigen' },
+    ],
+  },
+  {
+    place: 'Unten links',
+    buttons: [
+      { sign: WORK_MODE_SIGNS.auto, name: 'Auto-Modus', does: 'Claude entscheidet selbst, ob es Helfer einsetzt. Ein Druck schaltet auf Gruppenarbeit.', command: '/leitstand:arbeitsmodus-auto' },
+      {
+        sign: WORK_MODE_SIGNS.dynamisch,
+        name: 'Gruppenarbeit',
+        does: 'Claude plant und pr\u00FCft, Arbeiter setzen um, und jeder Plan wartet auf deine Freigabe. Ein Druck schaltet auf Auto-Modus.',
+        command: '/leitstand:arbeitsmodus-gruppenarbeit',
+      },
+      { sign: NIGHTSHIFT, name: 'Autopilot', does: 'Claude macht ohne R\u00FCckfragen weiter, bis alles erledigt ist, und schreibt am Ende eine \u00DCbergabe. Leuchtet, solange er l\u00E4uft.', command: '/leitstand:autopilot-an' },
+      { sign: GRILL, name: 'Grill mich', does: 'Claude l\u00F6chert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
+      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code pr\u00FCft Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', command: '/leitstand:sauberer-code' },
+      { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint in einem eigenen Fenster.', command: '/leitstand:selbstkritik' },
+      { sign: HUMANIZE, name: 'Vermenschlichen', does: 'Claude schreibt seine letzte Antwort um, damit sie nicht nach KI klingt.', command: '/leitstand:vermenschlichen' },
+      { sign: LONG_ANSWERS, name: 'Kurzantworten aus', does: 'Claude antwortet wie gewohnt. Ein Druck schaltet Kurzantworten ein.', command: '/leitstand:kurzantworten-aus' },
+      { sign: SHORT_ANSWERS, name: 'Kurzantworten an', does: 'Claude nennt zuerst den n\u00E4chsten Schritt und antwortet in nummerierten Schritten. Ein Druck schaltet sie aus.', command: '/leitstand:kurzantworten-an' },
+      { sign: FILETREE, name: 'Dateien', does: 'Zeigt die Dateien des Projekts als Baum in einem Fenster.', command: '/leitstand:dateien' },
+      { sign: REMOTE, name: 'Remote Control', does: 'Damit steuerst du den Chat vom Handy aus. Leuchtet, solange es verbunden ist, und fehlt, wenn der Chat es nicht kann.', command: '/leitstand:fernsteuerung-an' },
+      { sign: MASK_ON, name: 'Verdecken an', does: 'Passw\u00F6rter, Schl\u00FCssel und pers\u00F6nliche Daten stehen auf dem Bildschirm als Punkte. Claude liest alles unver\u00E4ndert.', command: '/leitstand:verdecken-an' },
+      { sign: MASK_OFF, name: 'Verdecken aus', does: 'Alles erscheint so, wie es im Chat steht.', command: '/leitstand:verdecken-aus' },
+      { sign: VAULT, name: 'Geheimnisse sichern', does: 'Verschiebt Passw\u00F6rter und Schl\u00FCssel aus dem Chat in die .env im Projektordner. Zweimal dr\u00FCcken.', command: '/leitstand:geheimnisse-sichern' },
+      { name: 'Plan', does: 'Zeigt den ganzen Plan in einem Fenster, sobald es einen gibt.', command: '/leitstand:plan-zeigen' },
+      { name: 'Verlauf', does: 'Deine Auftr\u00E4ge von heute und fr\u00FCheren Tagen, mit Tages- und Wochenbericht.', command: '/leitstand:verlauf-zeigen' },
+    ],
+  },
+  {
+    place: 'Unten rechts',
+    buttons: [
+      { name: 'Neuer Chat', does: 'Claude schreibt eine \u00DCbergabenotiz und beginnt damit einen neuen Chat. Zweimal dr\u00FCcken.', command: '/leitstand:neuer-chat' },
+      { name: 'Push', does: 'Nach einem fertigen Auftrag in einem GitHub-Projekt: Commit, Pull Request und Merge. Zweimal dr\u00FCcken.', command: '/leitstand:abschliessen' },
+      { name: 'Start', does: 'Startet den Plan, der auf deine Freigabe wartet.', command: '/leitstand:plan-starten' },
+      { name: 'Pause', does: 'H\u00E4lt Claude mitten im Auftrag an.', command: '/leitstand:pause' },
+      { name: 'Weiter', does: 'Claude macht dort weiter, wo es aufgeh\u00F6rt hat.', command: '/leitstand:weiter' },
+    ],
+  },
+]
+
+/** The same as text, for the phone, where no pane shows. */
+export function buttonHelpText(): string {
+  const places = BUTTON_HELP.map(({ place, buttons }) =>
+    [place, ...buttons.map(one => `${one.sign ? `${one.sign} ` : ''}${one.name}: ${one.does}${one.command ? ` (${one.command})` : ''}`)].join('\n'),
+  )
+  return ['Die Kn\u00F6pfe des Leitstands:', ...places].join('\n\n')
+}
 const HANDOFF_KEY = 'lastHandoff'
 // Below this width the mode button drops the name; below METER_MIN_COLUMNS the bars go, so step names keep their room.
 const NARROW = 60
@@ -282,6 +342,7 @@ const historyAtom = atom({ plugin: 'leitstand', key: 'historyView' } as const, n
 const HISTORY_PANE = 'leitstand-history'
 const PLAN_PANE = 'leitstand-plan'
 const SETTINGS_PANE = 'leitstand-settings'
+const HELP_PANE = 'leitstand-knoepfe'
 const handoffAtom = atom({ plugin: 'leitstand', key: 'handoffState' } as const, 'idle')
 // The main chat is being compacted: a message sent now waits in the queue until it is through.
 const compactingAtom = atom({ plugin: 'leitstand', key: 'isCompacting' } as const, false)
@@ -1992,6 +2053,7 @@ const resetSettings = async ($: $) => {
 }
 
 const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'Leitstand-Einstellungen', closeOnEscape: true })
+const showButtonHelp = ($: $) => $.ui.open({ id: HELP_PANE, title: 'Leitstand-Knöpfe', closeOnEscape: true })
 
 /** The one button: Simple → Details → Minimal → Simple; from Off back to Simple. Off is in Settings and /leitstand off. */
 const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed' | 'minimal') => {
@@ -2392,6 +2454,10 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
     }
     case 'leitstand:geheimnisse-sichern':
       return geheimnisseSichern($, args)
+
+    case 'leitstand:knoepfe-zeigen':
+      imHintergrund(() => showButtonHelp($))
+      return isPhone ? buttonHelpText() : 'Die Erklärung der Knöpfe ist in der Seitenleiste.'
 
     case 'leitstand:einstellungen-zeigen':
       imHintergrund(() => showSettings($))
@@ -4067,6 +4133,43 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     )
   })
 
+  // The buttons of the band, each with its sign, what it does and its command, by where they stand.
+  on('ui.render', { component: 'Pane', requestId: HELP_PANE }, async ($, e) => {
+    const table = $.ui.resolve(e)
+    const { Box, Text, Button } = table
+    const vector = kitOf(table, e.surface).isVector
+    const columns = Math.max(30, e.props.bodyColumns)
+    return (
+      <Box flexDirection="column" width={columns}>
+        {BUTTON_HELP.map(({ place, buttons }, at) => (
+          <Box key={`place-${at}`} flexDirection="column" marginTop={at === 0 ? 0 : 1}>
+            <Text bold>{place}</Text>
+            {buttons.map((one, n) => (
+              <Box key={`button-${at}-${n}`} flexDirection="row" columnGap={1} marginTop={1}>
+                <Box width={3} flexShrink={0}>
+                  <Text>{one.sign ?? ''}</Text>
+                </Box>
+                <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+                  <Text wrap="wrap">
+                    <Text bold>{one.name}</Text>
+                    <Text>{`: ${one.does}`}</Text>
+                  </Text>
+                  {one.command !== undefined && <Text dimColor>{one.command}</Text>}
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        ))}
+        {/* The app draws a panel's own close control; the terminal's panel needs the button. */}
+        {!vector && (
+          <Box key="close" marginTop={1}>
+            <Button key="close" label="Schließen" role="dismiss" onPress={() => $.ui.close({ id: HELP_PANE })} />
+          </Box>
+        )}
+      </Box>
+    )
+  })
+
   on('ui.render', { component: 'Pane', requestId: HISTORY_PANE }, async ($, e) => {
     const table = $.ui.resolve(e)
     const { Box, Text, Button } = table
@@ -4658,13 +4761,15 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           {actionItems}
         </Box>
       )
-    // Elsewhere than the terminal the settings sit right of the view, as a gear, in every state of the band.
+    // Elsewhere than the terminal the settings sit right of the view, as a gear, in every state of the band; left of
+    // the gear the question mark that explains the buttons (Björn's wish, 2026-10-27).
     const gear = vector ? <Button key="settings" variant="secondary" label={GEAR} onPress={() => showSettings($)} /> : null
+    const help = vector ? <Button key="help" variant="secondary" label={HELP} onPress={() => showButtonHelp($)} /> : null
     // The header's right end holds the view, on every surface: elsewhere than the terminal a menu as wide as its
-    // longest choice, "Ausführlich", and its arrow and padding, then the gear; counted a cell a character, so the
-    // header never runs under them.
-    const headerRight = gear ? [button, gear] : button
-    const rightCells = vector ? 'Ausführlich'.length + 4 + 5 : columns < NARROW ? 15 : 27
+    // longest choice, "Ausführlich", and its arrow and padding, then the question mark and the gear; counted a cell a
+    // character, so the header never runs under them.
+    const headerRight = gear ? [button, help, gear] : button
+    const rightCells = vector ? 'Ausführlich'.length + 4 + 5 + 5 : columns < NARROW ? 15 : 27
     // In characters. Elsewhere than the terminal the app's font sets about 0.8 of a cell a character, so the header
     // counts that many more before it cuts its words.
     const headerWidth = Math.max(0, vector ? Math.floor((columns - rightCells - 2) / 0.8) : columns - rightCells)
@@ -4812,6 +4917,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             </Box>
             <Box key="header-right" flexDirection="row" alignItems="center" columnGap={1} flexShrink={0}>
               {button}
+              {help}
               {gear}
             </Box>
           </Box>

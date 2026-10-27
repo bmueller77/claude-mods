@@ -26,6 +26,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:an` | Leitstand einschalten |
 | `/leitstand:aus` | Leitstand ausschalten |
 | `/leitstand:tour` | Die Begrüßung noch mal zeigen |
+| `/leitstand:knoepfe-zeigen` | Die Knöpfe des Leitstands erklären |
 
 ### Ansicht
 

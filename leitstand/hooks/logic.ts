@@ -1630,6 +1630,7 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand über dem Eingabefeld ein.', 'Einstellungen › Ansicht (Einfach, Ausführlich oder Minimal)', 'einstellung'),
   befehl('Allgemein', 'leitstand:aus', 'Leitstand ausschalten', 'Schaltet den Leitstand aus; alle Werkzeug-Details sind dann wieder zu sehen.', 'Einstellungen › Ansicht › Aus', 'einstellung'),
   befehl('Allgemein', 'leitstand:tour', 'Die Begrüßung noch mal zeigen', 'Zeigt die Begrüßung über dem Eingabefeld noch einmal; mit Weiter gehst du sie durch.', 'Keiner; die Begrüßung erscheint beim ersten Start von selbst.', 'einmal'),
+  befehl('Allgemein', 'leitstand:knoepfe-zeigen', 'Die Knöpfe des Leitstands erklären', 'Öffnet ein Fenster, das jeden Knopf des Leitstands mit seinem Zeichen und seinem Befehl erklärt; auf dem Handy als Text.', '❓ links neben dem Zahnrad', 'einmal'),
 
   befehl('Ansicht', 'leitstand:ansicht-einfach', 'Ansicht Einfach: Schritte und Fortschritt', 'Der Leitstand zeigt die Schritte und den Fortschritt.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Einfach', 'einstellung'),
   befehl('Ansicht', 'leitstand:ansicht-ausfuehrlich', 'Ansicht Ausführlich: dazu Modelle, Zeit und Tokens', 'Der Leitstand zeigt dazu Modelle, Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Ausführlich', 'einstellung'),
