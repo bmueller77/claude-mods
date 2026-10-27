@@ -189,8 +189,9 @@ const VAULT = '\u{1F6E1}\uFE0F'
 const REMOTE = '\u{1F6DC}'
 /** The two work modes, as the person reads them. */
 const WORK_MODE_WORDS: Record<WorkMode, string> = { auto: 'Auto-Modus', dynamisch: 'Gruppenarbeit' }
-/** The work mode on its button: one person while Claude decides alone, two for the team. */
-const WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F464}', dynamisch: '\u{1F465}' }
+/** The work mode on its button: the office worker while Claude decides alone, a family of four for the team. In colour,
+ * since the grey silhouettes looked too dark beside the other buttons (Björn, 2026-10-27). */
+const WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F468}\u200D\u{1F4BC}', dynamisch: '\u{1F468}\u200D\u{1F468}\u200D\u{1F467}\u200D\u{1F466}' }
 const HANDOFF_KEY = 'lastHandoff'
 // Below this width the mode button drops the name; below METER_MIN_COLUMNS the bars go, so step names keep their room.
 const NARROW = 60

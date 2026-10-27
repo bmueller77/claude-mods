@@ -1558,7 +1558,7 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const working = await drawn()
-  // Die Arbeitsweise ist kein Menü mehr, sondern der helle Knopf 👤/👥 unten links.
+  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links.
   expect(working.menus).toEqual(['Ausführlich / Einfach / Minimal'])
   expect(working.bottom).toContain('"key":"workmode"')
   expect(working.top).toContain('"type":"Select"')
@@ -6267,7 +6267,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(state.filled).toEqual(['/anthropic-skills:vermenschlichen Überarbeite deine letzte Antwort hier im Chat.'])
   })
 
-  test('auf dem Desktop steht die Arbeitsweise als heller Knopf 👤/👥 unten links vor Verlauf und schaltet um', async ($, on) => {
+  test('auf dem Desktop steht die Arbeitsweise als Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links vor Verlauf und schaltet um', async ($, on) => {
     world(on)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const boxes = await ui.findAll({ type: 'Box' })
@@ -6280,10 +6280,10 @@ describe('Arbeitsweise und Grill mich', () => {
     // Kein Menü mehr, ein Knopf mit dem Zeichen der Arbeitsweise, in keiner hell (Björns Wunsch, 2026-10-27).
     expect((await ui.findAll({ type: 'Select' })).some(one => one.props.key === 'workmode')).toBe(false)
     const knopf = async () => (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'workmode')
-    expect((await knopf())?.props.label).toBe('\u{1F464}')
+    expect((await knopf())?.props.label).toBe('\u{1F468}\u200D\u{1F4BC}')
     expect((await knopf())?.props.variant).toBe('secondary')
     await ui.press({ key: 'workmode' })
-    expect((await knopf())?.props.label).toBe('\u{1F465}')
+    expect((await knopf())?.props.label).toBe('\u{1F468}\u200D\u{1F468}\u200D\u{1F467}\u200D\u{1F466}')
     expect((await knopf())?.props.variant).toBe('secondary')
     await ui.unmount()
 
@@ -6371,7 +6371,7 @@ describe('Ansicht Minimal', () => {
       expect(line).toContain('Verlauf')
       expect(line).toContain('Pause')
       expect(line).toContain(surface === 'terminal' ? 'Grill' : '♨️')
-      if (surface === 'desktop') expect(shown).toContain('\u{1F464}')
+      if (surface === 'desktop') expect(shown).toContain('\u{1F468}\u200D\u{1F4BC}')
       expect(line).toContain(surface === 'terminal' ? 'Leitstand: Minimal' : 'Minimal ▾')
     }
   })
@@ -7775,7 +7775,7 @@ describe('Einstellungen je Chat', () => {
     expect(store.has('settings:chat-2')).toBe(false)
   })
 
-  test('im Desktop ändern 👥 und 🔒 nur diesen Chat', VIEW_SIMPLE, async ($, on) => {
+  test('im Desktop ändern 👨‍👨‍👧‍👦 und 🔒 nur diesen Chat', VIEW_SIMPLE, async ($, on) => {
     // Past the welcome, so the band shows its buttons.
     const { store, session } = resumeWorld(on, { glanceTour: true })
     await openChat($, session, 'chat-1')
