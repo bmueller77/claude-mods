@@ -1,6 +1,6 @@
 import type { ElementTable, RenderElement, RenderSurface } from 'claude-code'
 
-import { GLYPH, TONE_TEXT, badgeSvg, dotsSvg, iconSvg, meterSvg, openRingSvg, ringSvg } from './look'
+import { GLYPH, TONE_TEXT, badgeSvg, countSvg, dotsSvg, iconSvg, meterSvg, openRingSvg, pieSvg, ringSvg } from './look'
 import type { IconName, Tone } from './look'
 
 /** Icon size in the band and the panels, in CSS px: a touch smaller than the desktop's 14.5px text. */
@@ -54,8 +54,14 @@ export function kitOf(table: ElementTable, surface: RenderSurface) {
     /** The current step: a ring filled to `percent`, or turning with `turn` while there is none. */
     ring: (percent: number | null, turn: number, alt: string, size = ICON, tone: Tone = 'active') =>
       placed(draw(ringSvg(tone, size, percent, turn, LINE), alt, size, LINE), size) ?? glyph('play', tone),
-    /** A step still to come. */
-    open: (alt: string, size = ICON) => placed(draw(openRingSvg(size, LINE), alt, size, LINE), size) ?? <Text dimColor>○</Text>,
+    /** The job at work: a pie filled to `percent`, or a slice turning with `turn` while there is none. */
+    pie: (percent: number | null, turn: number, alt: string, size = ICON, tone: Tone = 'active') =>
+      placed(draw(pieSvg(tone, size, percent, turn, LINE), alt, size, LINE), size) ?? glyph('play', tone),
+    /** A step still to come, with its place in the plan in the ring when `number` is given. */
+    open: (alt: string, number?: number, size = ICON) =>
+      placed(draw(openRingSvg(size, LINE, number), alt, size, LINE), size) ?? <Text dimColor>○</Text>,
+    /** Steps folded into one line: how many, as "+N"; the terminal keeps its three dots. */
+    count: (n: number, alt: string, size = ICON) => placed(draw(countSvg(n, size, LINE), alt, size, LINE), size) ?? <Text dimColor>…</Text>,
     /** A mark's room with nothing in it, so a line under a step starts where the step's name does; no drawing, so a
      * screen reader passes over it. */
     blank: () => (Svg ? <Box width={MARK} flexShrink={0} /> : <Text> </Text>),

@@ -43,6 +43,7 @@ const PATHS = {
   sliders: '<path d="M4 7.5h9.3M18.1 7.5H20"/><circle cx="15.7" cy="7.5" r="2.3"/><path d="M4 16.5h1.9M10.7 16.5H20"/><circle cx="8.3" cy="16.5" r="2.3"/>',
   fresh: '<path d="M5.6 5h12.8A1.6 1.6 0 0 1 20 6.6v8.8a1.6 1.6 0 0 1-1.6 1.6H10.6L6 20.4V17h-.4A1.6 1.6 0 0 1 4 15.4V6.6A1.6 1.6 0 0 1 5.6 5z"/><path d="M12 8.4v5.2M9.4 11h5.2"/>',
   bang: '<path d="M12 7.2v5.6"/><path d="M12 16.6v.01"/>',
+  question: '<path d="M9.3 9.6a2.8 2.8 0 1 1 3.9 2.6c-.8.4-1.2 1-1.2 1.9v.5"/><path d="M12 17.1v.01"/>',
   eye: '<path d="M2.8 12S6 6.2 12 6.2 21.2 12 21.2 12 18 17.8 12 17.8 2.8 12 2.8 12z"/><circle cx="12" cy="12" r="2.6"/>',
   sound: '<path d="M4.2 9.8v4.4h3.3l4.2 3.5V6.3L7.5 9.8z"/><path d="M15.3 9.3a3.8 3.8 0 0 1 0 5.4"/><path d="M17.9 6.8a7.4 7.4 0 0 1 0 10.4"/>',
   bell: '<path d="M6.3 16.6v-5.1a5.7 5.7 0 0 1 11.4 0v5.1l1.4 1.8H4.9z"/><path d="M10.1 21h3.8"/>',
@@ -75,6 +76,7 @@ export const GLYPH: Record<IconName, string> = {
   sliders: '⚙',
   fresh: '↻',
   bang: '!',
+  question: '?',
   eye: '◉',
   sound: '♪',
   bell: '◈',
@@ -126,9 +128,52 @@ export function ringSvg(tone: Tone, size = 16, percent: number | null = null, tu
   return `<svg ${XMLNS} viewBox="0 0 24 24" width="${size}" height="${height}" fill="none" stroke-linecap="round"><circle cx="12" cy="12" r="8.5" stroke="${TONE[tone]}" stroke-opacity=".4" stroke-width="3"/>${arc}</svg>`
 }
 
-/** A step still to come: an open ring. */
-export function openRingSvg(size = 16, height = size): string {
-  return `<svg ${XMLNS} viewBox="0 0 24 24" width="${size}" height="${height}" fill="none"><circle cx="12" cy="12" r="8.5" stroke="${TONE.quiet}" stroke-width="1.9"/></svg>`
+/**
+ * The job at work: a pie that fills with its percentage, from twelve o'clock clockwise. With none, a slice of 30 %
+ * stands at the turn `turn` gives (a twelfth of a circle each), so a screen redrawn each tick spins it, as the ring's arc.
+ */
+export function pieSvg(tone: Tone, size = 16, percent: number | null = null, turn = 0, height = size): string {
+  const known = percent !== null
+  // A pie barely begun still shows a slice, so it never reads as nothing done.
+  const share = known ? Math.max(8, Math.min(100, percent)) / 100 : 0.3
+  const start = known ? -90 : -90 + (turn % 12) * 30
+  const at = (degrees: number) => {
+    const radians = (degrees * Math.PI) / 180
+    return `${(12 + 9 * Math.cos(radians)).toFixed(2)} ${(12 + 9 * Math.sin(radians)).toFixed(2)}`
+  }
+  const slice =
+    share >= 1
+      ? `<circle cx="12" cy="12" r="9" fill="${TONE[tone]}"/>`
+      : `<path d="M12 12 L${at(start)} A9 9 0 ${share > 0.5 ? 1 : 0} 1 ${at(start + share * 360)} Z" fill="${TONE[tone]}"/>`
+
+  // The track takes the pie's own tone, faint, as the ring's does.
+  return `<svg ${XMLNS} viewBox="0 0 24 24" width="${size}" height="${height}"><circle cx="12" cy="12" r="9" fill="${TONE[tone]}" fill-opacity=".28"/>${slice}</svg>`
+}
+
+/** The font of the numbers in the marks: the system's own, as the text beside them. */
+const MARK_FONT = `font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-weight="600" fill="${TONE.quiet}"`
+
+/** A number in the middle of the 24 × 24 grid, `fontSize` tall, in the quiet tone. */
+const markText = (words: string, fontSize: number) =>
+  `<text x="12" y="12" text-anchor="middle" dominant-baseline="central" ${MARK_FONT} font-size="${fontSize}">${words}</text>`
+
+/**
+ * A step still to come: an open ring. Given its place in the plan, the number stands in the ring (one or two digits;
+ * from 100 on the ring stays empty).
+ */
+export function openRingSvg(size = 16, height = size, number?: number): string {
+  if (number === undefined) {
+    return `<svg ${XMLNS} viewBox="0 0 24 24" width="${size}" height="${height}" fill="none"><circle cx="12" cy="12" r="8.5" stroke="${TONE.quiet}" stroke-width="1.9"/></svg>`
+  }
+  const digits = String(number)
+  const label = digits.length <= 2 ? markText(digits, digits.length === 1 ? 13 : 10.5) : ''
+  return `<svg ${XMLNS} viewBox="0 0 24 24" width="${size}" height="${height}" fill="none"><circle cx="12" cy="12" r="10" stroke="${TONE.quiet}" stroke-width="1.6"/>${label}</svg>`
+}
+
+/** Steps folded into one line: how many, as "+N" (from 100 on "+99"). */
+export function countSvg(count: number, size = 16, height = size): string {
+  const words = count > 99 ? '+99' : `+${count}`
+  return `<svg ${XMLNS} viewBox="0 0 24 24" width="${size}" height="${height}" fill="none">${markText(words, count <= 9 ? 12 : 10)}</svg>`
 }
 
 /**

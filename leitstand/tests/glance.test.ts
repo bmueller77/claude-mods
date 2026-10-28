@@ -1656,7 +1656,7 @@ test('in the Desktop app a job that stops on a question offers no Continue, whic
   expect(asked).not.toContain('Weiter')
 })
 
-test('the second welcome card says where the yellow is: in the words on the terminal, a bell beside them in the Desktop app', VIEW_SIMPLE, async ($, on) => {
+test('the second welcome card says where the yellow is: in the words on the terminal, a question mark beside them in the Desktop app', VIEW_SIMPLE, async ($, on) => {
   mock.store(on)
   mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
@@ -1666,7 +1666,7 @@ test('the second welcome card says where the yellow is: in the words on the term
   const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await band.press({ key: 'tour-next' })
   await band.unmount()
-  expect((await texts($, 'desktop', 120)).join('\n')).toContain('Braucht dich neben einer gelben Glocke')
+  expect((await texts($, 'desktop', 120)).join('\n')).toContain('Braucht dich neben einem gelben Fragezeichen')
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('Braucht dich in Gelb')
 })
 
@@ -2064,6 +2064,109 @@ test('on the desktop Needs you and Stuck read in the text colour, with the colou
   expect(await leadColor('Braucht dich')).toBeUndefined()
   await $.classic.StopFailure({ error: 'rate_limit', error_details: '' } as never)
   expect(await leadColor('Hängt fest')).toBeUndefined()
+})
+
+/** What a desktop screen draws, each drawing as its alt and its source. */
+async function drawings($: Engine, target: object = BAND): Promise<{ alt: string; source: string }[]> {
+  const ui = await $.ui.mount({ ...target, surface: 'desktop' } as never)
+  const svgs = (await ui.findAll({ type: 'Svg' })).map(one => ({ alt: String(one.props.alt), source: String(one.props.source) }))
+  await ui.unmount()
+  return svgs
+}
+/** A slice of the pie, from its middle out (look.ts pieSvg). */
+const PIE_SLICE = '<path d="M12 12 L'
+/** The question mark's bowl and the bell's body (look.ts PATHS). */
+const QUESTION_PATH = 'M9.3 9.6a2.8 2.8 0 1 1 3.9 2.6'
+const BELL_PATH = 'M6.3 16.6v-5.1'
+/** The tick (look.ts PATHS.check) and the filled disc a badge draws it on, in the green of done. */
+const CHECK_PATH = 'M6.8 12.5l3.4 3.4 7-7.4'
+const DONE_DISC = '<circle cx="12" cy="12" r="10" fill="#3fa45a"/>'
+
+test('on the desktop a working job heads with a pie: filled to its percentage with a plan, turning with the tick without one', VIEW_SIMPLE, async ($, on) => {
+  const clock = world(on)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: 'Bash', command: 'npm run build' })
+  const turning = async () => (await drawings($)).find(one => one.alt === 'Status')?.source ?? ''
+  const before = await turning()
+  expect(before).toContain(PIE_SLICE)
+  expect(before).toContain('fill-opacity=".28"')
+  expect(before).not.toContain('stroke-dasharray')
+  await clock.advance(250)
+  const after = await turning()
+  expect(after).toContain(PIE_SLICE)
+  expect(after).not.toBe(before)
+
+  await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  await callTool($, { tool: PROGRESS, task: 'Write it', percent: 100 })
+  const pie = (await drawings($)).find(one => /% fertig$/.test(one.alt))
+  expect(pie?.source).toContain(PIE_SLICE)
+  expect(pie?.source).toContain('fill-opacity=".28"')
+  expect(pie?.source).not.toContain('stroke-dasharray')
+})
+
+test('on the desktop Needs you shows a question mark, in the header and on the step that waits, never the bell', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  await $.classic.Notification({ message: 'Claude needs your permission to use Bash', notification_type: 'permission_prompt' })
+  const drawn = await drawings($)
+  const header = drawn.find(one => one.alt === 'Status')
+  expect(header?.source).toContain(QUESTION_PATH)
+  expect(header?.source).not.toContain(BELL_PATH)
+  // The step that waits keeps its amber disc, now with the question mark in it.
+  const waits = drawn.find(one => one.alt === 'Wartet')
+  expect(waits?.source).toContain('<circle cx="12" cy="12" r="10" fill="#d9970b"/>')
+  expect(waits?.source).toContain(QUESTION_PATH)
+  expect(drawn.some(one => one.source.includes(BELL_PATH))).toBe(false)
+  // So does the Plan.
+  const plan = await drawings($, PLAN_PANE)
+  expect(plan.find(one => one.alt === 'Braucht dich')?.source).toContain(QUESTION_PATH)
+})
+
+test('on the desktop the steps read by their marks: done a disc with a tick, now a turning ring, to come a ring with its number', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Write it', 'Check it', 'Ship it', 'Tell the team'] })
+  await callTool($, { tool: PROGRESS, task: 'Write it', percent: 100 })
+  for (const target of [BAND, PLAN_PANE]) {
+    const drawn = await drawings($, target)
+    const done = drawn.find(one => one.alt === 'Fertig')
+    expect(done?.source).toContain(DONE_DISC)
+    expect(done?.source).toContain(CHECK_PATH)
+    const now = drawn.find(one => one.alt === 'Jetzt')
+    expect(now?.source).toContain('stroke-dasharray')
+    expect(now?.source).not.toContain(PIE_SLICE)
+    // Each step to come carries its place in the plan.
+    const coming = drawn.filter(one => ['Als Nächstes', 'Später', 'Offen'].includes(one.alt)).map(one => one.source)
+    expect(coming).toHaveLength(2)
+    expect(coming[0]).toContain('>3<')
+    expect(coming[1]).toContain('>4<')
+    expect(coming.every(source => source.includes('r="10" stroke="#8e8e8e" stroke-width="1.6"'))).toBe(true)
+  }
+  expect((await drawings($)).find(one => one.alt === 'Als Nächstes')?.source).toContain('>3<')
+})
+
+test('on the desktop a plan waiting for Start numbers its first step too', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  const coming = (await drawings($)).filter(one => one.alt === 'Als Nächstes').map(one => one.source)
+  expect(coming).toHaveLength(2)
+  expect(coming[0]).toContain('>1<')
+  expect(coming[1]).toContain('>2<')
+})
+
+test('on the desktop a folded block of steps says how many it stands for, +N, not three dots', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'] })
+  await callTool($, { tool: PROGRESS, task: 'Two', percent: 100 })
+  const folded = (await drawings($)).filter(one => one.alt === 'Zusammengefasst').map(one => one.source)
+  expect(folded).toHaveLength(2)
+  expect(folded[0]).toContain('>+2<')
+  expect(folded[1]).toContain('>+4<')
+  expect(folded.every(source => !source.includes('stroke-width="3.4"'))).toBe(true)
 })
 
 // The desktop app draws nothing for an Svg whose alt is empty: a mark without words would just be missing.
@@ -5549,9 +5652,9 @@ describe('Arbeitsweise und Grill mich', () => {
     return left.map(kid => (kid.type === 'Text' ? `${kid.props.dimColor === true ? 'dim' : ''}${(kid.children ?? []).join('')}` : String(kid.props.key)))
   }
 
-  test('in der App trennen Striche die Gruppen unten links: hinter Kurzantworten, hinter Dateien und vor Plan, im Terminal keine', async ($, on) => {
+  test('in der App trennen Striche die Gruppen unten links: hinter dem Autopiloten, hinter Kurzantworten, hinter Dateien und vor Plan, im Terminal keine', async ($, on) => {
     await skillWorld($, on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
 
     for (const bodyColumns of [50, 80, 140]) {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
@@ -5642,14 +5745,34 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
   })
 
-  test('Kurzantworten (📖) steht direkt hinter Vermenschlichen und vor dem ersten Strich', async ($, on) => {
+  test('Kurzantworten (📖) steht direkt hinter Vermenschlichen und vor dem Strich vor Dateien', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     expect(row.indexOf('adhd')).toBe(row.indexOf('humanize') + 1)
-    expect(row.indexOf('adhd')).toBeLessThan(row.indexOf('dim|'))
+    expect(row[row.indexOf('adhd') + 1]).toBe('dim|')
+    expect(row[row.indexOf('adhd') + 2]).toBe('filetree')
+  })
+
+  test('in der App steht genau ein Strich zwischen 🅰️ und dem Knopf dahinter; keiner am Rand, nie zwei nebeneinander', async ($, on) => {
+    await skillWorld($, on)
+    const row = await leftRow($)
+    const at = row.indexOf('nightshift')
+    expect(row.slice(at - 1, at + 3)).toEqual(['workmode', 'nightshift', 'dim|', 'grill'])
+    // Nothing before 🅰️ is a bar: the first one stands right behind it.
+    expect(row.slice(0, at + 1).filter(one => one === 'dim|')).toEqual([])
+    expect(row[0]).not.toBe('dim|')
+    expect(row.at(-1)).not.toBe('dim|')
+    expect(row.some((one, index) => one === 'dim|' && row[index + 1] === 'dim|')).toBe(false)
+
+    // Off, the Leitstand shows neither 🅰️ nor the buttons after it, and so no bar beside it either.
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
+    const off = await leftRow($)
+    expect(off).not.toContain('nightshift')
+    expect(off[0]).not.toBe('dim|')
+    expect(off.at(-1)).not.toBe('dim|')
   })
 
   test('Dateien (📂) steht hinter 📖 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
@@ -6093,8 +6216,8 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 11)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote'])
-    expect(row.filter(one => one === 'dim|')).toHaveLength(3)
+    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote'])
+    expect(row.filter(one => one === 'dim|')).toHaveLength(4)
   })
 
   test('Remote Control nicht verbunden: 🛜 steht schlicht da', async ($, on) => {
@@ -6115,7 +6238,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 11)).toEqual(['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy'])
+    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)

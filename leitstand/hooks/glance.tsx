@@ -161,10 +161,10 @@ const APPROVE_ALWAYS = 'An (in der Gruppenarbeit immer)'
 const TOUR_FIRST = 'Hier erscheint eine Checkliste, wenn du Claude um etwas mit mehreren Schritten bittest: jeder Schritt, wie weit er ist und wie lange es noch etwa dauert.'
 const TOUR_LAST = 'Unten unter Einstellungen findest du alle Optionen. Der Verlauf zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR = [TOUR_FIRST, tourNeeds('in Gelb'), TOUR_LAST]
-/** Elsewhere than the terminal the words keep the text colour and the yellow is the bell beside them. */
+/** Elsewhere than the terminal the words keep the text colour and the yellow is the question mark beside them. */
 const TOUR_LAST_VECTOR =
   'Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
-const TOUR_VECTOR = [TOUR_FIRST, tourNeeds('neben einer gelben Glocke'), TOUR_LAST_VECTOR]
+const TOUR_VECTOR = [TOUR_FIRST, tourNeeds('neben einem gelben Fragezeichen'), TOUR_LAST_VECTOR]
 /** The settings button beside the view elsewhere than the terminal: a gear, drawn as an emoji (U+FE0F), as wide as the other sign buttons. */
 const GEAR = '\u2699\uFE0F'
 /** Left of the gear elsewhere than the terminal: a question mark that opens the pane explaining the buttons. */
@@ -3888,7 +3888,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const grew = list.plannedCount > 0 && list.tasks.length > list.plannedCount ? ` · Plan gewachsen ${list.plannedCount} → ${list.tasks.length}` : ''
     const status =
       list.phase === 'needsYou'
-        ? { color: 'yellow', tone: 'warn' as const, icon: 'bell' as const, lead: 'Braucht dich', text: needsText(list) ?? WAITING }
+        ? { color: 'yellow', tone: 'warn' as const, icon: 'question' as const, lead: 'Braucht dich', text: needsText(list) ?? WAITING }
         : list.phase === 'stuck'
           ? { color: 'yellow', tone: 'alert' as const, icon: 'bang' as const, lead: 'Hängt fest', text: list.stuckReason ?? 'Claude kommt gerade nicht weiter' }
           : list.phase === 'stopped'
@@ -3997,7 +3997,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         // Under the Done heading a time says how long it took; the terminal, with no heading in the column, says so.
         const took = ms === null ? (vector ? '' : 'fertig') : vector ? (ms < 1000 ? '' : durationWords(ms)) : `dauerte ${formatDuration(ms)}`
         done.push(
-          row(key, { glyph: <Text color="green">✓ </Text>, icon: kit.icon('done', 'ok', 'Fertig') }, one.name, {}, [took, tokensOf(one)].filter(Boolean).join(' · ')),
+          row(key, { glyph: <Text color="green">✓ </Text>, icon: kit.badge('check', 'ok', 'Fertig') }, one.name, {}, [took, tokensOf(one)].filter(Boolean).join(' · ')),
           ...(one.summary ? [note(`${key}-summary`, one.summary)] : []),
           ...filesOf(key, one),
           ...helperRows(one),
@@ -4013,7 +4013,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             key,
             {
               glyph: <Text color="cyan">▶ </Text>,
-              icon: waits ? kit.badge(status.icon, status.tone, status.lead) : kit.badge('play', 'active', 'Jetzt'),
+              icon: waits ? kit.badge(status.icon, status.tone, status.lead) : kit.ring(null, isCalm ? 0 : tick, 'Jetzt'),
             },
             one.name,
             { bold: true },
@@ -4039,7 +4039,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       } else {
         const { expectedMs: expected } = stepEstimate(list, one, at)
         next_.push(
-          row(key, { glyph: <Text dimColor>○ </Text>, icon: kit.open('Offen') }, one.name, { dim: true }, expected < 60_000 ? 'unter einer Minute' : `etwa ${formatLeft(expected)}`),
+          row(key, { glyph: <Text dimColor>○ </Text>, icon: kit.open('Offen', index + 1) }, one.name, { dim: true }, expected < 60_000 ? 'unter einer Minute' : `etwa ${formatLeft(expected)}`),
           ...helperRows(one),
         )
       }
@@ -4299,16 +4299,16 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     }
     const outcomeMark = (outcome: GlanceHistoryEntry['outcome']) =>
       outcome === 'done'
-        ? kit.icon('done', 'ok', 'Fertig')
+        ? kit.badge('check', 'ok', 'Fertig')
         : outcome === 'stopped'
           ? kit.badge('stop', 'quiet', 'Gestoppt')
           : outcome === 'stuck'
             ? kit.badge('bang', 'alert', 'Hängt fest')
             : outcome === 'waiting'
-              ? kit.badge('bell', 'warn', 'Wartet')
+              ? kit.badge('question', 'warn', 'Wartet')
               : outcome === 'background'
                 ? kit.icon('clock', 'active', 'Im Hintergrund')
-                : kit.ring(null, 0, 'Arbeitet')
+                : kit.pie(null, 0, 'Arbeitet')
     const titleWidth = Math.max(12, Math.min(MAX_NAME, columns - 9 - 44))
     const rows = view.entries.map(one => {
       const [mark, color] = marks[one.outcome]
@@ -4506,7 +4506,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         vector
           ? line(
               'others',
-              kit.icon(needsYou ? 'bell' : 'eye', needsYou ? 'warn' : 'quiet', NOTICE),
+              kit.icon(needsYou ? 'question' : 'eye', needsYou ? 'warn' : 'quiet', NOTICE),
               <Text wrap="truncate-end" dimColor={!needsYou}>
                 {otherLine(Math.floor(columns / 0.8) - 3)}
               </Text>,
@@ -4514,7 +4514,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           : (
               <Box key="others" width={columns}>
                 <Text wrap="truncate-end" color={needsYou ? 'yellow' : undefined} dimColor={!needsYou}>
-                  {needsYou ? `${GLYPH.bell} ${otherLine(columns - 2)}` : otherLine(columns)}
+                  {needsYou ? `${GLYPH.question} ${otherLine(columns - 2)}` : otherLine(columns)}
                 </Text>
               </Box>
             ),
@@ -4723,11 +4723,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
               />,
             ],
           }
-    // Elsewhere than the terminal a dim bar parts the groups at the bottom left: after ADHD mode, after Filetree, and
-    // before the plan and the history. One stands only between two groups that show a button, so never at an end or
-    // two side by side.
+    // Elsewhere than the terminal a dim bar parts the groups at the bottom left: after the Autopilot, after ADHD mode,
+    // after Filetree, and before the plan and the history. One stands only between two groups that show a button, so
+    // never at an end or two side by side.
     const leftGroups = [
-      { bar: '', items: [workModeItem, nightShiftItem, grillItem, cleanItem, reflectItem, ...(skillItems?.beside ?? [])] },
+      { bar: '', items: [workModeItem, nightShiftItem] },
+      { bar: 'sep-autopilot', items: [grillItem, cleanItem, reflectItem, ...(skillItems?.beside ?? [])] },
       { bar: 'sep-files', items: skillItems?.files ?? [] },
       { bar: 'sep-skills', items: skillItems?.past ?? [] },
       { bar: 'sep-places', items: places },
@@ -4891,7 +4892,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         : list === null
           ? kit.icon('plan', 'quiet', 'Noch kein Plan')
           : list.phase === 'needsYou'
-            ? kit.badge('bell', 'warn', STATUS)
+            ? kit.badge('question', 'warn', STATUS)
             : list.phase === 'stuck'
               ? kit.badge('bang', 'alert', STATUS)
               : list.phase === 'stopped'
@@ -4901,8 +4902,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
                   : list.phase === 'background'
                     ? kit.icon('clock', 'active', STATUS)
                     : list.hasPlan
-                      ? kit.ring(overallProgress(list.tasks, activePercent).percent, 0, STATUS)
-                      : kit.ring(null, isCalm ? 0 : tick, STATUS)
+                      ? kit.pie(overallProgress(list.tasks, activePercent).percent, 0, STATUS)
+                      : kit.pie(null, isCalm ? 0 : tick, STATUS)
 
       return withBeneath(
         <Box flexDirection="column" width={columns}>
@@ -5009,7 +5010,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       const reason = needsText(list) ?? PERMISSION
       header = vector ? (
         // The amber is in the icon; the words keep the app's text colour, which reads on a light window too.
-        headline(kit.badge('bell', 'warn', STATUS), 'Braucht dich', [reason], { isRestPlain: true })
+        headline(kit.badge('question', 'warn', STATUS), 'Braucht dich', [reason], { isRestPlain: true })
       ) : (
         <Text wrap="truncate-end">
           <Text bold inverse color="yellow">
@@ -5091,7 +5092,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       header = vector ? (
         // Every state's header reads the same way: its mark, the state in bold, then the job and how far it is.
         headline(
-          list.hasPlan ? kit.ring(overall, 0, `${overall}% fertig`) : kit.ring(null, isCalm ? 0 : tick, STATUS),
+          list.hasPlan ? kit.pie(overall, 0, `${overall}% fertig`) : kit.pie(null, isCalm ? 0 : tick, STATUS),
           lead,
           keepsTitle ? ` · ${list.title}${details}` : details,
         )
@@ -5215,7 +5216,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // Where the current step stands: the word says when Claude isn't working on it.
     const standing =
       list.phase === 'needsYou'
-        ? { mark: '‖ ', label: 'Wartet', icon: 'bell' as const, tone: 'warn' as const }
+        ? { mark: '‖ ', label: 'Wartet', icon: 'question' as const, tone: 'warn' as const }
         : list.phase === 'stuck'
           ? { mark: '⚠ ', label: 'Hängt fest', icon: 'bang' as const, tone: 'alert' as const }
           : list.phase === 'stopped'
@@ -5237,10 +5238,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           steps: doneSteps.length,
           isActive: false,
           element: vector ? (
-            // A summary of steps, not a step: its own quiet mark, so the tick and the ring stay for real steps.
+            // A summary of steps, not a step: its own quiet mark, how many it stands for, so the disc and the rings stay
+            // for real steps.
             step(
               key,
-              kit.icon('more', 'quiet', 'Zusammengefasst'),
+              kit.count(doneSteps.length, 'Zusammengefasst'),
               <Text dimColor wrap="truncate-end">
                 {fitted(words, '', roomFor(0)).name}
               </Text>,
@@ -5270,9 +5272,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           steps: laterSteps.length,
           isActive: false,
           element: vector ? (
+            // As the finished ones: how many steps the line stands for.
             step(
               key,
-              kit.icon('more', 'quiet', 'Zusammengefasst'),
+              kit.count(laterSteps.length, 'Zusammengefasst'),
               <Text dimColor wrap="truncate-end">
                 {fitted(words, '', roomFor(0)).name}
               </Text>,
@@ -5298,7 +5301,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           element: vector ? (
             step(
               key,
-              kit.icon('done', 'ok', 'Fertig'),
+              kit.badge('check', 'ok', 'Fertig'),
               <Text dimColor wrap="truncate-end">
                 {done.name}
               </Text>,
@@ -5329,7 +5332,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         if (vector && list.approval === 'waiting') {
           // Nothing has started while the plan waits for Start: the first step is one more to come, and the amber of
           // the header is the only call on you.
-          element = step(key, kit.open('Als Nächstes'), <Text wrap="truncate-end">{fitted(one.name, '', roomFor(0)).name}</Text>, '')
+          element = step(key, kit.open('Als Nächstes', index + 1), <Text wrap="truncate-end">{fitted(one.name, '', roomFor(0)).name}</Text>, '')
         } else if (vector) {
           // The bar shows how far the step is, so no number stands beside it; a step that waits on you or has stopped
           // goes grey, the header saying why. With no progress reported yet there is no bar, only what Claude is
@@ -5357,10 +5360,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             roomFor(hasBar ? 10 : 0) - (note !== '' ? widthOf(note) + 3 : 0),
             hasBar ? 0 : 3,
           )
-          // The bar says how far the step is, so the mark beside the name says Now, as the Plan's does, not that again.
+          // The bar says how far the step is, so the mark beside the name says Now, as the Plan's does, not that again:
+          // a turning ring while Claude works on it, the disc of where it stands otherwise.
           element = step(
             key,
-            kit.badge(standing?.icon ?? 'play', standing?.tone ?? 'active', standing?.label ?? 'Jetzt'),
+            standing === null ? kit.ring(null, isStill ? 0 : tick, 'Jetzt') : kit.badge(standing.icon, standing.tone, standing.label),
             <Text bold wrap="truncate-end">
               {shown.name}
             </Text>,
@@ -5407,7 +5411,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           key,
           isActive: false,
           element: vector ? (
-            step(key, kit.open(label), <Text wrap="truncate-end">{fitted(one.name, '', roomFor(0)).name}</Text>, '')
+            step(key, kit.open(label, index + 1), <Text wrap="truncate-end">{fitted(one.name, '', roomFor(0)).name}</Text>, '')
           ) : (
             <Box key={key} flexDirection="row">
               <Text dimColor>○ </Text>
