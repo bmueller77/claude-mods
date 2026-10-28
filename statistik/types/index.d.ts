@@ -102,6 +102,18 @@ export type Countdown = {
     bis: number
 }
 
+/** Die Zusammenfassung vom letzten Compact dieses Chats, fuer das Fenster Zusammenfassung. */
+export type Zusammenfassung = {
+    /** Der Text der Zusammenfassung, wie die Engine ihn zurueckgab. */
+    text: string
+    /** Wann verdichtet wurde, in ms nach der Uhr der Engine. */
+    am: number
+    /** Tokens vor dem Compact, falls die Engine sie festgehalten hat. */
+    tokensVorher?: number
+    /** Tokens nach dem Compact, falls die Engine sie festgehalten hat. */
+    tokensNachher?: number
+}
+
 declare module 'claude-code' {
     interface PluginState {
         statistik: {
@@ -120,6 +132,8 @@ declare module 'claude-code' {
             chatlaenge: Chatlaenge | null
             /** Der Countdown vor Aufraeumen oder Verdichten; null, wenn keiner laeuft. Nach einem Neuladen gilt er als abgebrochen. */
             countdown: Countdown | null
+            /** Die Zusammenfassung vom letzten Compact, nur die letzte; null, solange in diesem Chat keiner lief. */
+            zusammenfassung: Zusammenfassung | null
         }
     }
 }

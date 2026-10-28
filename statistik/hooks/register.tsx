@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderNode, RenderSurface, SessionCompactInput, SessionMessage } from 'claude-code'
 
-import type { CacheSample, Chatlaenge, ContextSample, Countdown, Fenster, Lage, Nutzung } from '../types'
+import type { CacheSample, Chatlaenge, ContextSample, Countdown, Fenster, Lage, Nutzung, Zusammenfassung } from '../types'
 
 // Statistik: cache-meter und cache-tax in einer Zeile.
 //
@@ -77,6 +77,15 @@ const SICHERUNGSPUNKT_FRIST_MS = 30 * 24 * 60 * 60_000
 
 /** Das Fenster Letzter Stand: der Sicherungspunkt dieses Chats. */
 const FENSTER_LETZTER_STAND = 'statistik-letzter-stand'
+
+/** Das Fenster Zusammenfassung: der Text vom letzten Compact dieses Chats. */
+const FENSTER_ZUSAMMENFASSUNG = 'statistik-zusammenfassung'
+/** So viel vom Text zeigen Fenster und Befehl hoechstens. */
+const ZUSAMMENFASSUNG_GRENZE = 10_000
+
+/** Was Befehl und Fenster sagen, solange in diesem Chat kein Compact lief. */
+export const OHNE_ZUSAMMENFASSUNG = 'In diesem Chat lief noch kein Compact, es gibt keine Zusammenfassung.'
+export const FENSTER_OHNE_ZUSAMMENFASSUNG = 'Noch kein Compact in diesem Chat.'
 
 /** Was Claude vor dem Aufraeumen schreibt, im Fork ueber den eigenen Verlauf (wie bisher im Leitstand). */
 const SICHERUNGSPUNKT_PROMPT = `Dieser Chat wird gleich verdichtet, um Platz zu schaffen. Schreib einen Sicherungspunkt, damit die Arbeit weitergeht,
@@ -191,6 +200,7 @@ const tick = atom({ plugin: 'statistik', key: 'tick' } as const, 0)
 const eingereiht = atom({ plugin: 'statistik', key: 'eingereiht' } as const, null as 'compact' | 'wischen' | null)
 const chatlaenge = atom({ plugin: 'statistik', key: 'chatlaenge' } as const, null as Chatlaenge | null)
 const countdown = atom({ plugin: 'statistik', key: 'countdown' } as const, null as Countdown | null)
+const zusammenfassung = atom({ plugin: 'statistik', key: 'zusammenfassung' } as const, null as Zusammenfassung | null)
 
 // --- Was nur dieses Laden des Moduls braucht ---
 // Ein Neuladen beginnt hier von vorn. Was die Leiste zeigt, steht zusaetzlich
@@ -363,30 +373,6 @@ export function leseDauer(text: string): number | null {
     }
     const ms = (Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0)) * 60_000
     return ms > 0 ? ms : null
-}
-
-/**
- * Lange Zusammenfassung in Stuecke teilen, die ganz ins Bild passen.
- *
- * Das Terminal zeichnet von einer Log-Zeile die ersten 2000 Zeichen.
- */
-function absaetze(text: string, grenze = 1800): string[] {
-    const raus: string[] = []
-    for (const teil of text.split(/\n\s*\n/)) {
-        let rest = teil.trim()
-        if (!rest) {
-            continue
-        }
-        while (rest.length > grenze) {
-            const fenster = rest.slice(0, grenze)
-            const schnitt = fenster.lastIndexOf('\n')
-            const bei = schnitt > grenze / 2 ? schnitt : grenze
-            raus.push(rest.slice(0, bei).trimEnd())
-            rest = rest.slice(bei).trimStart()
-        }
-        raus.push(rest)
-    }
-    return raus
 }
 
 /** Text fuer ein XML-Dokument entschaerfen. */
@@ -1166,11 +1152,23 @@ async function raeumeAuf($: EngineInterface, jetzt: number): Promise<void> {
 
 // --- Compact ---
 
+/** Ob die Token-Zahlen eines Compacts bekannt sind. */
+function mitZahlen(vorher: number | undefined, nachher: number | undefined): vorher is number {
+    return vorher != null && nachher != null && vorher > 0
+}
+
+/** Die Kopfzeile der Zusammenfassung: "Compact um 14:32, 412k auf 38k Tokens", in Berliner Zeit. */
+export function zusammenfassungKopf(z: Zusammenfassung, jetzt: number): string {
+    const um = `Compact ${gespeichertUm(z.am, jetzt)}`
+    return mitZahlen(z.tokensVorher, z.tokensNachher) ? `${um}, ${kurz(z.tokensVorher)} auf ${kurz(z.tokensNachher ?? 0)} Tokens` : um
+}
+
 /**
- * Tokens und Zusammenfassung in den Verlauf schreiben.
+ * Tokens in den Verlauf schreiben, eine Zeile, und die Zusammenfassung fuer ihr Fenster merken.
  *
  * `$.ui.log` zeichnet dim wie eine Systemmeldung und schickt nichts an das
- * Modell.
+ * Modell. Der Text selbst steht nicht im Verlauf, nur im Fenster Zusammenfassung,
+ * das sich auf /statistik:zusammenfassung-zeigen oeffnet.
  */
 async function protokolliere(
     $: EngineInterface,
@@ -1179,14 +1177,15 @@ async function protokolliere(
     hookHatProtokolliert = true
     const vorher = r.tokensBefore
     const nachher = r.tokensAfter
-    $.ui.log(
-        vorher != null && nachher != null && vorher > 0
-            ? `Compact: ${kurz(vorher)} auf ${kurz(nachher)} Tokens, ${Math.round((1 - nachher / vorher) * 100)} Prozent weniger`
-            : 'Compact durchgelaufen, die Token-Zahlen hat die Engine nicht festgehalten',
-    )
     const text = r.messages?.[0]?.text?.trim() ?? ''
-    for (const stueck of text ? absaetze(text) : []) {
-        $.ui.log(stueck)
+    const zahlen = mitZahlen(vorher, nachher)
+    const zeile = zahlen
+        ? `Compact: ${kurz(vorher)} auf ${kurz(nachher ?? 0)} Tokens, ${Math.round((1 - (nachher ?? 0) / vorher) * 100)} Prozent weniger`
+        : 'Compact durchgelaufen, die Token-Zahlen hat die Engine nicht festgehalten'
+    $.ui.log(text ? `${zeile}. Zusammenfassung: /statistik:zusammenfassung-zeigen` : zeile)
+    if (text) {
+        const am = await $.clock.now()
+        await update($, zusammenfassung, () => (zahlen ? { text, am, tokensVorher: vorher, tokensNachher: nachher } : { text, am }))
     }
     await kontextNeu($)
     await zeige($)
@@ -1435,7 +1434,11 @@ async function leitstandVerdeckt($: EngineInterface): Promise<boolean> {
 
 /** Claudes Text zum Zeigen: ohne den Vorsatz "Sicherungspunkt:", verdeckt, wenn der Leitstand verdeckt. */
 async function zeigbar($: EngineInterface, notiz: string): Promise<string> {
-    const text = notiz.replace(/^(Checkpoint|Sicherungspunkt):\s*/, '')
+    return verdeckt($, notiz.replace(/^(Checkpoint|Sicherungspunkt):\s*/, ''))
+}
+
+/** Text zum Zeigen: verdeckt, wenn der Leitstand verdeckt; sonst wie er ist. */
+async function verdeckt($: EngineInterface, text: string): Promise<string> {
     return (await leitstandVerdeckt($)) ? verdecke(text) : text
 }
 
@@ -1455,6 +1458,24 @@ async function letzterStand($: EngineInterface, vomHandy: boolean): Promise<stri
         }
     }
     return `Letzter Stand, gespeichert ${gespeichertUm(punkt.am, await $.clock.now())}:\n\n${await zeigbar($, punkt.notiz)}`
+}
+
+/**
+ * /statistik:zusammenfassung-zeigen: am Rechner das Fenster Zusammenfassung, vom Handy die
+ * Zusammenfassung als Text. Kann die Flaeche kein Fenster zeigen, kommt auch dort der Text.
+ */
+async function zusammenfassungZeigen($: EngineInterface, vomHandy: boolean): Promise<string> {
+    const z = await read($, zusammenfassung)
+    if (!z) {
+        return OHNE_ZUSAMMENFASSUNG
+    }
+    if (!vomHandy) {
+        const offen = await $.ui.open({ id: FENSTER_ZUSAMMENFASSUNG, title: 'Zusammenfassung', closeOnEscape: true }).catch(() => null)
+        if (offen?.isPlaced) {
+            return 'Die Zusammenfassung vom letzten Compact steht im Fenster Zusammenfassung.'
+        }
+    }
+    return `${zusammenfassungKopf(z, await $.clock.now())}\n\n${await verdeckt($, z.text.slice(0, ZUSAMMENFASSUNG_GRENZE))}`
 }
 
 // --- Countdown vor Schwamm und Pfeil ---
@@ -1841,6 +1862,15 @@ export const BEFEHLE: readonly Befehl[] = [
         beispiel: '/statistik:letzter-stand-zeigen',
     },
     {
+        name: 'statistik:zusammenfassung-zeigen',
+        description: 'Die Zusammenfassung vom letzten Compact in einem Fenster zeigen',
+        was: 'Zeigt die Zusammenfassung, die beim letzten Compact dieses Chats entstand, im Fenster Zusammenfassung, mit Uhrzeit und Tokens vorher und nachher. Vom Handy kommt sie als Text. Im Verlauf steht nach einem Compact nur eine Zeile mit diesem Befehl.',
+        knopf: 'keiner',
+        gilt: 'für diesen Chat; ändert nichts',
+        argumente: 'keine',
+        beispiel: '/statistik:zusammenfassung-zeigen',
+    },
+    {
         name: 'statistik:verdichten',
         description: 'Den Kontext verdichten (/compact), sofort ohne Countdown',
         was: 'Verdichtet den Kontext mit /compact, zwischen zwei Runden sofort, sonst sobald Claude fertig ist. Ohne Countdown; ein laufender Countdown endet dabei.',
@@ -1903,6 +1933,8 @@ async function wirke($: EngineInterface, name: string, args: string, vomHandy: b
             return sofort($, 'wischen')
         case 'statistik:letzter-stand-zeigen':
             return letzterStand($, vomHandy)
+        case 'statistik:zusammenfassung-zeigen':
+            return zusammenfassungZeigen($, vomHandy)
         case 'statistik:verdichten':
             return sofort($, 'compact')
         default:
@@ -2004,6 +2036,8 @@ export const register: Register = (on, options) => {
             z.neuschriebe = []
             z.sid = await $.session.id()
             await update($, cache, () => null)
+            // Ein geleerter Chat hat keine Zusammenfassung mehr.
+            await update($, zusammenfassung, () => null)
             await kontextNeu($)
             await zeige($)
             return r
@@ -2233,6 +2267,40 @@ export const register: Register = (on, options) => {
                 </Text>
                 <Box key="notiz" flexDirection="column" marginTop={1}>
                     <Markdown key="notiz-text" text={(await zeigbar($, punkt.notiz)).slice(0, 10_000)} />
+                </Box>
+                {schliessen}
+            </Box>
+        )
+    })
+
+    // Das Fenster Zusammenfassung: der Text vom letzten Compact als Markdown, oeffnet sich nur auf Wunsch.
+    on('ui.render', { component: 'Pane', requestId: FENSTER_ZUSAMMENFASSUNG }, async ($, e) => {
+        const { Box, Button, Markdown, Text } = $.ui.resolve(e)
+        // Die App zeichnet am Fenster ein eigenes Schliessen, das Terminal braucht den Knopf.
+        const schliessen =
+            e.surface === 'terminal' ? (
+                <Box key="aktionen" marginTop={1}>
+                    <Button key="schliessen" label="Schließen" role="dismiss" onPress={() => void $.ui.close({ id: FENSTER_ZUSAMMENFASSUNG })} />
+                </Box>
+            ) : null
+        const z = await read($, zusammenfassung)
+        if (!z) {
+            return (
+                <Box flexDirection="column">
+                    <Text dimColor wrap="wrap">
+                        {FENSTER_OHNE_ZUSAMMENFASSUNG}
+                    </Text>
+                    {schliessen}
+                </Box>
+            )
+        }
+        return (
+            <Box flexDirection="column">
+                <Text dimColor wrap="wrap">
+                    {zusammenfassungKopf(z, await $.clock.now())}
+                </Text>
+                <Box key="text" flexDirection="column" marginTop={1}>
+                    <Markdown key="zusammenfassung-text" text={await verdeckt($, z.text.slice(0, ZUSAMMENFASSUNG_GRENZE))} />
                 </Box>
                 {schliessen}
             </Box>

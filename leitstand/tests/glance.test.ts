@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, TEIL_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, TEIL_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 
@@ -8541,6 +8541,130 @@ describe('Einstellungen je Chat', () => {
       expect(await stateOf($, 'detailLevel')).toBe('minimal')
     },
   )
+
+  // The view stored as ausfuehrlich, its name until 0.60: register gets minimal, as the engine reads an option it
+  // does not know; settings.read and the config menu tell the stored value.
+  const OLD_VIEW_OPTIONS = { options: { ansicht: 'ausfuehrlich' } }
+  const VIEW_ROW = {
+    key: 'leitstand.ansicht',
+    label: 'Ansicht',
+    kind: 'choice',
+    value: 'ausfuehrlich',
+    options: ['einfach', 'detailliert', 'minimal', 'aus'],
+    provider: { plugin: 'leitstand@bjoern-mods', tier: 'user' },
+    isLocked: false,
+  }
+  const stored = (view: string) => ({ pluginConfigs: { 'leitstand@bjoern-mods': { options: { ansicht: view } } } })
+  /** Settings by source, the rows the config menu lists, and its answer to a write; the writes, as asked. */
+  const configWorld = (
+    on: On,
+    sources: Record<string, unknown>,
+    rows: () => unknown[] = () => [VIEW_ROW],
+    answer: (value: unknown) => unknown = value => ({ value }),
+  ) => {
+    const sets: unknown[] = []
+    const reads: unknown[] = []
+    on('settings.read', (_, e) => {
+      const source = (e as { source?: string }).source
+      reads.push(source)
+      return { value: sources[source ?? 'merged'] ?? {} } as never
+    })
+    on('config.list', () => ({ value: rows() }) as never)
+    on('config.set', (_, e) => {
+      sets.push({ key: e.key, value: e.value })
+      return answer(e.value) as never
+    })
+    return { sets, reads }
+  }
+  /** The view the desktop band's menu shows picked. */
+  const bandView = async ($: Engine) => {
+    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const menu = (await band.findAll({ type: 'Select' })).find(one => one.props.key === 'view')
+    await band.unmount()
+    const props = menu?.props as { value?: string; options?: { value: string; label: string }[] } | undefined
+    return props?.options?.find(option => option.value === props.value)?.label
+  }
+
+  test('der gespeicherte Name der Ansicht: der letzte von user, flag und policy gilt, nur unter leitstand', () => {
+    expect(OLD_VIEW).toBe('ausfuehrlich')
+    expect(storedView([stored('ausfuehrlich').pluginConfigs])).toBe('ausfuehrlich')
+    expect(storedView([stored('ausfuehrlich').pluginConfigs, { leitstand: { options: { ansicht: 'einfach' } } }, undefined])).toBe('einfach')
+    expect(storedView([{ 'leitstand@x': { options: { ansicht: 'aus' } } }, {}, undefined])).toBe('aus')
+    expect(storedView([{ 'leitstand-test@x': { options: { ansicht: 'ausfuehrlich' } }, statistik: { options: { ansicht: 'x' } } }])).toBeUndefined()
+    expect(storedView([{ leitstand: { options: { ansicht: 3 } } }, { leitstand: null }, { leitstand: 'x' }, 'x', null])).toBeUndefined()
+    expect(storedView([])).toBeUndefined()
+  })
+
+  test('gespeichert ausfuehrlich: der Chat zeigt Detailliert, die Einstellung heißt danach detailliert', OLD_VIEW_OPTIONS, async ($, on) => {
+    const { session } = resumeWorld(on, { glanceTour: true })
+    const { sets, reads } = configWorld(on, { user: stored('ausfuehrlich') })
+    await openChat($, session, 'chat-1')
+    expect(await stateOf($, 'detailLevel')).toBe('detailed')
+    expect(await bandView($)).toBe('Detailliert')
+    expect(sets).toEqual([{ key: 'leitstand.ansicht', value: 'detailliert' }])
+    expect(reads).toEqual(['user', 'flag', 'policy'])
+    // Once is enough, the next turn writes nothing.
+    await $.turn.start({ text: 'Hallo', turnId: 't1' })
+    await $.turn.complete({ answer: 'Hallo.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(sets).toHaveLength(1)
+  })
+
+  test('gespeichert ausfuehrlich, das Schreiben abgelehnt: weiter Detailliert, ein Versuch', OLD_VIEW_OPTIONS, async ($, on) => {
+    const { session } = resumeWorld(on, { glanceTour: true })
+    const { sets } = configWorld(on, { user: stored('ausfuehrlich') }, undefined, () => ({ deny: 'nein' }))
+    await openChat($, session, 'chat-1')
+    expect(await stateOf($, 'detailLevel')).toBe('detailed')
+    expect(await bandView($)).toBe('Detailliert')
+    await $.turn.start({ text: 'Hallo', turnId: 't1' })
+    await $.turn.complete({ answer: 'Hallo.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(sets).toEqual([{ key: 'leitstand.ansicht', value: 'detailliert' }])
+  })
+
+  test('gespeichert ausfuehrlich, die Zeile gesperrt: Detailliert, kein Schreiben', OLD_VIEW_OPTIONS, async ($, on) => {
+    const { session } = resumeWorld(on, { glanceTour: true })
+    const { sets } = configWorld(on, { policy: stored('ausfuehrlich') }, () => [{ ...VIEW_ROW, isLocked: true }])
+    await openChat($, session, 'chat-1')
+    expect(await stateOf($, 'detailLevel')).toBe('detailed')
+    expect(sets).toEqual([])
+  })
+
+  test('gespeichert ausfuehrlich, die Zeile fehlt noch: Detailliert, geschrieben nach der nächsten Runde', OLD_VIEW_OPTIONS, async ($, on) => {
+    const { session } = resumeWorld(on, { glanceTour: true })
+    let rows: unknown[] = []
+    const { sets } = configWorld(on, { user: stored('ausfuehrlich') }, () => rows)
+    await openChat($, session, 'chat-1')
+    expect(await stateOf($, 'detailLevel')).toBe('detailed')
+    expect(await bandView($)).toBe('Detailliert')
+    expect(sets).toEqual([])
+    // A turn while the menu still lacks the row: the rewrite stays open.
+    await $.turn.start({ text: 'Hallo', turnId: 't1' })
+    await $.turn.complete({ answer: 'Hallo.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(sets).toEqual([])
+    rows = [VIEW_ROW]
+    await $.turn.start({ text: 'Weiter', turnId: 't2' })
+    await $.turn.complete({ answer: 'Weiter.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(sets).toEqual([{ key: 'leitstand.ansicht', value: 'detailliert' }])
+    await $.turn.start({ text: 'Noch einmal', turnId: 't3' })
+    await $.turn.complete({ answer: 'Gut.', durationMs: 1, isAborted: false, turnId: 't3', reason: 'answer' })
+    expect(sets).toHaveLength(1)
+  })
+
+  for (const [name, sources] of [
+    ['gespeichert detailliert', { user: stored('detailliert') }],
+    ['nichts gespeichert', { user: {}, flag: { pluginConfigs: { statistik: { options: { ansicht: 'ausfuehrlich' } } } } }],
+    ['ausfuehrlich nur in den Projekt-Einstellungen', { project: stored('ausfuehrlich'), merged: stored('ausfuehrlich') }],
+  ] as const) {
+    test(`${name}: Minimal, kein Schreiben`, OLD_VIEW_OPTIONS, async ($, on) => {
+      const { session } = resumeWorld(on, { glanceTour: true })
+      const { sets } = configWorld(on, sources)
+      await openChat($, session, 'chat-1')
+      expect(await stateOf($, 'detailLevel')).toBe('minimal')
+      expect(await bandView($)).toBe('Minimal')
+      await $.turn.start({ text: 'Hallo', turnId: 't1' })
+      await $.turn.complete({ answer: 'Hallo.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+      expect(sets).toEqual([])
+    })
+  }
 
   test('Zurücksetzen nimmt nur die Werte dieses Chats zurück', VIEW_SIMPLE, async ($, on) => {
     const { store, session } = resumeWorld(on)

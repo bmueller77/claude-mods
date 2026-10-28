@@ -69,6 +69,19 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 
 - Einstellungen gelten je Chat, der Standard kommt aus `userConfig`. Leitstand-Standard: Auto-Modus,
   Verdecken und Passwortschutz an, Ansicht minimal, alles andere aus.
+- userConfig mit `options`: Ein gespeicherter Wert außerhalb der Optionen kommt in `register` als Standard
+  an, `$.config.list()` zeigt aber den rohen Wert. `$.settings.read({ key: 'pluginConfigs', source })` mit
+  `user`, `flag` oder `policy` liest ihn in jedem Modus; `pluginConfigs` aus Projekt-Settings verwirft die
+  Engine. In der Desktop-App und in `-p` fehlen die Plugin-Zeilen in `$.config.list()` bis zu einem Neuladen
+  der Plugins, dort wirft `$.config.set`. Ein `$.config.set` des eigenen Felds lädt den Mod neu (geprüft
+  2026-10-28, 2.1.309). So schreibt leitstand 0.61.1 ein altes `ausfuehrlich` auf `detailliert` um; bis
+  dahin gilt es bei jedem Start schon als Detailliert.
+- Statistik seit 0.19.0 (Björns Wunsch): Nach einem Compact steht im Verlauf nur eine Zeile, die
+  Zusammenfassung zeigt `/statistik:zusammenfassung-zeigen` im Fenster (vom Handy und ohne Fenster als
+  Text), verdeckt, wenn der Leitstand verdeckt. `$.ui.log`-Zeilen lassen sich nicht zuklappen.
+- Desktop-App: Denkblöcke, die in der Ansicht Normal offen bleiben und sich auch mit ▾ nicht zuklappen
+  lassen (gesehen 2026-10-28 in einigen Chats, etwa mit Fable), sind ein Fehler der App. Kein Mod fasst
+  Denkblöcke an.
 - Jeder Knopf hat einen Befehl. `hilfe` hinter jedem Befehl erklärt ihn, größere Aktionen wollen `ja`.
   Leitstand seit 0.56.0 (Björns Wunsch, Anthropics Schreibweise): Langform `/leitstand:<funktion>`
   als Markdown-Datei in `leitstand/commands/` (die App setzt `leitstand:` davor; ein Name mit
@@ -210,3 +223,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.
 8. Live-Test ausstehend: leitstand 0.61.0 im echten Terminal (Breite der Zeichen, ob ❓ zwei Zellen zählt,
    Umbruch der Knopfzeile, Leuchten auf `suggestion`) und Kurzfassen per 📖/📝.
+9. Leitstand (gesehen 2026-10-28): Endet eine Runde, während Helfer im Hintergrund laufen, hakt er den Plan
+   als Fertig ab, und der Rest braucht eine neue Freigabe. Der Passwortschutz hielt am selben Tag
+   vermutlich zweimal den Bericht eines Helfers als Eingabe zurück; der Bericht kam nicht an, und Björn
+   bekam nur den Hinweis "Ein Hook hat deine Eingabe blockiert". Björn: mindestens eine Freigabe anbieten.

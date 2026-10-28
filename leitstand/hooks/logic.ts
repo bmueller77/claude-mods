@@ -1567,6 +1567,28 @@ export function defaultSettings(options: Readonly<Record<string, unknown>> = {})
   }
 }
 
+/** The view's name until leitstand 0.60: the engine reads it as the default now, so it is rewritten to detailliert. */
+export const OLD_VIEW = 'ausfuehrlich'
+
+/**
+ * The view as the settings store it, from settings.read's answers for `pluginConfigs`, one per source in rising
+ * precedence (user, flag, policy): the last source that names one wins. The plugin's entry is keyed `leitstand` or
+ * `leitstand@<marketplace>`; anything else, or a value of another kind, counts as none.
+ */
+export function storedView(answers: readonly unknown[]): string | undefined {
+  let found: string | undefined
+  for (const answer of answers) {
+    if (typeof answer !== 'object' || answer === null) continue
+    for (const [key, entry] of Object.entries(answer)) {
+      if (key !== PLUGIN && !key.startsWith(`${PLUGIN}@`)) continue
+      const options: unknown = (entry as { options?: unknown } | null)?.options
+      const view: unknown = typeof options === 'object' && options !== null ? (options as { ansicht?: unknown }).ansicht : undefined
+      if (typeof view === 'string') found = view
+    }
+  }
+  return found
+}
+
 /** A chat's settings: its own values where they are of the right kind, the defaults for the rest. */
 export function chatSettings(defaults: ChatSettings, own: unknown): ChatSettings {
   const values = typeof own === 'object' && own !== null ? (own as Record<string, unknown>) : {}

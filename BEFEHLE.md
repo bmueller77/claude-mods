@@ -167,6 +167,7 @@ Eine Zeile über der Eingabe mit Nutzungslimits, Tokens, Kontext und Cache-Uhr. 
 | `/statistik:warmhalten-aus` | Warmhalten des Prompt-Caches sofort ausschalten |
 | `/statistik:chat-aufraeumen` | Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown |
 | `/statistik:letzter-stand-zeigen` | Den Sicherungspunkt zeigen, den Claude beim letzten Aufräumen gespeichert hat |
+| `/statistik:zusammenfassung-zeigen` | Die Zusammenfassung vom letzten Compact in einem Fenster zeigen |
 | `/statistik:verdichten` | Den Kontext verdichten (/compact), sofort ohne Countdown |
 
 ## Nächste Schritte

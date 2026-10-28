@@ -5,7 +5,9 @@ import type { On, RenderElement, SessionContextBreakdown } from 'claude-code'
 import {
     ALTE_BEFEHLE,
     BEFEHLE,
+    FENSTER_OHNE_ZUSAMMENFASSUNG,
     OHNE_SICHERUNGSPUNKT,
+    OHNE_ZUSAMMENFASSUNG,
     behalteAnweisung,
     dauer,
     fableAus,
@@ -21,6 +23,7 @@ import {
     verdecke,
     warmRest,
     wochentagZeit,
+    zusammenfassungKopf,
 } from '../hooks/register'
 
 const FLAECHEN = ['terminal', 'desktop'] as const
@@ -1568,6 +1571,7 @@ const NEUE = [
     'statistik:warmhalten-aus',
     'statistik:chat-aufraeumen',
     'statistik:letzter-stand-zeigen',
+    'statistik:zusammenfassung-zeigen',
     'statistik:verdichten',
 ]
 
@@ -1928,8 +1932,11 @@ test('im Terminal zwischen zwei Runden verdichtet der Schwamm direkt, mit der An
     expect(anweisungen).toEqual([behalteAnweisung(SICHERUNG)])
     const am = 1_000_000 + COUNTDOWN
     expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am, notiz: SICHERUNG, verdichtet: am })
-    expect(b.logs[0]).toBe('Sicherungspunkt gespeichert. /statistik:letzter-stand-zeigen zeigt ihn.')
-    expect(b.logs[1]).toBe('Compact: 40k auf 8,0k Tokens, 80 Prozent weniger')
+    // Eine Zeile zum Compact, der Text der Zusammenfassung steht nicht im Verlauf.
+    expect(b.logs).toEqual([
+        'Sicherungspunkt gespeichert. /statistik:letzter-stand-zeigen zeigt ihn.',
+        'Compact: 40k auf 8,0k Tokens, 80 Prozent weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen',
+    ])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
 })
 
@@ -2089,4 +2096,182 @@ test('Sicherungspunkte anderer Chats, 30 Tage unberührt, gehen höchstens einma
     await start($ as never)
     expect(speicher.has('statistik.sicherungspunkt:alt')).toBe(false)
     expect(speicher.has('statistik.sicherungspunkt:frisch')).toBe(true)
+})
+
+// --- Zusammenfassung vom letzten Compact ---
+
+/** Ein Compact am 15. Juli 2026 um 12:32 UTC: 14:32 in Berlin. */
+const COMPACT_AM = Date.UTC(2026, 6, 15, 12, 32)
+const ZUSAMMENFASSUNG = '## Ziel\nDie Statistik zeigt die Zusammenfassung im Fenster.\n\n## Offen\nTests.'
+const HINWEIS = 'Compact: 412k auf 38k Tokens, 91 Prozent weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen'
+
+const FENSTER_Z = {
+    plugin: 'statistik',
+    component: 'Pane',
+    requestId: 'statistik-zusammenfassung',
+    props: { title: 'Zusammenfassung', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 20 }, view: {} },
+} as const
+
+/** Eine Verdichtung mit eigenem Text und eigenen Zahlen; ohne Zahlen hat die Engine keine festgehalten. */
+function verdichtungMit(on: On, text: string | null, zahlen = true) {
+    on('session.compact', (_$, _e, _next) => ({
+        // Eine Verdichtung laesst immer eine Nachricht stehen; ohne Text ist sie leer.
+        messages: [{ role: 'user', text: text ?? '', toolUses: [] }],
+        ...(zahlen ? { tokensBefore: 412_000, tokensAfter: 38_000 } : {}),
+    }) as never)
+}
+
+test('nach einem Compact steht genau eine Zeile im Verlauf, die Zusammenfassung nicht', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    verdichtungMit(on, ZUSAMMENFASSUNG)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    expect(b.logs).toEqual([HINWEIS])
+    // Das Fenster geht nicht von selbst auf.
+    expect(geoeffnet).toEqual([])
+})
+
+test('im Terminal zwischen zwei Runden: der direkte Compact schreibt auch nur eine Zeile', async ($, on) => {
+    const clock = mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    verdichtungMit(on, ZUSAMMENFASSUNG)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    await ui.press({ key: 'compact' })
+    await clock.advance(COUNTDOWN)
+    expect(b.befehle).toEqual([])
+    expect(b.logs).toEqual([HINWEIS])
+    expect(geoeffnet).toEqual([])
+})
+
+test('ohne Text der Zusammenfassung steht kein Hinweis auf den Befehl da', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    verdichtungMit(on, null)
+    fensterZaehler(on)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    expect(b.logs).toEqual(['Compact: 412k auf 38k Tokens, 91 Prozent weniger'])
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
+})
+
+test('ohne Token-Zahlen: eigene Zeile mit Hinweis, im Fenster nur die Uhrzeit', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    verdichtungMit(on, ZUSAMMENFASSUNG, false)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    expect(b.logs).toEqual([
+        'Compact durchgelaufen, die Token-Zahlen hat die Engine nicht festgehalten. Zusammenfassung: /statistik:zusammenfassung-zeigen',
+    ])
+    const ui = await $.ui.mount({ ...FENSTER_Z, surface: 'desktop' })
+    expect((await ui.find({ type: 'Text', text: /^Compact/ }))?.text).toBe('Compact um 14:32')
+})
+
+test('/statistik:zusammenfassung-zeigen öffnet das Fenster Zusammenfassung mit Kopfzeile und Text', async ($, on) => {
+    const clock = mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    boden(on, STAND)
+    verdichtungMit(on, ZUSAMMENFASSUNG)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    await clock.advance(30 * MIN)
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Compact steht im Fenster Zusammenfassung.')
+    expect(geoeffnet).toEqual(['statistik-zusammenfassung'])
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...FENSTER_Z, surface })
+        expect((await ui.find({ type: 'Text', text: /^Compact/ }))?.text).toBe('Compact um 14:32, 412k auf 38k Tokens')
+        expect((await ui.find({ type: 'Markdown' }))?.text).toBe(ZUSAMMENFASSUNG)
+        expect(Boolean(await ui.find({ type: 'Button', key: 'schliessen' }))).toBe(surface === 'terminal')
+        await ui.unmount()
+    }
+})
+
+test('ist das Fenster nicht platziert, kommt die Zusammenfassung als Antwort, gekürzt auf 10 000 Zeichen', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    boden(on, STAND)
+    const lang = `Anfang ${'x'.repeat(12_000)}`
+    verdichtungMit(on, lang)
+    on('ui.open', () => ({ value: { isPlaced: false, reason: 'keine Fläche' } }) as never)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`Compact um 14:32, 412k auf 38k Tokens\n\n${lang.slice(0, 10_000)}`)
+})
+
+test('ohne Compact: der Befehl sagt es, das Fenster auch, und es geht nichts auf', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    boden(on, STAND)
+    const geoeffnet = fensterZaehler(on)
+    await start($ as never)
+    expect(OHNE_ZUSAMMENFASSUNG).toBe('In diesem Chat lief noch kein Compact, es gibt keine Zusammenfassung.')
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
+    expect(await vomHandy($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
+    expect(geoeffnet).toEqual([])
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...FENSTER_Z, surface })
+        expect((await ui.find({ type: 'Text', text: /Compact/ }))?.text).toBe(FENSTER_OHNE_ZUSAMMENFASSUNG)
+        await ui.unmount()
+    }
+})
+
+test('Kopfzeile der Zusammenfassung in Berliner Zeit, an einem anderen Tag mit Datum', () => {
+    const z = { text: 'x', am: Date.UTC(2026, 11, 1, 23, 30), tokensVorher: 412_000, tokensNachher: 38_000 }
+    expect(zusammenfassungKopf(z, Date.UTC(2026, 11, 2, 8, 0))).toBe('Compact um 00:30, 412k auf 38k Tokens')
+    expect(zusammenfassungKopf({ text: 'x', am: COMPACT_AM }, Date.UTC(2026, 6, 16, 9, 0))).toBe('Compact am 15.07. um 14:32')
+})
+
+test('ist im Leitstand Verdecken an, verdecken Fenster und Textantwort der Zusammenfassung Geheimes', { plugins: [LEITSTAND] }, async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    boden(on, STAND)
+    on('prompt.compose', () => ({ sections: [] }) as never)
+    const offen = 'Login mit bjoern@example.com, DB_PASSWORT=geheim123.'
+    const verdeckt = 'Login mit •••@•••, DB_PASSWORT=••••••••.'
+    verdichtungMit(on, offen)
+    let platziert = false
+    on('ui.open', () => ({ value: { isPlaced: platziert } }) as never)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    const kopf = 'Compact um 14:32, 412k auf 38k Tokens'
+    // Ohne Wert vom Leitstand: nichts verdeckt.
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`${kopf}\n\n${offen}`)
+
+    await befehl($ as never, 'verdecken', 'an')
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`${kopf}\n\n${verdeckt}`)
+    platziert = true
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...FENSTER_Z, surface })
+        expect((await ui.find({ type: 'Markdown' }))?.text).toBe(verdeckt)
+        await ui.unmount()
+    }
+
+    await befehl($ as never, 'verdecken', 'aus')
+    const ui = await $.ui.mount({ ...FENSTER_Z, surface: 'desktop' })
+    expect((await ui.find({ type: 'Markdown' }))?.text).toBe(offen)
+})
+
+test('nach /clear gibt es keine Zusammenfassung mehr', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    boden(on, STAND)
+    verdichtungMit(on, ZUSAMMENFASSUNG)
+    fensterZaehler(on)
+    on('classic.SessionStart', () => ({}) as never)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Compact steht im Fenster Zusammenfassung.')
+    await $.classic.SessionStart({ source: 'clear' } as never)
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
 })

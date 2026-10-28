@@ -57,6 +57,8 @@ import {
   SETTINGS_PREFIX,
   chatSettings,
   defaultSettings,
+  OLD_VIEW,
+  storedView,
   ownValues,
   staleSettingsKeys,
   QUESTION,
@@ -531,6 +533,9 @@ let readOnlyJob: string | null = null
 // so the next waits for it.
 let defaults: ChatSettings = FACTORY_SETTINGS
 let settingsWrite: Promise<void> = Promise.resolve()
+// The settings still store the view's old name: rewritten in the config menu once it lists the row (in the desktop app
+// only after a reload of the plugins), so turn.complete tries again until then.
+let isViewRewriteOpen = false
 
 const now = ($: $) => $.clock.now()
 
@@ -2557,9 +2562,41 @@ const leitstandBefehl = async ($: $, name: string, args: string, isPhone: boolea
   }
 }
 
+/**
+ * The view the settings store, user, flag and policy alone: project settings are not read, the engine drops plugin
+ * values from them. A source that cannot be read (in tests, say) counts as none.
+ */
+const readStoredView = async ($: $): Promise<string | undefined> => {
+  const answers: unknown[] = []
+  for (const source of ['user', 'flag', 'policy'] as const) {
+    answers.push(await $.settings.read({ key: 'pluginConfigs', source }).catch(() => undefined))
+  }
+  return storedView(answers)
+}
+
+/**
+ * Rewrites the stored old view to detailliert through the config menu, once the menu lists the row; until then the
+ * rewrite stays open. A locked row or a refusal is accepted. Never throws: the engine reloads the plugin after a write.
+ */
+const rewriteOldView = async ($: $): Promise<void> => {
+  if (!isViewRewriteOpen) return
+  try {
+    const rows = await $.config.list().catch(() => [])
+    const isOwn = (plugin: unknown) => plugin === PLUGIN || (typeof plugin === 'string' && plugin.startsWith(`${PLUGIN}@`))
+    const row = rows.find(one => one.key === `${PLUGIN}.ansicht` || (isOwn(one.provider?.plugin) && one.key.endsWith('.ansicht')))
+    if (row === undefined || !isViewRewriteOpen) return
+    isViewRewriteOpen = false
+    if (row.value !== OLD_VIEW || row.isLocked) return
+    await $.config.set({ key: row.key, value: 'detailliert' }).catch(() => undefined)
+  } catch {
+    // The view stays as the engine reads it; the next session start tries again.
+  }
+}
+
 export function registerGlance(on: On, options: PluginOptions = {}): void {
   // What a new chat starts with; a change in the config menu reloads the module with the new values.
   defaults = defaultSettings(options)
+  isViewRewriteOpen = false
   // A chat that ends says so, so the other chats stop mentioning it; its checklist stays for when it is resumed.
   on('session.end', async ($, e, next) => {
     saveTimer?.cancel()
@@ -2603,6 +2640,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     }
     // Housekeeping first: other chats' settings and checkpoints unused for 30 days go, never this chat's own.
     await tidySettings($).catch(() => undefined)
+    // The view's old name reaches register as the default, minimal: the stored value decides, so this chat already
+    // shows Detailliert, and the settings get the new name once Leitstand is set up.
+    if (options.ansicht === 'minimal' && (await readStoredView($).catch(() => undefined)) === OLD_VIEW) {
+      defaults = defaultSettings({ ...options, ansicht: 'detailliert' })
+      isViewRewriteOpen = true
+    }
     // This chat's own settings, or the defaults from the config menu for a new chat; and its own Letzter Stand.
     await followSession($, true).catch(() => undefined)
     const origin = await $.process.run(['git', 'remote', 'get-url', 'origin']).catch(() => ({ exitCode: 1, stdout: '' }))
@@ -2695,6 +2738,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const started = await next(e)
     // Die Arbeiter der Arbeitsweise Dynamisch, sobald die Sitzung steht.
     await registerTiers($)
+    // Last, with the parts set up beneath: the write reloads the plugin.
+    await rewriteOldView($)
 
     return started
   })
@@ -3597,7 +3642,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       await recordJob($)
     }
 
-    return next(e)
+    const completed = await next(e)
+    // The config menu lists the row a little after the start in the terminal, in the app only after a reload.
+    await rewriteOldView($)
+    return completed
   })
 
   // Simple hides the tool rows; Details keeps them, for people who want the code next to the checklist. The phone
