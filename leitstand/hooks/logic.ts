@@ -1633,7 +1633,7 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Allgemein', 'leitstand:knoepfe-zeigen', 'Die Knöpfe des Leitstands erklären', 'Öffnet ein Fenster, das jeden Knopf des Leitstands mit seinem Zeichen und seinem Befehl erklärt; auf dem Handy als Text.', '❓ links neben dem Zahnrad', 'einmal'),
 
   befehl('Ansicht', 'leitstand:ansicht-einfach', 'Ansicht Einfach: Schritte und Fortschritt', 'Der Leitstand zeigt die Schritte und den Fortschritt.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Einfach', 'einstellung'),
-  befehl('Ansicht', 'leitstand:ansicht-ausfuehrlich', 'Ansicht Ausführlich: dazu Modelle, Zeit und Tokens', 'Der Leitstand zeigt dazu Modelle, Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Ausführlich', 'einstellung'),
+  befehl('Ansicht', 'leitstand:ansicht-ausfuehrlich', 'Ansicht Ausführlich: dazu Zeit und Tokens', 'Der Leitstand zeigt dazu Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Ausführlich', 'einstellung'),
   befehl('Ansicht', 'leitstand:ansicht-minimal', 'Ansicht Minimal: eine Zeile', 'Der Leitstand zeigt eine Zeile mit Stand, Fortschritt, Restzeit und Tokens.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Minimal', 'einstellung'),
 
   befehl('Arbeitsweise', 'leitstand:arbeitsmodus-auto', 'Auto-Modus: Claude entscheidet selbst über Helfer', 'Claude entscheidet selbst, ob und welche Helfer es einsetzt.', 'Modus-Menü in der Knopfzeile oder Einstellungen › Arbeitsweise › Auto-Modus', 'einstellung'),

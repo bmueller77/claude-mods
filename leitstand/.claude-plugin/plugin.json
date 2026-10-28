@@ -1,6 +1,6 @@
 {
   "name": "leitstand",
-  "version": "0.59.0",
+  "version": "0.60.0",
   "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Modus und Gruppenarbeit. In der Knopfzeile Schalter für Kurzantworten, Remote Control und Verdecken. Eingebaut sind Selbstkritik und Regeln 🪞 (früher Reflect), Dateien 📂 (früher Filetree) und der Autopilot 🅰️; läuft er, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"

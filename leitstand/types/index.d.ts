@@ -47,6 +47,11 @@ export type GlanceHelper = {
   status: 'running' | 'done' | 'failed'
   /** Tokens this helper's own model requests handled. */
   tokens: number
+  /**
+   * True when it was started in a turn whose request said "ultracode": its tag shows Ultracode for the effort. Absent
+   * otherwise, and on helpers saved before 0.60.
+   */
+  ultracode?: boolean
 }
 
 export type GlanceChecklist = {
@@ -369,7 +374,7 @@ declare module 'claude-code' {
   interface PluginState {
     'leitstand': {
       glanceEnabled: boolean
-      /** `simple`: steps, progress and time. `detailed`: also models, effort, tokens, cache and plan usage. */
+      /** `simple`: steps, progress and time. `detailed`: also time, tokens, cache and plan usage. */
       detailLevel: 'simple' | 'detailed' | 'minimal'
       checklist: GlanceChecklist | null
       tick: number
@@ -424,6 +429,11 @@ declare module 'claude-code' {
        * Autopilot reads it as a round ends and ends a run that began before it, instead of pushing on.
        */
       autopilotStop: number | null
+      /**
+       * Whether the person's latest request said "ultracode": helpers started until their next request get
+       * `ultracode` and show Ultracode for their effort.
+       */
+      ultracodeTurn: boolean
       /** Selbstkritik und Regeln: wartende Regeln dieses Projekts und globale, sortiert, wie das Band sie zeigt. */
       regelnWartend: ReflectFund[]
       /** In dieser Sitzung in CLAUDE.md gespeicherte Regeln: der Systemprompt trägt sie, bis CLAUDE.md neu gelesen wird. */

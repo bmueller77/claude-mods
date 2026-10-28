@@ -28,6 +28,46 @@ export const TONE_TEXT: Record<Tone, string | undefined> = {
   quiet: undefined,
 }
 
+/** A helper's model by family, from green (the lightest) to red (the heaviest); any other model reads dim. */
+export const MODEL_COLOR: Record<string, string> = {
+  haiku: '#3fa45a',
+  sonnet: '#c29d0b',
+  opus: '#e2683a',
+  fable: '#d93f3f',
+}
+
+/** A helper's effort as the app names it, and its color from green (low) to orange (max). */
+export const EFFORT_LOOK: Record<string, { word: string; color: string }> = {
+  low: { word: 'Niedrig', color: '#3fa45a' },
+  medium: { word: 'Mittel', color: '#8aa62e' },
+  high: { word: 'Hoch', color: '#c29d0b' },
+  xhigh: { word: 'Extra hoch', color: '#df8a1c' },
+  max: { word: 'Maximal', color: '#e2683a' },
+}
+
+/** In place of the effort, for a helper started in a turn whose request says "ultracode": the red end of the scale. */
+export const ULTRACODE_LOOK = { word: 'Ultracode', color: '#d93f3f' }
+
+/** One run of a helper's tag: its words, and their color; none draws dim. */
+export type TagPart = { text: string; color?: string }
+
+/**
+ * The tag behind a helper, `[Opus 5.5 · Mittel]`: the brackets and the dot dim, the model colored by its family, the
+ * effort by its level (`Ultracode` when `isUltracode`). With no effort known only the model stands in it; with no
+ * model known (a background shell, say) there is no tag at all, an empty list.
+ */
+export function helperTag(model: string | null, effort: string | null, isUltracode = false): TagPart[] {
+  if (model === null) return []
+  const family = /^(haiku|sonnet|opus|fable)\b/i.exec(model)?.[1]?.toLowerCase()
+  const level = isUltracode ? ULTRACODE_LOOK : effort === null ? null : (EFFORT_LOOK[effort] ?? { word: effort, color: undefined })
+  return [
+    { text: '[' },
+    { text: model, color: family === undefined ? undefined : MODEL_COLOR[family] },
+    ...(level === null ? [] : [{ text: ' · ' }, { text: level.word, color: level.color }]),
+    { text: ']' },
+  ]
+}
+
 /** Each icon on a 24 × 24 grid, stroked 1.75 wide with round ends and joins: one weight and one corner for all. */
 const PATHS = {
   check: '<path d="M6.8 12.5l3.4 3.4 7-7.4"/>',

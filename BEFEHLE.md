@@ -33,7 +33,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | Befehl | Was er tut |
 |---|---|
 | `/leitstand:ansicht-einfach` | Ansicht Einfach: Schritte und Fortschritt |
-| `/leitstand:ansicht-ausfuehrlich` | Ansicht Ausführlich: dazu Modelle, Zeit und Tokens |
+| `/leitstand:ansicht-ausfuehrlich` | Ansicht Ausführlich: dazu Zeit und Tokens |
 | `/leitstand:ansicht-minimal` | Ansicht Minimal: eine Zeile |
 
 ### Arbeitsweise

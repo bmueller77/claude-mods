@@ -1,5 +1,5 @@
 ---
-description: "Ansicht Ausführlich: dazu Modelle, Zeit und Tokens"
+description: "Ansicht Ausführlich: dazu Zeit und Tokens"
 disable-model-invocation: true
 ---
 

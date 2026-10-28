@@ -55,7 +55,7 @@ function world(on: On, toolAnswer: () => unknown = () => ({ result: {} })) {
   return clock
 }
 
-/** Turns on the detailed view: models, tokens, cache and plan usage. */
+/** Turns on the detailed view: time, tokens, cache and plan usage. */
 async function detailsOn($: Engine) {
   await $.command.run({ command: 'leitstand', args: 'details on' } as never)
 }
@@ -79,6 +79,26 @@ async function texts($: Engine, surface: (typeof SURFACES)[number], bodyColumns 
 }
 
 type Drawn = { type: string; props: Record<string, unknown>; children?: (Drawn | string)[] }
+
+/**
+ * The tags behind the helpers, as the band (or `pane`, the Plan) draws them: each tag Text's runs, a run as its words
+ * and, after a bar, its color or `dim`. A tag is small (caption) on vector surfaces and has no size on the terminal.
+ */
+async function helperTags($: Engine, surface: (typeof SURFACES)[number], bodyColumns = 80, pane = false): Promise<string[][]> {
+  const ui = await $.ui.mount(pane ? { ...PLAN_PANE, props: { ...PLAN_PANE.props, bodyColumns }, surface } : { ...BAND, props: { ...BAND.props, bodyColumns }, surface })
+  // A tag is the Text whose first run is its opening bracket.
+  const opens = (run: unknown) => typeof run === 'object' && run !== null && (run as Drawn).type === 'Text' && (run as Drawn).children?.join('') === '['
+  const small = (await ui.findAll({ type: 'Text' })).filter(one => opens(one.children[0]))
+  await ui.unmount()
+  expect(small.filter(one => (surface === 'terminal' ? 'size' in one.props : one.props.size !== 'caption'))).toEqual([])
+  const textOf = (node: Drawn | string): string => (typeof node === 'string' ? node : (node.children ?? []).map(textOf).join(''))
+
+  return small.map(one =>
+    (one.children as (Drawn | string)[]).map(run =>
+      typeof run === 'string' ? `${run}|plain` : `${textOf(run)}|${run.props.dimColor === true ? 'dim' : String(run.props.color)}`,
+    ),
+  )
+}
 
 /** Marks a screen reader would say twice: an alt its row's words hold, or one another mark in the row has. */
 function echoes(boxes: unknown[]): string[] {
@@ -829,13 +849,157 @@ test('a subagent shows under its step with its model and effort, then checks off
     const shown = (await texts($, surface)).join('\n')
     expect(shown).toContain(surface === 'terminal' ? '↳' : '[Läuft]')
     expect(shown).toContain('Find the pricing data')
-    expect(shown).toContain('Explore · Haiku 4.5 · Aufwand niedrig')
+    expect(shown).toContain('Explore')
+    expect(shown).not.toContain('Aufwand')
+    expect(await helperTags($, surface)).toEqual([['[|dim', 'Haiku 4.5|#3fa45a', ' · |dim', 'Niedrig|#3fa45a', ']|dim']])
   }
 
   await $.turn.complete({ answer: 'found it', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer', agentId: 'a1' })
   const after = await texts($, 'terminal')
   const at = after.findIndex(one => one.includes('Find the pricing data'))
   expect(after[at - 1]).toContain('✓')
+})
+
+/** Starts a helper as the engine does, `model` its answer, and has it make one model request at `effort`. */
+async function spawnHelper($: Engine, agentId: string, description: string, effort?: string) {
+  await $.agent.spawn({
+    tool_use_id: `tu-${agentId}`, prompt: description, description, subagentType: 'Explore',
+    provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: false, fork: false,
+  } as never)
+  if (effort === undefined) return
+  for await (const _ of $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', effort, messageCount: 1, agentId } as never)) {
+    // drain the step
+  }
+}
+
+describe('Modell und Aufwand hinter jedem Helfer', () => {
+  /** A world whose helpers answer with `models[agentId]`, each request with an empty answer. */
+  const helperWorld = (on: On, models: Record<string, string | undefined>) => {
+    world(on)
+    let spawned = 0
+    on('agent.spawn', () => {
+      const agentId = Object.keys(models)[spawned++] ?? 'x'
+      return { model: models[agentId], agentId } as never
+    })
+    on('turn.step', async function* (_, e) {
+      return { turnId: e.turnId, index: e.index, answer: '', toolUses: [] } as never
+    })
+    on('classic.Stop', () => ({}) as never)
+  }
+  const OPUS_MITTEL = ['[|dim', 'Opus 5.5|#e2683a', ' · |dim', 'Mittel|#8aa62e', ']|dim']
+
+  test('im Band und im Plan steht [Opus 5.5 · Mittel] klein und farbig, in jeder Ansicht; die Details sagen es nicht noch einmal', async ($, on) => {
+    helperWorld(on, { a1: 'claude-opus-5-5' })
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
+    await spawnHelper($, 'a1', 'Find the pricing data', 'medium')
+
+    // The minimal view a new chat starts in, then Details.
+    for (const view of ['minimal', 'details']) {
+      if (view === 'details') await detailsOn($)
+      for (const surface of SURFACES) {
+        expect(await helperTags($, surface)).toEqual([OPUS_MITTEL])
+        expect(await helperTags($, surface, 80, true)).toEqual([OPUS_MITTEL])
+        const shown = await texts($, surface)
+        expect(shown.some(one => one.includes('Aufwand'))).toBe(false)
+        expect(shown.some(one => one.includes('· Opus 5.5'))).toBe(false)
+      }
+      expect(await planPaneTexts($)).not.toContain('Aufwand')
+    }
+
+    // Finished, it keeps its tag.
+    await $.turn.complete({ answer: 'found it', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer', agentId: 'a1' })
+    for (const surface of SURFACES) {
+      expect(await helperTags($, surface)).toEqual([OPUS_MITTEL])
+    }
+  })
+
+  test('ohne Aufwand steht nur [Haiku 5.5] da, ohne Modell gar keine Klammer', async ($, on) => {
+    helperWorld(on, { a1: 'claude-haiku-5-5' })
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
+    await spawnHelper($, 'a1', 'Find the pricing data')
+    await $.classic.Stop({
+      stop_hook_active: false,
+      background_tasks: [{ id: 'b1', type: 'shell', status: 'running', description: 'Run the build' }],
+    } as never)
+
+    for (const surface of SURFACES) {
+      const shown = (await texts($, surface)).join('\n')
+      expect(shown).toContain('Find the pricing data')
+      expect(shown).toContain('Run the build')
+      expect(await helperTags($, surface)).toEqual([['[|dim', 'Haiku 5.5|#3fa45a', ']|dim']])
+      expect(await helperTags($, surface, 80, true)).toEqual([['[|dim', 'Haiku 5.5|#3fa45a', ']|dim']])
+    }
+  })
+
+  test('ein Auftrag mit „ultracode“ zeigt Ultracode statt der Stufe; die nächste Runde ohne das Wort wieder die Stufe', async ($, on) => {
+    helperWorld(on, { a1: 'claude-opus-5-5', a2: 'claude-opus-5-5' })
+    await $.turn.start({ text: 'Bau die Seite mit Ultracode', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
+    await spawnHelper($, 'a1', 'Find the pricing data', 'xhigh')
+    const ultracode = ['[|dim', 'Opus 5.5|#e2683a', ' · |dim', 'Ultracode|#d93f3f', ']|dim']
+    for (const surface of SURFACES) {
+      expect(await helperTags($, surface)).toEqual([ultracode])
+    }
+
+    await $.turn.start({ text: 'Und jetzt die Preise', turnId: 't2' })
+    await spawnHelper($, 'a2', 'Check the prices', 'high')
+    for (const surface of SURFACES) {
+      const tags = await helperTags($, surface)
+      expect(tags).toContainEqual(ultracode)
+      expect(tags).toContainEqual(['[|dim', 'Opus 5.5|#e2683a', ' · |dim', 'Hoch|#c29d0b', ']|dim'])
+      expect(tags).toHaveLength(2)
+    }
+  })
+
+  test('size nur auf Vektor-Oberflächen: im Terminal hat kein Text den Schlüssel size, am Desktop ist die Klammer caption', async ($, on) => {
+    helperWorld(on, { a1: 'claude-opus-5-5' })
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
+    await spawnHelper($, 'a1', 'Find the pricing data', 'medium')
+    const drawnTexts = async (surface: (typeof SURFACES)[number], pane: boolean) => {
+      const ui = await $.ui.mount(pane ? { ...PLAN_PANE, surface } : { ...BAND, surface })
+      const found = await ui.findAll({ type: 'Text' })
+      await ui.unmount()
+      return found
+    }
+
+    for (const pane of [false, true]) {
+      const terminal = await drawnTexts('terminal', pane)
+      // The tag is drawn there, only without a size: older engines refuse the prop and drop the whole band.
+      expect(terminal.some(one => one.text.includes('Opus 5.5'))).toBe(true)
+      expect(terminal.filter(one => 'size' in one.props)).toEqual([])
+      const desktop = (await drawnTexts('desktop', pane)).filter(one => 'size' in one.props)
+      expect(desktop.length).toBe(1)
+      expect(desktop[0]?.props.size).toBe('caption')
+    }
+  })
+
+  test('im Terminal steht die Klammer in der Zeile; wird es eng, gehen erst die Details, dann die ganze Klammer', async ($, on) => {
+    helperWorld(on, { a1: 'claude-opus-5-5' })
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
+    await spawnHelper($, 'a1', 'Find the pricing data', 'medium')
+    const rowOf = async (bodyColumns: number) => {
+      const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
+      const row = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'helper-a1')
+      await ui.unmount()
+      const textOf = (node: Drawn | string): string => (typeof node === 'string' ? node : (node.children ?? []).map(textOf).join(''))
+      return row === undefined ? '' : textOf(row as unknown as Drawn)
+    }
+
+    expect(await rowOf(80)).toContain('Find the pricing data Explore [Opus 5.5 · Mittel]')
+    // Room for the name and the tag, not the details too.
+    const middle = await rowOf(50)
+    expect(middle).toContain('Find the pricing data [Opus 5.5 · Mittel]')
+    expect(middle).not.toContain('Explore')
+    // Narrow: the name alone, no half tag.
+    const narrow = await rowOf(40)
+    expect(narrow).toContain('Find the pricing data')
+    expect(narrow).not.toMatch(/[[\]]|Opus|Mittel|Explore/)
+    expect(await helperTags($, 'terminal', 40)).toEqual([])
+  })
 })
 
 test('background work keeps the job open until it finishes', async ($, on) => {
@@ -1050,7 +1214,7 @@ test('the details view shows no usage line under the limit, as the mod Statistik
   }
 })
 
-test('the simple view hides models, tokens and low plan usage; the Details button shows them', async ($, on) => {
+test("the simple view hides tokens and low plan usage, not the helper's model; the Details button shows them", async ($, on) => {
   world(on)
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5-20251001', agentId: 'a1' }))
   on('session.measure', (_, e) => ({ changed: e.changed }))
@@ -1076,7 +1240,8 @@ test('the simple view hides models, tokens and low plan usage; the Details butto
     const simple = (await texts($, surface, 120)).join('\n')
     expect(simple).toContain('Find the prices')
     expect(simple).toContain(surface === 'terminal' ? 'Leitstand: Einfach' : 'Einfach ▾')
-    expect(simple).not.toContain('Haiku 4.5')
+    // The tag behind a helper stands in every view.
+    expect(simple).toContain('Haiku 4.5')
     expect(simple).not.toMatch(/tokens/i)
     expect(simple).not.toContain('aus Cache')
     expect(simple).not.toContain('Nutzung')
@@ -1087,7 +1252,8 @@ test('the simple view hides models, tokens and low plan usage; the Details butto
   await ui.unmount()
   const detailed = (await texts($, 'terminal', 120)).join('\n')
   expect(detailed).toContain('Leitstand: Details')
-  expect(detailed).toContain('Explore · Haiku 4.5')
+  expect(detailed).toContain('Explore')
+  expect(detailed).toContain('Haiku 4.5')
   expect(detailed).toContain('2,4k neu · 10k aus Cache')
   expect(detailed).not.toContain('Nutzung')
 })
@@ -5134,7 +5300,8 @@ test('a Leitstand worker shows by its tier, without "leitstand:"; other helpers 
   for (const surface of SURFACES) {
     const shown = (await texts($, surface)).join('\n')
     expect(shown).toContain('Write the page carefully')
-    expect(shown).toContain('sorgfältig · Opus 5.5')
+    expect(shown).toContain('sorgfältig')
+    expect(shown).toContain('Opus 5.5')
     expect(shown).not.toContain('leitstand:')
   }
   const pane = await planPaneTexts($)

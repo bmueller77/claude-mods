@@ -131,8 +131,8 @@ import type { ChatSettings, SavedChecklist } from './logic'
 import { kitOf } from './kit'
 import { DYNAMIC_ALSO, DYNAMIC_SECTION, TIERS, isTierAgent, tierAgent, tierDescription, workerPrompt } from './dynamisch'
 import type { WorkMode } from './dynamisch'
-import { GLYPH } from './look'
-import type { IconName } from './look'
+import { GLYPH, helperTag } from './look'
+import type { IconName, TagPart } from './look'
 
 export { activityOf, asksQuestion, carryTokens, cleanName, fit, formatCost, formatTokens, headerDetails, isButtonsOnly, isContinueWords, isGermanText, isLatinText, isStartWords, liftButtons, localTimes, ownWords, prettyModel, questionOf, resetTime, sentenceCase, takeOut, tokenNote, wholePieces } from './logic'
 const PLAN_TOOL = `mcp__${PLUGIN}__plan_steps`
@@ -202,7 +202,7 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
   {
     place: 'Oben rechts',
     buttons: [
-      { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Ausf\u00FChrlich dazu Modelle, Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
+      { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Ausf\u00FChrlich dazu Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
       { sign: HELP, name: 'Kn\u00F6pfe', does: 'Dieses Fenster: was jeder Knopf tut.', command: '/leitstand:knoepfe-zeigen' },
       { sign: GEAR, name: 'Einstellungen', does: '\u00D6ffnet die Einstellungen des Leitstands.', command: '/leitstand:einstellungen-zeigen' },
     ],
@@ -290,7 +290,7 @@ const OLD_RESUME_KEY = 'glanceResume'
 const RESUME_KEEP = 20
 const LIMIT_LABEL: Record<string, string> = { five_hour: '5 Std.', seven_day: 'Woche', spend_limit: 'Ausgaben' }
 // What a helper's effort and a job's outcome read as on screen; a count of one takes the singular.
-const EFFORT_WORDS: Record<string, string> = { low: 'niedrig', medium: 'mittel', high: 'hoch', xhigh: 'sehr hoch', max: 'maximal' }
+const EFFORT_WORDS: Record<string, string> = { low: 'niedrig', medium: 'mittel', high: 'hoch', xhigh: 'extra hoch', max: 'maximal' }
 const effortWords = (effort: string) => `Aufwand ${EFFORT_WORDS[effort] ?? effort}`
 const OUTCOME_WORDS: Record<GlanceHistoryEntry['outcome'], [string, string]> = {
   done: ['fertig', 'fertig'],
@@ -358,6 +358,9 @@ const remoteAtom = atom({ plugin: 'leitstand', key: 'remoteControl' } as const, 
 const adhdAtom = atom({ plugin: 'leitstand', key: 'adhdMode' } as const, false)
 // When 🅰️ was last pressed to end a running Autopilot, for Autopilot to read as a round ends (see toggleNightShift).
 const autopilotStopAtom = atom({ plugin: 'leitstand', key: 'autopilotStop' } as const, null)
+// Whether the person's latest request says "ultracode": the helpers started in its turn show Ultracode for their
+// effort. Kept in state, so a reload mid-turn keeps it.
+const ultracodeAtom = atom({ plugin: 'leitstand', key: 'ultracodeTurn' } as const, false)
 // This chat's own settings, as the person changed them in it; see keepForChat.
 const ownSettingsAtom = atom({ plugin: 'leitstand', key: 'ownSettings' } as const, { sid: null, carry: false, values: {} } as {
   sid: string | null
@@ -2061,7 +2064,7 @@ const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed'
   await setView($, next)
   $.ui.toast(
     next === 'detailed'
-      ? 'Leitstand Details: Modelle, Zeit, Tokens und Cache'
+      ? 'Leitstand Details: Zeit, Tokens und Cache'
       : next === 'minimal'
         ? 'Leitstand minimal: eine Zeile mit Stand, Fortschritt, Restzeit und Tokens'
         : 'Leitstand einfach: nur die Schritte und der Fortschritt',
@@ -2072,7 +2075,7 @@ const setDetail = async ($: $, isDetailed: boolean) => {
   await update($, detailAtom, () => (isDetailed ? 'detailed' : 'simple'))
   await keepForChat($, { detail: isDetailed ? 'detailed' : 'simple' })
   $.ui.toast(
-    isDetailed ? 'Details an: Modelle, Tokens und Cache' : 'Details aus: nur die Schritte und der Fortschritt',
+    isDetailed ? 'Details an: Tokens und Cache' : 'Details aus: nur die Schritte und der Fortschritt',
   )
 }
 
@@ -3034,6 +3037,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
     if (started.agentId !== undefined && e.parentAgentId === undefined) {
+      const isUltracode = await read($, ultracodeAtom)
       await addHelper($, {
         id: started.agentId,
         kind: 'helper',
@@ -3043,6 +3047,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         effort: null,
         status: 'running',
         tokens: 0,
+        ...(isUltracode ? { ultracode: true } : {}),
       })
     }
 
@@ -3091,6 +3096,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     runningTurn = e.turnId
     noteSign($)
     const text = ownWords(e.text)
+    // A request of the person's own says whether its helpers run as Ultracode; a turn Claude starts by itself (a
+    // helper finished) carries on the request before it.
+    if (e.agentId === undefined && text) await update($, ultracodeAtom, () => /\bultracode\b/i.test(text))
     // Ship it, on a turn the person started (not a continuation or a slash command). Only the exact reply
     // "Approve merge <SHA>" to a pending request approves that head commit. Any other reply declines it: the pull
     // request stays open, the guard holds for that whole turn, and Ship it ends with it. A later turn of the person's
@@ -3675,7 +3683,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
 
     const viewHelp = {
       simple: 'Die Schritte und der Fortschritt in einfachen Worten, ohne Tool-Details. Für alle.',
-      detailed: 'Dazu Zeit, Modelle und Tokens pro Schritt, mit dem Code im Blick. Für Entwickler.',
+      detailed: 'Dazu Zeit und Tokens pro Schritt, mit dem Code im Blick. Für Entwickler.',
       minimal: 'Nur eine Zeile über dem Eingabefeld: was gerade passiert, wie viele Schritte fertig sind, die geschätzte Restzeit und die bisher genutzten Tokens.',
       off: 'Claude Code wie gewohnt: keine Checkliste, alle Tool-Zeilen sichtbar. Der Passwortschutz behält seine eigene Einstellung.',
     }[view]
@@ -3944,8 +3952,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           )}
         </Box>
       )
-    // A line under a step, in line with its name. A command keeps to one line, cut at the edge.
-    const note = (key: string, text: string, icon?: RenderChildren, isOneLine = false) =>
+    // A line under a step, in line with its name. A command keeps to one line, cut at the edge. A helper's tag
+    // follows its words.
+    const note = (key: string, text: string, icon?: RenderChildren, isOneLine = false, tag?: RenderChildren) =>
       vector ? (
         <Box key={key} flexDirection="row" gap={1} width={columns}>
           {kit.blank()}
@@ -3953,24 +3962,41 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           <Box flexShrink={1} minWidth={0}>
             <Text dimColor wrap={isOneLine ? 'truncate-end' : 'wrap'}>
               {text}
+              {tag}
             </Text>
           </Box>
         </Box>
       ) : (
         <Text key={key} dimColor wrap="wrap">
           {`    ${text}`}
+          {tag}
         </Text>
       )
+    // A helper's model and effort, small, after a space: `[Opus 5.5 · Mittel]`.
+    const tagOf = (parts: TagPart[]) =>
+      parts.length === 0
+        ? undefined
+        : [
+            ' ',
+            <Text key="tag" {...(vector ? { size: 'caption' as const } : {})}>
+              {parts.map((part, index) => (
+                <Text key={`tag-${index}`} color={part.color} dimColor={part.color === undefined}>
+                  {part.text}
+                </Text>
+              ))}
+            </Text>,
+          ]
     const helperRows = (one: GlanceTask) =>
       list.helpers
         .filter(helper => helper.stepId === one.id)
         .map(helper => {
           const mark = helper.status === 'running' ? '◐' : helper.status === 'failed' ? '✗' : '✓'
           const kind = helper.kind === 'background' ? 'im Hintergrund' : helper.type === 'general-purpose' ? 'Helfer' : helperType(helper.type)
-          const details = [kind, helper.model, isDetailed && helper.effort ? effortWords(helper.effort) : null, isDetailed && helper.tokens > 0 ? `${formatTokens(helper.tokens)} Tokens` : null]
+          const details = [kind, isDetailed && helper.tokens > 0 ? `${formatTokens(helper.tokens)} Tokens` : null]
             .filter(Boolean)
             .join(' · ')
           const words = `${helper.label}${details ? ` · ${details}` : ''}`
+          const tag = tagOf(helperTag(helper.model, helper.effort, helper.ultracode === true))
           return vector
             ? note(
                 `helper-${helper.id}`,
@@ -3980,8 +4006,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
                   : helper.status === 'failed'
                     ? kit.badge('close', 'alert', 'Fehlgeschlagen', 13)
                     : kit.badge('check', 'ok', 'Fertig', 13),
+                false,
+                tag,
               )
-            : note(`helper-${helper.id}`, `↳ ${mark} ${words}`)
+            : note(`helper-${helper.id}`, `↳ ${mark} ${words}`, undefined, false, tag)
         })
     const tokensOf = (one: GlanceTask) => (isDetailed ? tokenNote(one.tokens, one.cachedTokens) : '')
     const filesOf = (key: string, one: GlanceTask, suffix = '') =>
@@ -5433,22 +5461,29 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             : helper.type === 'general-purpose'
               ? 'Helfer'
               : helperType(helper.type)
-        const details = (
-          isDetailed
-            ? [
-                kindLabel,
-                helper.model,
-                helper.effort ? effortWords(helper.effort) : null,
-                helper.tokens > 0 ? `${formatTokens(helper.tokens)} Tokens` : null,
-              ]
-            : [kindLabel]
-        )
+        const details = (isDetailed ? [kindLabel, helper.tokens > 0 ? `${formatTokens(helper.tokens)} Tokens` : null] : [kindLabel])
           .filter(Boolean)
           .join(' · ')
         const isRunning = helper.status === 'running'
+        // The tag behind the words, after a space, counted in whole cells (caption draws it smaller, which only helps).
+        // Short of room the details go first, then the whole tag, never half of it; the name is cut last.
+        const tagParts = helperTag(helper.model, helper.effort, helper.ultracode === true)
+        const tagWidth = tagParts.length === 0 ? 0 : 1 + widthOf(tagParts.map(part => part.text).join(''))
+        const tag =
+          tagParts.length === 0 ? null : (
+            <Text key="tag" {...(vector ? { size: 'caption' as const } : {})}>
+              {tagParts.map((part, index) => (
+                <Text key={`tag-${index}`} color={part.color} dimColor={part.color === undefined}>
+                  {part.text}
+                </Text>
+              ))}
+            </Text>
+          )
         if (vector) {
           // Its own small mark and a gap take two cells more.
-          const shown = fitted(helper.label, details, roomFor(2))
+          const room = roomFor(2)
+          const hasTag = tagWidth > 0 && widthOf(helper.label) + tagWidth <= room
+          const shown = fitted(helper.label, tagWidth > 0 && !hasTag ? '' : details, room - (hasTag ? tagWidth : 0))
           lines.push({
             key: helperKey,
             isActive: isRunning,
@@ -5464,6 +5499,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
                 <Text wrap="truncate-end">
                   <Text dimColor={!isRunning}>{shown.name}</Text>
                   {shown.tail !== '' && <Text dimColor>{` · ${shown.tail}`}</Text>}
+                  {hasTag && ' '}
+                  {hasTag && tag}
                 </Text>
               </Box>,
             ),
@@ -5473,7 +5510,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         const icon = isRunning ? (isCalm ? '◐' : SPINNER[tick % SPINNER.length]!) : helper.status === 'failed' ? '✗' : '✓'
         // The whole row is the description's: "in the background" and the details go first when it is short of room.
         const room = Math.max(4, columns - 7)
-        const hasRoom = details !== '' && widthOf(helper.label) + 1 + widthOf(details) <= room
+        const hasTag = tagWidth > 0 && widthOf(helper.label) + tagWidth <= room
+        const hasRoom = details !== '' && (tagWidth === 0 || hasTag) && widthOf(helper.label) + 1 + widthOf(details) + tagWidth <= room
         lines.push({
           key: helperKey,
           isActive: isRunning,
@@ -5482,9 +5520,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
               <Text dimColor>{'  ↳ '}</Text>
               <Text color={isRunning ? 'cyan' : helper.status === 'failed' ? 'red' : 'green'}>{`${icon} `}</Text>
               <Text dimColor={!isRunning} wrap="truncate-end">
-                {hasRoom ? helper.label : fit(helper.label, room).trimEnd()}
+                {hasRoom || hasTag ? helper.label : fit(helper.label, room).trimEnd()}
               </Text>
               {hasRoom && <Text dimColor wrap="truncate-end">{` ${details}`}</Text>}
+              {hasTag && <Text> </Text>}
+              {hasTag && tag}
             </Box>
           ),
         })
