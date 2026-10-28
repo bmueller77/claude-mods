@@ -1,6 +1,6 @@
 # bjoern-mods
 
-Claude-Code-Marktplatz mit Björns eigenen Mods, dazu i-have-adhd.
+Claude-Code-Marktplatz mit Björns eigenen Mods, dazu i-have-adhd (das englische Original von kurzfassen).
 Die eigenen Mods und die deutschen Fassungen liegen hier im Repo, i-have-adhd kommt direkt aus seinem Original-Repo.
 
 Einstellungen gelten je Chat: Ein Schalter, den du in einem Chat umlegst, ändert keinen anderen Chat. Neue Chats
@@ -46,7 +46,8 @@ ob die Langformen mit Doppelpunkt bis zum Rundenende warten, ist ungeprüft.
 | visible-compact | hier (deutsche Fassung von nvsravank/visible-compact, MIT) | Chat vor und nach `/compact` nebeneinander, Knopf Übersetzen; `/show-last-compact` | nur beim Übersetzen (Haiku) |
 | prompt-upgrade | hier (Eigenbau) | `/better <Prompt>`: bis zu drei Rückfragen, dann ein verbesserter Prompt neben dem Original, gesendet erst auf Ausführen; `/better an|aus` fängt am Rechner getippte Prompts ab (je Chat, Standard aus) | ja: zwei Haiku-Aufrufe je Upgrade |
 | modellwahl | hier (Eigenbau) | schlägt einmal je Aufgabe Modell (Haiku, Sonnet, Opus, Fable) und Aufwand vor: automatisch bei der ersten Nachricht eines neuen Chats, sonst per `/modellwahl [Aufgabe]`; am Rechner gilt der Vorschlag nach 15 s (Übernehmen und Nein über der Eingabe), vom Handy erst auf ja oder ok; nennt den geschätzten Limit-Verbrauch eines Wechsels | ja: ein Haiku-Aufruf je Wahl; ein Wechsel mitten im Chat liest den Kontext einmal neu |
-| i-have-adhd | ayghri/i-have-adhd (MIT) | ADHS-Modus: zuerst die nächste Handlung, nummerierte Schritte; im Leitstand Kurzantworten, Knopf 📖/📝 | nur der Skilltext im Kontext, solange der Modus an ist |
+| kurzfassen | hier (deutsche Fassung von ayghri/i-have-adhd, MIT) | Kurzfassen als Skill: zuerst die nächste Handlung, nummerierte Schritte; im Leitstand Kurzantworten, Knopf 📖/📝 | nur der Skilltext im Kontext, solange der Modus an ist |
+| i-have-adhd | ayghri/i-have-adhd (MIT) | englisches Original von kurzfassen; der Leitstand nutzt es nur, wenn kurzfassen fehlt | nur der Skilltext im Kontext, solange der Modus an ist |
 | you-should-know | in Claude Code eingebaut | wird von install.sh eingeschaltet | ja |
 
 ## Im Leitstand aufgegangen am 2026-10-26

@@ -13,6 +13,7 @@ import type {
 } from '../types'
 import { gemerkteAntwort, merkeAntwort } from './antwort'
 import { DATEIEN_FENSTER } from './filetree/befehle'
+import { terminalHinweis } from './filetree/teil'
 import {
   HISTORY_PREFIX,
   WEEK_DAYS,
@@ -41,6 +42,8 @@ import type { Secret } from './privacy'
 import {
   CHECKPOINT_PREFIX,
   FACTORY_SETTINGS,
+  buttonLines,
+  cellsOfDrawn,
   LEITSTAND_BEFEHLE,
   LEITSTAND_BEFEHL_NAMEN,
   ALTE_BEFEHLE,
@@ -159,7 +162,8 @@ const DAY_MS = 24 * 60 * 60_000
 const APPROVE_ALWAYS = 'An (in der Gruppenarbeit immer)'
 /** The welcome, three short cards the first time: what the checklist is, what Needs you means, where the rest lives. */
 const TOUR_FIRST = 'Hier erscheint eine Checkliste, wenn du Claude um etwas mit mehreren Schritten bittest: jeder Schritt, wie weit er ist und wie lange es noch etwa dauert.'
-const TOUR_LAST = 'Unten unter Einstellungen findest du alle Optionen. Der Verlauf zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
+const TOUR_LAST =
+  'Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Schraubenschlüssel findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR = [TOUR_FIRST, tourNeeds('in Gelb'), TOUR_LAST]
 /** Elsewhere than the terminal the words keep the text colour and the yellow is the question mark beside them. */
 const TOUR_LAST_VECTOR =
@@ -173,7 +177,7 @@ const HELP = '\u2753'
 const GRILL = '\u2668\uFE0F'
 /** The skill buttons beside Grill mich elsewhere than the terminal, as emoji. */
 const HUMANIZE = '\u{1F9CD}'
-/** Kurzantworten (the i-have-adhd skill) on and off: a memo for short answers, a book for the usual long ones. */
+/** Kurzantworten (the Kurzfassen skill, i-have-adhd as fallback) on and off: a memo for short answers, a book for the usual long ones. */
 const SHORT_ANSWERS = '\u{1F4DD}'
 const LONG_ANSWERS = '\u{1F4D6}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
@@ -194,6 +198,28 @@ const WORK_MODE_WORDS: Record<WorkMode, string> = { auto: 'Auto-Modus', dynamisc
 /** The work mode on its button: the office worker while Claude decides alone, a family of four for the team. In colour,
  * since the grey silhouettes looked too dark beside the other buttons (Björn, 2026-10-27). */
 const WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F468}\u200D\u{1F4BC}', dynamisch: '\u{1F468}\u200D\u{1F468}\u200D\u{1F467}\u200D\u{1F466}' }
+/** The terminal's signs where the app's would not line up: each one code point with Emoji_Presentation, two cells in
+ * every terminal; never U+FE0F or U+200D, which terminals count apart. The bare gear (U+2699) left no gap behind it in
+ * Windows Terminal, so the settings are a wrench there. */
+const TERMINAL_WORK_MODE_SIGNS: Record<WorkMode, string> = { auto: '\u{1F464}', dynamisch: '\u{1F465}' }
+const TERMINAL_NIGHTSHIFT = '\u{1F916}'
+const TERMINAL_GRILL = '\u{1F525}'
+const TERMINAL_VAULT = '\u{1F510}'
+const TERMINAL_GEAR = '\u{1F527}'
+const TERMINAL_REMOTE = '\u{1F4E1}'
+/** What the pane Kn\u00F6pfe draws in the terminal for each of the app's signs that the terminal draws otherwise. */
+const TERMINAL_SIGN_OF: Readonly<Record<string, string>> = {
+  [WORK_MODE_SIGNS.auto]: TERMINAL_WORK_MODE_SIGNS.auto,
+  [WORK_MODE_SIGNS.dynamisch]: TERMINAL_WORK_MODE_SIGNS.dynamisch,
+  [NIGHTSHIFT]: TERMINAL_NIGHTSHIFT,
+  [GRILL]: TERMINAL_GRILL,
+  [VAULT]: TERMINAL_VAULT,
+  [GEAR]: TERMINAL_GEAR,
+  [REMOTE]: TERMINAL_REMOTE,
+}
+/** A lit sign button in the terminal (Autopilot running, Remote Control connected, masking on): its sign on the accent
+ * colour, as the terminal draws a primary button in it. A plain button draws the same in either variant. */
+const TERMINAL_LIT = 'suggestion'
 /** A button of the band as the pane Kn\u00F6pfe explains it: its sign (none for a button with words), its name, what it does,
  * and the command that sets the same. A switch has one line per state, each with the command for that state. */
 type ButtonHelp = { sign?: string; name: string; does: string; command?: string }
@@ -202,7 +228,7 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
   {
     place: 'Oben rechts',
     buttons: [
-      { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Ausf\u00FChrlich dazu Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
+      { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Detailliert dazu Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
       { sign: HELP, name: 'Kn\u00F6pfe', does: 'Dieses Fenster: was jeder Knopf tut.', command: '/leitstand:knoepfe-zeigen' },
       { sign: GEAR, name: 'Einstellungen', does: '\u00D6ffnet die Einstellungen des Leitstands.', command: '/leitstand:einstellungen-zeigen' },
     ],
@@ -253,8 +279,7 @@ export function buttonHelpText(): string {
   return ['Die Kn\u00F6pfe des Leitstands:', ...places].join('\n\n')
 }
 const HANDOFF_KEY = 'lastHandoff'
-// Below this width the mode button drops the name; below METER_MIN_COLUMNS the bars go, so step names keep their room.
-const NARROW = 60
+// Below METER_MIN_COLUMNS the bars go, so step names keep their room.
 const METER_MIN_COLUMNS = 50
 /** The gap between the buttons in the row under the checklist elsewhere than the terminal, in cells: half of one. */
 const BUTTON_GAP = 0.5
@@ -354,7 +379,8 @@ const startingAtom = atom({ plugin: 'leitstand', key: 'startingPlan' } as const,
 type RemoteSide = 'on' | 'off' | 'missing'
 type RemoteSides = { app: RemoteSide; command: RemoteSide }
 const remoteAtom = atom({ plugin: 'leitstand', key: 'remoteControl' } as const, { app: 'missing', command: 'missing' } as RemoteSides)
-// Whether the i-have-adhd skill's mode is on: it stays on until the person says "stop adhd mode" or "normal mode".
+// Whether Kurzantworten (the Kurzfassen skill, i-have-adhd as fallback) is on: it stays on until the person says
+// "Kurzfassen aus" or "normal antworten" (the old "stop adhd mode" and "normal mode" still count).
 const adhdAtom = atom({ plugin: 'leitstand', key: 'adhdMode' } as const, false)
 // When 🅰️ was last pressed to end a running Autopilot, for Autopilot to read as a round ends (see toggleNightShift).
 const autopilotStopAtom = atom({ plugin: 'leitstand', key: 'autopilotStop' } as const, null)
@@ -1675,14 +1701,18 @@ const isNightShiftOn = async ($: $): Promise<boolean> => {
   }
 }
 
-/** What turns ADHD mode off, as the person's own words. */
-const ADHD_STOP = 'stop adhd mode'
-// The skill's call, typed or in the transcript (`<command-name>/i-have-adhd:i-have-adhd</command-name>`); not a path.
-const ADHD_CALL = /(?:^|[\s>])\/i-have-adhd(?::i-have-adhd)?(?=$|[\s<])/
-const ADHD_OFF = /stop adhd mode|normal mode/
+/** The Kurzfassen skill by its names, first choice; the i-have-adhd skill only where kurzfassen is not installed. */
+const ADHD_NAMES = ['kurzfassen:kurzfassen', 'kurzfassen', 'i-have-adhd:i-have-adhd', 'i-have-adhd']
+/** What turns Kurzantworten off, as the person's own words. */
+const ADHD_STOP = 'Kurzfassen aus'
+// Either skill's call, typed or in the transcript (`<command-name>/kurzfassen:kurzfassen</command-name>`); not a path.
+const ADHD_CALL = /(?:^|[\s>])\/(?:kurzfassen(?::kurzfassen)?|i-have-adhd(?::i-have-adhd)?)(?=$|[\s<])/
+// Kurzfassen's stop words, and the old ones of i-have-adhd, which still count; "Kurzfassen ausprobieren" is none.
+const ADHD_OFF = /kurzfassen aus\b|normal antworten|stop adhd mode|normal mode/
 
-/** Whether a slash command is the i-have-adhd skill, by either name. */
-const isAdhdCommand = (name: string) => name === 'i-have-adhd' || name.endsWith(':i-have-adhd')
+/** Whether a slash command is the Kurzfassen skill or the i-have-adhd skill, by either name. */
+const isAdhdCommand = (name: string) =>
+  name === 'kurzfassen' || name.endsWith(':kurzfassen') || name === 'i-have-adhd' || name.endsWith(':i-have-adhd')
 /** Whether a message turns ADHD mode on (true), off (false), or neither (null). */
 const adhdSays = (text: string): boolean | null => {
   const said = text.trim().toLowerCase()
@@ -1710,8 +1740,9 @@ const adhdInTranscript = async ($: $): Promise<boolean> => {
 }
 
 /**
- * ADHD mode toggle: off, it starts the i-have-adhd plugin's skill (answers lead with the next action, in numbered
- * steps, without tangents); on, it says "stop adhd mode". Left waiting in the prompt, the mode is not on yet.
+ * Kurzantworten toggle: off, it starts the Kurzfassen skill, or i-have-adhd where that is missing (answers lead with
+ * the next action, in numbered steps, without tangents); on, it says "Kurzfassen aus". Left waiting in the prompt, the
+ * mode is not on yet.
  */
 const toggleAdhd = async ($: $) => {
   if (await read($, adhdAtom)) {
@@ -1719,7 +1750,7 @@ const toggleAdhd = async ($: $) => {
     await update($, adhdAtom, () => false)
     return
   }
-  if ((await runCommand($, 'i-have-adhd', ['i-have-adhd:i-have-adhd', 'i-have-adhd'])) === 'ran') await update($, adhdAtom, () => true)
+  if ((await runCommand($, 'Kurzfassen', ADHD_NAMES)) === 'ran') await update($, adhdAtom, () => true)
 }
 
 /** The desktop app's MCP server that holds the session's own Remote Control switch. */
@@ -2029,7 +2060,7 @@ const nightStartNote = async ($: $) =>
       ? ` Der Auftrag kam aus einer geplanten Aufgabe, niemand sieht zu: Der Leitstand startet den Plan in ${NIGHT_SHIFT_START_MS / 1000} Sekunden von selbst.`
       : ''
 
-/** Picks Simple, Details, Minimal or Off directly, as the settings panel does. */
+/** Picks Simple, Detailliert, Minimal or Off directly, as the settings panel does. */
 const setView = async ($: $, view: 'simple' | 'detailed' | 'minimal' | 'off') => {
   await update($, enabledAtom, () => view !== 'off')
   if (view !== 'off') await update($, detailAtom, () => view)
@@ -2058,13 +2089,13 @@ const resetSettings = async ($: $) => {
 const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'Leitstand-Einstellungen', closeOnEscape: true })
 const showButtonHelp = ($: $) => $.ui.open({ id: HELP_PANE, title: 'Leitstand-Knöpfe', closeOnEscape: true })
 
-/** The one button: Simple → Details → Minimal → Simple; from Off back to Simple. Off is in Settings and /leitstand off. */
+/** The one button: Simple → Detailliert → Minimal → Simple; from Off back to Simple. Off is in Settings and /leitstand off. */
 const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed' | 'minimal') => {
   const next = !isEnabled ? 'simple' : detail === 'simple' ? 'detailed' : detail === 'detailed' ? 'minimal' : 'simple'
   await setView($, next)
   $.ui.toast(
     next === 'detailed'
-      ? 'Leitstand Details: Zeit, Tokens und Cache'
+      ? 'Leitstand detailliert: Zeit, Tokens und Cache'
       : next === 'minimal'
         ? 'Leitstand minimal: eine Zeile mit Stand, Fortschritt, Restzeit und Tokens'
         : 'Leitstand einfach: nur die Schritte und der Fortschritt',
@@ -2175,9 +2206,8 @@ function answerOf(text: string): string {
 const NUR_HIER = '(nur in diesem Chat)'
 const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Knopf im Leitstand.'
 const COMPACTING_WORDS = 'Der Chat wird gerade aufgeräumt. Versuch es gleich noch einmal.'
-// The skill behind 📖/📝 (Kurzantworten), by either name.
-const ADHD_NAMES = ['i-have-adhd:i-have-adhd', 'i-have-adhd']
-const ANSICHT_WORTE = { simple: 'Einfach', detailed: 'Ausführlich', minimal: 'Minimal' } as const
+// The skill behind 📖/📝 (Kurzantworten) is ADHD_NAMES, beside its toggle.
+const ANSICHT_WORTE = { simple: 'Einfach', detailed: 'Detailliert', minimal: 'Minimal' } as const
 
 const anAus = (isOn: boolean) => (isOn ? 'an' : 'aus')
 const istJa = (args: string) => args.trim().toLowerCase() === 'ja'
@@ -2360,9 +2390,9 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       return 'Die Begrüßung steht über dem Eingabefeld: Drück Weiter, um sie durchzugehen.'
 
     case 'leitstand:ansicht-einfach':
-    case 'leitstand:ansicht-ausfuehrlich':
+    case 'leitstand:ansicht-detailliert':
     case 'leitstand:ansicht-minimal': {
-      const view = name === 'leitstand:ansicht-einfach' ? 'simple' : name === 'leitstand:ansicht-ausfuehrlich' ? 'detailed' : 'minimal'
+      const view = name === 'leitstand:ansicht-einfach' ? 'simple' : name === 'leitstand:ansicht-detailliert' ? 'detailed' : 'minimal'
       await setView($, view)
       return `Die Ansicht ist jetzt ${ANSICHT_WORTE[view]} ${NUR_HIER}.`
     }
@@ -2891,8 +2921,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
 
   // Passwords and keys pasted into a message stay on this computer unless sent twice. From the phone (Remote Control),
   // where no toast and no prompt box shows a held message, the message goes on without them and Claude says so.
-  // ADHD mode follows what is sent, the button's own words included: the skill's call turns it on, "stop adhd mode" or
-  // "normal mode" off. A message held back changes nothing.
+  // Kurzantworten follow what is sent, the button's own words included: the skill's call turns them on, "Kurzfassen
+  // aus" or "normal antworten" (or the old "stop adhd mode", "normal mode") off. A message held back changes nothing.
   on('prompt.submit', async ($, e, next) => {
     if (!e.isMeta && !e.command && !e.turnId) promptKind = e.origin.kind
     const says = e.command ? (isAdhdCommand(e.command.name) ? true : null) : e.isMeta ? null : adhdSays(e.text)
@@ -3702,7 +3732,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           </Text>
         ) : (
           <Box flexDirection="column">
-            <Text bold>⚙ Leitstand-Einstellungen</Text>
+            <Text bold>{`${vector ? '⚙' : TERMINAL_GEAR} Leitstand-Einstellungen`}</Text>
             <Text dimColor wrap="wrap">
               Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.
             </Text>
@@ -3713,12 +3743,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           'view',
           'eye',
           'Ansicht',
-          view === 'simple' ? 'Einfach' : view === 'detailed' ? (vector ? 'Ausführlich' : 'Details') : view === 'minimal' ? 'Minimal' : 'Aus',
+          view === 'simple' ? 'Einfach' : view === 'detailed' ? 'Detailliert' : view === 'minimal' ? 'Minimal' : 'Aus',
           choice(
             'view',
             vector
-              ? [['detailed', 'Ausführlich'], ['simple', 'Einfach'], ['minimal', 'Minimal'], ['off', 'Aus']]
-              : [['simple', 'Einfach'], ['detailed', 'Details'], ['minimal', 'Minimal'], ['off', 'Aus']],
+              ? [['detailed', 'Detailliert'], ['simple', 'Einfach'], ['minimal', 'Minimal'], ['off', 'Aus']]
+              : [['simple', 'Einfach'], ['detailed', 'Detailliert'], ['minimal', 'Minimal'], ['off', 'Aus']],
             view,
             value => setView($, value),
           ),
@@ -4167,6 +4197,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const { Box, Text, Button } = table
     const vector = kitOf(table, e.surface).isVector
     const columns = Math.max(30, e.props.bodyColumns)
+    // The terminal names the signs its band draws.
+    const signOf = (sign: string | undefined) => (sign === undefined ? '' : vector ? sign : (TERMINAL_SIGN_OF[sign] ?? sign))
     return (
       <Box flexDirection="column" width={columns}>
         {BUTTON_HELP.map(({ place, buttons }, at) => (
@@ -4175,7 +4207,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             {buttons.map((one, n) => (
               <Box key={`button-${at}-${n}`} flexDirection="row" columnGap={1} marginTop={1}>
                 <Box width={3} flexShrink={0}>
-                  <Text>{one.sign ?? ''}</Text>
+                  <Text>{signOf(one.sign)}</Text>
                 </Box>
                 <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
                   <Text wrap="wrap">
@@ -4503,8 +4535,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const masks = await read($, maskAtom)
     const remote = remoteShown(await read($, remoteAtom))
     const adhd = await read($, adhdAtom)
-    // Read only where its button shows, so Autopilot's writes redraw nothing else.
-    const nightShift = vector && isEnabled && (await isNightShiftOn($))
+    // Read only while its button shows, on every surface; off, Autopilot's writes redraw nothing.
+    const nightShift = isEnabled && (await isNightShiftOn($))
     const canShip = isEnabled && (await read($, shipOnGithubAtom)) && (await read($, hasGithubAtom))
     const columns = Math.max(20, e.props.bodyColumns)
     const current = await now($)
@@ -4580,10 +4612,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const isLimitStuck = isStuck && /limit/i.test(list0?.stuckReason ?? '')
     // Beside "try again later" a usage limit's button checks whether it has lifted.
     const continueLabel = vector && isStuck ? (isLimitStuck ? 'Erneut prüfen' : 'Erneut versuchen') : 'Weiter'
-    // With Autopilot on, a waiting plan starts by itself: beside Start, dim, how long until then. The terminal reads
-    // Autopilot only while a plan waits, so its writes redraw nothing else there.
+    // With Autopilot on, a waiting plan starts by itself: beside Start, dim, how long until then.
     const nightStartIn =
-      !isCompacting && list0?.approval === 'waiting' && (isUnattendedJob || (vector ? nightShift : await isNightShiftOn($)))
+      !isCompacting && list0?.approval === 'waiting' && (isUnattendedJob || nightShift)
         ? nightStartSeconds(list0, current)
         : null
     const nightStartHint = nightStartIn !== null && (
@@ -4620,22 +4651,31 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       canShip &&
       (list0?.phase === 'done' || armed === 'ship') &&
       action('ship', 'ship', armed === 'ship' ? 'Noch mal drücken für Push' : 'Push', () => pressTwice($, 'ship', () => shipIt($)), undefined, armed !== 'ship')
-    // Where to go from here: the plan, the history, the settings. Elsewhere than the terminal the settings are a gear
-    // beside the view, at the top right. On the terminal Autopilot's hint takes its room from their long labels:
-    // a waiting plan's row with both needs 88 columns.
-    const isShortRow = columns < (nightStartIn !== null && !vector ? 88 : 63)
+    // Where to go from here: the plan and the history. The settings are a sign beside the view, at the top right.
     const places = isEnabled
       ? [
           list0?.hasPlan && action('plan', 'plan', 'Plan', () => showPlan($)),
           // ≣, not ☰: Unicode 16 made ☰ two cells wide, and the row shifted in newer terminals.
           action('history', 'history', 'Verlauf', () => showHistory($, dayKey(current), true)),
-          !vector && action('settings', 'sliders', 'Einstellungen', () => showSettings($), isShortRow ? '⚙' : undefined),
-          !vector && action('grill', 'spark', 'Grill mich', () => grillMe($), isShortRow ? `${GLYPH.spark} Grill` : undefined),
-          !vector && handoffItem,
-          !vector && shipItem,
         ].filter(Boolean)
       : []
     const actionItems = isEnabled ? [...controls, ...places] : null
+    // A sign button on the terminal: the bare sign, two cells; lit on the accent colour (TERMINAL_LIT).
+    const terminalSign = (key: string, label: string, onPress: () => unknown, isLit = false) =>
+      isLit ? (
+        <Button key={key} plain label={label} onPress={onPress}>
+          <Text backgroundColor={TERMINAL_LIT}>{label}</Text>
+        </Button>
+      ) : (
+        <Button key={key} plain label={label} onPress={onPress} />
+      )
+    // 📂 on the terminal: where the side pane cannot show (the main screen, or fullscreen under 110 columns), the
+    // press says what /dateien would say, instead of a pane that closes at once.
+    const filesHint =
+      !vector && e.viewport?.isFullscreen !== undefined
+        ? terminalHinweis({ isFullscreen: e.viewport.isFullscreen, columns: e.viewport.columns }, 'dateien')
+        : undefined
+    const pressFiles = () => (filesHint === undefined ? openFiletree($) : $.ui.toast(filesHint))
     const usageParts = usage.limits.map(one => `${one.label} ${Math.round(one.percent)}%`)
     const top = usage.limitPercent ?? 0
     const isHigh = top >= LIMIT_WARN
@@ -4667,10 +4707,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       )
     }
 
-    // The view: on the terminal one button steps through Simple → Details → Off. Elsewhere a menu shows the view and
+    // The view: on the terminal one button steps through Simple → Detailliert → Minimal. Elsewhere a menu shows the view and
     // the others, so no press turns Leitstand off by surprise; a surface without one (the phone) keeps the button.
     const view = !isEnabled ? 'off' : isMinimal ? 'minimal' : isDetailed ? 'detailed' : 'simple'
-    const viewWords = { detailed: 'Ausführlich', simple: 'Einfach', minimal: 'Minimal', off: 'Aus' }
+    const viewWords = { detailed: 'Detailliert', simple: 'Einfach', minimal: 'Minimal', off: 'Aus' }
     const button =
       vector && 'Select' in table && table.Select ? (
         <table.Select
@@ -4688,49 +4728,61 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       ) : (
       <Button
         key="toggle"
-        label={
-          vector
-            ? viewWords[view]
-            : `${isEnabled ? '●' : '○'} ${columns < NARROW ? '' : 'Leitstand: '}${view === 'detailed' ? 'Details' : viewWords[view]}`
-        }
+        label={vector ? viewWords[view] : `${isEnabled ? '●' : '○'} ${viewWords[view]}`}
         variant={isEnabled && !vector ? 'primary' : 'secondary'}
         onPress={() => cycleMode($, isEnabled, detail)}
       />
       )
-    // The work mode, while the Leitstand is on (off, no work mode applies), leads the places at the bottom left
-    // elsewhere than the terminal: one button with the mode's sign, lit in neither mode (its sign shows which; it is
-    // never "on" or "off", Björn's wish 2026-10-27); a press flips the two. The terminal keeps it in Settings and
-    // /leitstand arbeitsweise.
-    const workModeItem = !isEnabled || !vector ? null : (
+    // The work mode, while the Leitstand is on (off, no work mode applies), leads the places at the bottom left: one
+    // button with the mode's sign, lit in neither mode (its sign shows which; it is never "on" or "off", Björn's wish
+    // 2026-10-27); a press flips the two.
+    const flipWorkMode = () => void setWorkMode($, workMode === 'dynamisch' ? 'auto' : 'dynamisch')
+    const workModeItem = !isEnabled ? null : vector ? (
       <Button
         key="workmode"
         variant="secondary"
         label={WORK_MODE_SIGNS[workMode]}
-        onPress={() => void setWorkMode($, workMode === 'dynamisch' ? 'auto' : 'dynamisch')}
+        onPress={flipWorkMode}
       />
+    ) : (
+      terminalSign('workmode', TERMINAL_WORK_MODE_SIGNS[workMode], flipWorkMode)
     )
-    // Autopilot right after it, as the A sign: lit while it runs, a press flips it.
-    const nightShiftItem = !isEnabled || !vector ? null : <Button key="nightshift" variant={nightShift ? 'primary' : 'secondary'} label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />
-    // Grill mich behind it, as the steam sign.
-    const grillItem = !isEnabled || !vector ? null : <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
+    // Autopilot right after it, as the A sign (the robot on the terminal): lit while it runs, a press flips it.
+    const nightShiftItem = !isEnabled
+      ? null
+      : vector
+        ? <Button key="nightshift" variant={nightShift ? 'primary' : 'secondary'} label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />
+        : terminalSign('nightshift', TERMINAL_NIGHTSHIFT, () => toggleNightShift($), nightShift)
+    // Grill mich behind it, as the steam sign (the flame on the terminal).
+    const grillItem = !isEnabled
+      ? null
+      : vector
+        ? <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
+        : terminalSign('grill', TERMINAL_GRILL, () => grillMe($))
     // The broom right behind it: the clean-code skill. The press does not wait for the command, which runs once the
     // session is idle; waiting would run the press past its budget while Claude works.
     const cleanItem =
-      !isEnabled || !vector ? null : (
+      !isEnabled ? null : vector ? (
         <Button key="cleancode" variant="secondary" label={CLEAN_CODE} onPress={() => void runCleanCode($).catch(() => undefined)} />
+      ) : (
+        terminalSign('cleancode', CLEAN_CODE, () => void runCleanCode($).catch(() => undefined))
       )
     // The mirror right behind the broom: the reflect mod's command, likewise not waited for.
     const reflectItem =
-      !isEnabled || !vector ? null : (
+      !isEnabled ? null : vector ? (
         <Button key="reflect" variant="secondary" label={REFLECT} onPress={() => runReflect($)} />
+      ) : (
+        terminalSign('reflect', REFLECT, () => runReflect($))
       )
     // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
     // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it),
-    // masking on screen and the shield that moves the chat's secrets into the .env.
-    const skillItems =
-      !isEnabled || !vector
-        ? null
-        : {
+    // masking on screen and the shield that moves the chat's secrets into the .env (a closed lock with a key on the
+    // terminal).
+    const pressVault = () => pressTwice($, 'vault', () => vaultSecrets($))
+    const skillItems = !isEnabled
+      ? null
+      : vector
+        ? {
             beside: [
               <Button key="humanize" variant="secondary" label={HUMANIZE} onPress={() => humanizeLast($)} />,
               // A switch whose sign says the state: never drawn as pressed (Björn's wish).
@@ -4747,25 +4799,84 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
                 key="vault"
                 variant="secondary"
                 label={armed === 'vault' ? `${VAULT} Noch mal drücken` : VAULT}
-                onPress={() => pressTwice($, 'vault', () => vaultSecrets($))}
+                onPress={pressVault}
               />,
             ],
           }
-    // Elsewhere than the terminal a dim bar parts the groups at the bottom left: after the Autopilot, after ADHD mode,
-    // after Filetree, and before the plan and the history. One stands only between two groups that show a button, so
-    // never at an end or two side by side.
+        : {
+            beside: [
+              terminalSign('humanize', HUMANIZE, () => humanizeLast($)),
+              terminalSign('adhd', adhd ? SHORT_ANSWERS : LONG_ANSWERS, () => toggleAdhd($)),
+            ],
+            files: [terminalSign('filetree', FILETREE, pressFiles)],
+            past: [
+              remote === 'missing' ? null : terminalSign('remote', TERMINAL_REMOTE, () => toggleRemote($), remote === 'on'),
+              terminalSign('privacy', masks ? MASK_ON : MASK_OFF, () => toggleMasking($), masks),
+              terminalSign('vault', armed === 'vault' ? `${TERMINAL_VAULT} Noch mal drücken` : TERMINAL_VAULT, pressVault),
+            ],
+          }
+    // A dim bar parts the groups at the bottom left: after the Autopilot, after ADHD mode, after Filetree, and before
+    // the plan and the history. One stands only between two groups that show a button, so never at an end or two side
+    // by side. On the terminal the signs stand a cell apart, the plan and the history as far as the actions.
+    const textGap = columns < 44 ? 1 : 2
     const leftGroups = [
-      { bar: '', items: [workModeItem, nightShiftItem] },
-      { bar: 'sep-autopilot', items: [grillItem, cleanItem, reflectItem, ...(skillItems?.beside ?? [])] },
-      { bar: 'sep-files', items: skillItems?.files ?? [] },
-      { bar: 'sep-skills', items: skillItems?.past ?? [] },
-      { bar: 'sep-places', items: places },
+      { bar: '', gap: 1, items: [workModeItem, nightShiftItem] },
+      { bar: 'sep-autopilot', gap: 1, items: [grillItem, cleanItem, reflectItem, ...(skillItems?.beside ?? [])] },
+      { bar: 'sep-files', gap: 1, items: skillItems?.files ?? [] },
+      { bar: 'sep-skills', gap: 1, items: skillItems?.past ?? [] },
+      { bar: 'sep-places', gap: textGap, items: places },
     ]
       .map(group => ({ ...group, items: group.items.filter(Boolean) }))
       .filter(group => group.items.length > 0)
     const leftItems = leftGroups.flatMap((group, at) =>
       at === 0 ? group.items : [<Text key={group.bar} dimColor>|</Text>, ...group.items],
     )
+    // The row on the terminal: the groups at the left edge, the actions (Fresh chat, Push, Pause, Start and its hint,
+    // Continue) at the right. What does not fit on one line wraps: the actions onto a line of their own, still at the
+    // right, and the groups at a bar.
+    const rightItems = [handoffItem, shipItem, ...controls].filter(Boolean)
+    const cellsOfGroup = (group: { gap: number; items: unknown[] }) =>
+      group.items.reduce<number>((sum, one) => sum + cellsOfDrawn(one), 0) + group.gap * (group.items.length - 1)
+    const actionCells = rightItems.length === 0 ? 0 : rightItems.reduce<number>((sum, one) => sum + cellsOfDrawn(one), 0) + textGap * (rightItems.length - 1)
+    const plannedLines = vector ? null : buttonLines(leftGroups.map(cellsOfGroup), actionCells, columns)
+    const leftLine = (onLine: number[]) => (
+      <Box key={`left-${onLine[0] ?? 0}`} flexDirection="row" gap={1}>
+        {onLine.flatMap((place, at) => {
+          const group = leftGroups[place]!
+          const items = (
+            <Box key={`group-${place}`} flexDirection="row" gap={group.gap}>
+              {group.items}
+            </Box>
+          )
+          return at === 0 ? [items] : [<Text key={group.bar} dimColor>│</Text>, items]
+        })}
+      </Box>
+    )
+    const rightLine = rightItems.length === 0 ? null : (
+      <Box key="right" flexDirection="row" gap={textGap}>
+        {rightItems}
+      </Box>
+    )
+    const terminalLines =
+      plannedLines === null
+        ? []
+        : plannedLines.isRightBeside
+          ? [
+              <Box key="actions-0" flexDirection="row" justifyContent="space-between" width={columns}>
+                {plannedLines.left[0] === undefined ? null : leftLine(plannedLines.left[0])}
+                {rightLine}
+              </Box>,
+            ]
+          : [
+              ...plannedLines.left.map((onLine, n) => (
+                <Box key={`actions-${n}`} flexDirection="row" width={columns}>
+                  {leftLine(onLine)}
+                </Box>
+              )),
+              <Box key={`actions-${plannedLines.left.length}`} flexDirection="row" justifyContent="flex-end" width={columns}>
+                {rightLine}
+              </Box>,
+            ]
     // The row under the checklist. Elsewhere than the terminal: where to go on the left; on the right everything that
     // acts, together: another mod's buttons, Fresh chat, then Pause, Start or Continue, the main one last,
     // as a dialog's buttons sit. In a narrow band the actions wrap onto a line of their own and still keep to the right.
@@ -4786,19 +4897,29 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           </Box>
         </Box>
       ) : (
-        <Box key="actions" flexDirection="row" gap={columns < 44 ? 1 : 2}>
-          {actionItems}
+        <Box key="actions" flexDirection="column" width={columns}>
+          {terminalLines}
         </Box>
       )
-    // Elsewhere than the terminal the settings sit right of the view, as a gear, in every state of the band; left of
-    // the gear the question mark that explains the buttons (Björn's wish, 2026-10-27).
-    const gear = vector ? <Button key="settings" variant="secondary" label={GEAR} onPress={() => showSettings($)} /> : null
-    const help = vector ? <Button key="help" variant="secondary" label={HELP} onPress={() => showButtonHelp($)} /> : null
-    // The header's right end holds the view, on every surface: elsewhere than the terminal a menu as wide as its
-    // longest choice, "Ausführlich", and its arrow and padding, then the question mark and the gear; counted a cell a
-    // character, so the header never runs under them.
-    const headerRight = gear ? [button, help, gear] : button
-    const rightCells = vector ? 'Ausführlich'.length + 4 + 5 + 5 : columns < NARROW ? 15 : 27
+    // How many lines the row takes: on the terminal as many as it wraps onto; elsewhere one.
+    const actionRows = actions === null ? 0 : vector ? 1 : terminalLines.length
+    // The settings sit right of the view, as a gear (a wrench on the terminal), in every state of the band; left of
+    // it the question mark that explains the buttons (Björn's wish, 2026-10-27).
+    const gear = vector ? (
+      <Button key="settings" variant="secondary" label={GEAR} onPress={() => showSettings($)} />
+    ) : (
+      <Button key="settings" plain label={TERMINAL_GEAR} onPress={() => showSettings($)} />
+    )
+    const help = vector ? (
+      <Button key="help" variant="secondary" label={HELP} onPress={() => showButtonHelp($)} />
+    ) : (
+      <Button key="help" plain label={HELP} onPress={() => showButtonHelp($)} />
+    )
+    // The header's right end holds the view, the question mark and the gear, on every surface. Elsewhere than the
+    // terminal the menu is as wide as its longest choice, "Detailliert", and its arrow and padding; counted a cell a
+    // character, so the header never runs under them. The terminal counts the cells it draws, and one before them.
+    const headerRight = [button, help, gear]
+    const rightCells = vector ? 'Detailliert'.length + 4 + 5 + 5 : cellsOfDrawn(button) + 1 + cellsOfDrawn(help) + 1 + cellsOfDrawn(gear) + 1
     // In characters. Elsewhere than the terminal the app's font sets about 0.8 of a cell a character, so the header
     // counts that many more before it cuts its words.
     const headerWidth = Math.max(0, vector ? Math.floor((columns - rightCells - 2) / 0.8) : columns - rightCells)
@@ -4867,9 +4988,15 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           </Box>,
         )
       }
+      // On the terminal too the view, the question mark and the wrench stand at the top right, where the last card
+      // points.
       return withBeneath(
         <Box flexDirection="column" width={columns}>
-          <Text bold wrap="truncate-end">{`Willkommen im Leitstand · ${tourStep + 1} von ${TOUR.length}`}</Text>
+          {row(
+            <Text bold wrap="truncate-end">
+              {fit(`Willkommen im Leitstand · ${tourStep + 1} von ${TOUR.length}`, headerWidth).trimEnd()}
+            </Text>,
+          )}
           <Text wrap="wrap">{TOUR[tourStep]}</Text>
           <Box key="tour" flexDirection="row" gap={2} marginBottom={1}>
             <Button key="tour-next" plain label={isLast ? '✓ Verstanden' : 'Weiter ▶'} onPress={() => stepTour($, tourStep + 1)} />
@@ -5146,7 +5273,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const hasMeter = columns >= METER_MIN_COLUMNS
     const bar = (cells: string) => (hasMeter ? ` ${cells} ` : ' ')
     const nameWidth = Math.max(4, Math.min(MAX_NAME, columns - 2 - 2 - (hasMeter ? METER + 2 : 1) - LABEL_WIDTH - 1))
-    const room = Math.max(1, e.props.maxRows - 1 - warnings.length - (actions ? 1 : 0))
+    const room = Math.max(1, e.props.maxRows - 1 - warnings.length - actionRows)
     const firstUpcoming = list.tasks.findIndex(one => one.status === 'upcoming')
     // What is left of the row after mark, name, meter and label: the step's tokens, when they fit.
     const usageRoom = columns - 2 - nameWidth - (hasMeter ? METER + 2 : 1) - LABEL_WIDTH - 1

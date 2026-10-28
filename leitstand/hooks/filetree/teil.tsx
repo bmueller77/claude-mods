@@ -1070,8 +1070,13 @@ function einklappen($: EngineInterface) {
  */
 async function layoutHinweis($: EngineInterface, e: CommandRunInput, befehl: string): Promise<string | undefined> {
   const terminal = await $.session.surfaces().then(s => s.includes('terminal'), () => true)
-  if (terminal && !e.presentation.isFullscreen) return `Das Fenster Dateien steht in der Seitenleiste, und die braucht das Vollbild-Layout. Führ /tui fullscreen aus, dann /${befehl}.`
-  if (terminal && e.presentation.columns < 110) return `Das Fenster Dateien steht in der Seitenleiste, und die braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /${befehl}.`
+  return terminal ? terminalHinweis(e.presentation, befehl) : undefined
+}
+
+/** Was ein Terminal mit diesem Layout statt des Fensters sagt; undefined, wenn es das Fenster zeigen kann. Auch für 📂 im Band. */
+export function terminalHinweis(layout: { isFullscreen: boolean; columns: number }, befehl: string): string | undefined {
+  if (!layout.isFullscreen) return `Das Fenster Dateien steht in der Seitenleiste, und die braucht das Vollbild-Layout. Führ /tui fullscreen aus, dann /${befehl}.`
+  if (layout.columns < 110) return `Das Fenster Dateien steht in der Seitenleiste, und die braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /${befehl}.`
   return undefined
 }
 

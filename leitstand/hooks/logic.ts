@@ -133,6 +133,9 @@ export function cellsOf(char: string): number {
   const code = char.codePointAt(0) ?? 0
   if (code === 0x200d || (code >= 0x300 && code <= 0x36f) || (code >= 0xfe00 && code <= 0xfe0f)) return 0
   const isWide =
+    // The question and exclamation marks drawn as emoji (❓ ❔ ❕ ❗, Emoji_Presentation): ❓ opens the pane Knöpfe.
+    (code >= 0x2753 && code <= 0x2755) ||
+    code === 0x2757 ||
     (code >= 0x1100 && code <= 0x115f) ||
     (code >= 0x2e80 && code <= 0xa4cf) ||
     (code >= 0xac00 && code <= 0xd7a3) ||
@@ -1277,6 +1280,39 @@ export const buttonsIn = (tree: unknown): unknown[] =>
  * rest, which stays under the band. A drawing of nothing but buttons comes up whole; inside a stack (a column) only a
  * button standing on its own does, so a mod's own group of buttons (the next-steps suggestions) stays with its words.
  */
+/**
+ * How many cells the terminal draws a Button or a Text in: a plain Button its label alone, any other `[ label ]`; a
+ * Text its words.
+ */
+export function cellsOfDrawn(element: unknown): number {
+  if (element === null || typeof element !== 'object') return 0
+  const { type, props, children } = element as { type?: unknown; props?: { label?: unknown; plain?: unknown }; children?: unknown }
+  if (type === 'Button') return widthOf(String(props?.label ?? '')) + (props?.plain === true ? 0 : 4)
+  return childrenOf(children).reduce<number>((sum, kid) => sum + (typeof kid === 'string' || typeof kid === 'number' ? widthOf(String(kid)) : cellsOfDrawn(kid)), 0)
+}
+
+/**
+ * The terminal's row of buttons as lines: the groups on the left, `groups` their widths in cells, a bar with a cell on
+ * either side (3 cells) between two on a line; `right` the width of the actions, 0 when there are none. All on one
+ * line when they fit with 2 cells between; else the actions on a line of their own after the groups, and the groups
+ * wrapped at a bar, so no bar starts or ends a line. Each line of groups lists their places in `groups`.
+ */
+export function buttonLines(groups: readonly number[], right: number, columns: number): { left: number[][]; isRightBeside: boolean } {
+  const left: number[][] = []
+  let used = 0
+  groups.forEach((cells, at) => {
+    const line = left[left.length - 1]
+    if (line !== undefined && used + 3 + cells <= columns) {
+      line.push(at)
+      used += 3 + cells
+    } else {
+      left.push([at])
+      used = cells
+    }
+  })
+  return { left, isRightBeside: right === 0 || (left.length <= 1 && used + (left.length === 0 ? 0 : 2) + right <= columns) }
+}
+
 export function liftButtons(tree: unknown, isWhole = true): { buttons: unknown[]; rest: unknown } {
   if (tree === null || typeof tree !== 'object') return { buttons: [], rest: tree }
   const { type, props, children } = tree as { type?: unknown; props?: { flexDirection?: unknown }; children?: unknown }
@@ -1494,6 +1530,8 @@ const isSetting = (key: keyof ChatSettings, value: unknown) => (SETTING_CHECKS[k
 // The config menu's words for the view, and what they set.
 const MENU_VIEWS = new Map<unknown, Pick<ChatSettings, 'enabled' | 'detail'>>([
   ['einfach', { enabled: true, detail: 'simple' }],
+  ['detailliert', { enabled: true, detail: 'detailed' }],
+  // The name until leitstand 0.60, still stored by whoever chose it then.
   ['ausfuehrlich', { enabled: true, detail: 'detailed' }],
   ['minimal', { enabled: true, detail: 'minimal' }],
   ['aus', { enabled: false, detail: 'simple' }],
@@ -1627,13 +1665,13 @@ const ja = (name: string) => ({ ...JA, beispiel: `/${name} ja` })
 /** Die Befehle des Leitstands selbst, in der Reihenfolge der Übersicht. /leitstand bleibt daneben als Kurzform. */
 const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Allgemein', 'leitstand:hilfe', 'Alle Leitstand-Befehle im Überblick', 'Listet alle Leitstand-Befehle auf, nach Gruppen, je mit einer Zeile.', 'Keiner; die Knöpfe stehen im Leitstand über dem Eingabefeld.', 'einmal'),
-  befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand über dem Eingabefeld ein.', 'Einstellungen › Ansicht (Einfach, Ausführlich oder Minimal)', 'einstellung'),
+  befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand über dem Eingabefeld ein.', 'Einstellungen › Ansicht (Einfach, Detailliert oder Minimal)', 'einstellung'),
   befehl('Allgemein', 'leitstand:aus', 'Leitstand ausschalten', 'Schaltet den Leitstand aus; alle Werkzeug-Details sind dann wieder zu sehen.', 'Einstellungen › Ansicht › Aus', 'einstellung'),
   befehl('Allgemein', 'leitstand:tour', 'Die Begrüßung noch mal zeigen', 'Zeigt die Begrüßung über dem Eingabefeld noch einmal; mit Weiter gehst du sie durch.', 'Keiner; die Begrüßung erscheint beim ersten Start von selbst.', 'einmal'),
   befehl('Allgemein', 'leitstand:knoepfe-zeigen', 'Die Knöpfe des Leitstands erklären', 'Öffnet ein Fenster, das jeden Knopf des Leitstands mit seinem Zeichen und seinem Befehl erklärt; auf dem Handy als Text.', '❓ links neben dem Zahnrad', 'einmal'),
 
   befehl('Ansicht', 'leitstand:ansicht-einfach', 'Ansicht Einfach: Schritte und Fortschritt', 'Der Leitstand zeigt die Schritte und den Fortschritt.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Einfach', 'einstellung'),
-  befehl('Ansicht', 'leitstand:ansicht-ausfuehrlich', 'Ansicht Ausführlich: dazu Zeit und Tokens', 'Der Leitstand zeigt dazu Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Ausführlich', 'einstellung'),
+  befehl('Ansicht', 'leitstand:ansicht-detailliert', 'Ansicht Detailliert: dazu Zeit und Tokens', 'Der Leitstand zeigt dazu Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Detailliert', 'einstellung'),
   befehl('Ansicht', 'leitstand:ansicht-minimal', 'Ansicht Minimal: eine Zeile', 'Der Leitstand zeigt eine Zeile mit Stand, Fortschritt, Restzeit und Tokens.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Minimal', 'einstellung'),
 
   befehl('Arbeitsweise', 'leitstand:arbeitsmodus-auto', 'Auto-Modus: Claude entscheidet selbst über Helfer', 'Claude entscheidet selbst, ob und welche Helfer es einsetzt.', 'Modus-Menü in der Knopfzeile oder Einstellungen › Arbeitsweise › Auto-Modus', 'einstellung'),
@@ -1738,8 +1776,15 @@ const UMGEZOGEN: Readonly<Record<string, string>> = {
   'letzter-stand-zeigen': 'statistik:letzter-stand-zeigen',
 }
 
-/** Umbenannt am 2026-10-26: der ADHS-Modus heißt Kurzantworten. */
-const UMBENANNT: Readonly<Record<string, string>> = { 'adhs-an': 'kurzantworten-an', 'adhs-aus': 'kurzantworten-aus' }
+/** Umbenannt am 2026-10-26: der ADHS-Modus heißt Kurzantworten; am 2026-10-28: die Ansicht Ausführlich heißt Detailliert. */
+const UMBENANNT: Readonly<Record<string, string>> = {
+  'adhs-an': 'kurzantworten-an',
+  'adhs-aus': 'kurzantworten-aus',
+  'ansicht-ausfuehrlich': 'ansicht-detailliert',
+}
+
+/** Umbenannte, die es schon als /leitstand:… gab: Auch die Langform aus alter Gewohnheit nennt den neuen Namen. */
+const UMBENANNT_LANG: readonly string[] = ['ansicht-ausfuehrlich']
 
 /**
  * Die alten Namen bis leitstand 0.55: /leitstand-pause und /adhs-an, dazu die der Teile aus ihrer Zeit als eigene
@@ -1756,6 +1801,7 @@ export const ALTE_BEFEHLE: ReadonlyMap<string, string> = new Map([
     return [`leitstand-${alt}`, one.name] as const
   }),
   ...Object.entries(UMBENANNT).map(([alt, jetzt]) => [alt, `leitstand:${jetzt}`] as const),
+  ...UMBENANNT_LANG.map(alt => [`leitstand:${alt}`, `leitstand:${UMBENANNT[alt]}`] as const),
   ...Object.entries(UMGEZOGEN).flatMap(([alt, jetzt]) => [[`leitstand:${alt}`, jetzt], [`leitstand-${alt}`, jetzt], [alt, jetzt]] as const),
 ])
 

@@ -51,7 +51,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    settings.json noch einmal ansehen.
 4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
    leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, prompt-upgrade,
-   modellwahl, i-have-adhd. Meldet install "already installed",
+   modellwahl, kurzfassen, i-have-adhd. Meldet install "already installed",
    holt `claude plugin update <name>@bjoern-mods` die neue Version (install allein tut das nicht).
    Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
    (install.sh im Repo tut dasselbe.)
@@ -66,7 +66,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    Seit 2026-10-26 heißen die Befehle /<mod>:…, die Dateien dafür bringt jeder Mod selbst mit.
    Dann kennt die App alle Befehle (z. B. /leitstand:hilfe, /pause, /selbstkritik, /dateien,
    /autopilot-an) schon in der ersten Nachricht.
-6. Prüfen: `claude plugin list` zeigt die acht als enabled mit Scope user. Danach neu starten:
+6. Prüfen: `claude plugin list` zeigt die neun als enabled mit Scope user. Danach neu starten:
    die Desktop-App ganz beenden und öffnen; auf Servern laufende Sitzungen über ihren Dienst neu
    starten (z. B. die Remote-Control-Bridge per systemctl), nicht von Hand im tmux.
 7. Bericht: was entfernt wurde, was installiert ist (mit Versionen), was stehen blieb, Fehler.
@@ -83,7 +83,8 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 | visible-compact | Chat vor und nach `/compact` nebeneinander |
 | modellwahl | schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch zu Beginn eines neuen Chats oder per `/modellwahl`; am Rechner gilt der Vorschlag nach 15 s, vom Handy auf ja |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
-| i-have-adhd | ADHS-Modus, im Leitstand Kurzantworten mit Knopf 📖/📝 |
+| kurzfassen | Kurzfassen als Skill, im Leitstand Kurzantworten mit Knopf 📖/📝 |
+| i-have-adhd | englisches Original von kurzfassen, der Leitstand nutzt es nur, wenn kurzfassen fehlt |
 
 ## Reihenfolge über dem Eingabefeld
 

@@ -10,7 +10,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 
 - Ein Ordner je Mod: `.claude-plugin/plugin.json` (mit Version), `hooks/`, `types/`, `tests/`.
 - `.claude-plugin/marketplace.json` ist der Katalog. `i-have-adhd` ist fremd und kommt direkt aus
-  `ayghri/i-have-adhd`.
+  `ayghri/i-have-adhd`. Seit 2026-10-28 gibt es davon die deutsche Fassung `kurzfassen` (eigener Mod, nur
+  ein Skill, Björn mag den Namen ADHS nicht); i-have-adhd bleibt im Katalog.
 - Befehle heißen seit 2026-10-26 `/<mod>:<funktion>[-<wert>]` (Anthropics Schreibweise), `/<mod>:hilfe`
   listet sie. Jeder Mod hat dafür `<mod>/commands/<funktion>.md`; die App setzt `<mod>:` davor, der
   `command.run`-Hook des Mods beantwortet `e.command === '<mod>:<funktion>'`. Registriert
@@ -79,6 +80,12 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   (`lookUpCommand`) übergeht `leitstand:…`, sonst fände `:vermenschlichen` den eigenen Befehl.
   Ungeprüft: ob `/leitstand:pause` mitten in einer Runde sofort wirkt (Markdown-Befehle haben kein
   `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten, Knopf 📖 (aus) und 📝 (an), seit 0.56.1.
+  Seit 0.61.0 startet der Knopf den Skill `kurzfassen:kurzfassen` (Rückfall `i-have-adhd`), aus mit
+  "Kurzfassen aus" oder "normal antworten"; die Ansicht Ausführlich heißt Detailliert.
+- Terminal-Band seit leitstand 0.61.0 (Björns Wunsch): dieselben Knöpfe an denselben Plätzen wie in der App.
+  Zeichen im Terminal nur einzellige Nicht-Emoji oder ein Codepoint mit Emoji_Presentation, nie U+FE0F oder
+  U+200D; deshalb dort 👤/👥, 🤖, 🔥, 🔐, 🔧, 📡 statt der App-Zeichen. Ein nacktes ⚙ (U+2699) zeichnet
+  Windows Terminal zwei Zellen breit, die Lücke dahinter verschwindet.
   `claude -p "/befehl"` in Git Bash: MSYS macht aus einem Argument, das mit `/` beginnt, einen
   Windows-Pfad (`/pause` wird `C:/Program Files/Git/pause`), dann geht der Prompt ans Modell; Namen
   mit Doppelpunkt bleiben heil. Deshalb `MSYS_NO_PATHCONV=1` davor (oder PowerShell); dann laufen
@@ -201,3 +208,5 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Werkzeug stehen.
 7. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.
+8. Live-Test ausstehend: leitstand 0.61.0 im echten Terminal (Breite der Zeichen, ob ❓ zwei Zellen zählt,
+   Umbruch der Knopfzeile, Leuchten auf `suggestion`) und Kurzfassen per 📖/📝.

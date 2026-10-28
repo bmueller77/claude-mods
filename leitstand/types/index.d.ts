@@ -422,7 +422,7 @@ declare module 'claude-code' {
        * /remote-control; `on` while connected (or connecting), `off` when not, `missing` when the session lacks it.
        */
       remoteControl: { app: 'on' | 'off' | 'missing'; command: 'on' | 'off' | 'missing' }
-      /** Whether the i-have-adhd skill's mode is on, until "stop adhd mode" or "normal mode". */
+      /** Whether Kurzantworten (the Kurzfassen skill, i-have-adhd as fallback) is on, until "Kurzfassen aus" or "normal antworten" (the old "stop adhd mode" and "normal mode" still count). */
       adhdMode: boolean
       /**
        * When the Autopilot button was last pressed to end a running Autopilot, in ms since the epoch; null until then.

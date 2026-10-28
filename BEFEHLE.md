@@ -33,7 +33,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | Befehl | Was er tut |
 |---|---|
 | `/leitstand:ansicht-einfach` | Ansicht Einfach: Schritte und Fortschritt |
-| `/leitstand:ansicht-ausfuehrlich` | Ansicht Ausführlich: dazu Zeit und Tokens |
+| `/leitstand:ansicht-detailliert` | Ansicht Detailliert: dazu Zeit und Tokens |
 | `/leitstand:ansicht-minimal` | Ansicht Minimal: eine Zeile |
 
 ### Arbeitsweise
@@ -240,6 +240,10 @@ Schlägt einmal je Aufgabe Modell und Aufwand vor. Am Rechner gilt der Vorschlag
 | `/modellwahl:auto-an` | Automatische Modellwahl bei der ersten Nachricht eines neuen Chats einschalten, nur für diesen Chat |
 | `/modellwahl:auto-aus` | Automatische Modellwahl bei der ersten Nachricht eines neuen Chats ausschalten, nur für diesen Chat |
 
+## kurzfassen
+
+Kurzfassen als Skill, die deutsche Fassung von i-have-adhd: zuerst die nächste Handlung, dann nummerierte Schritte. Er bringt nur einen Skill mit, keine Befehle. Ein- und ausgeschaltet wird er im Leitstand mit `/kurzantworten-an` und `/kurzantworten-aus` oder dem Knopf 📖/📝, oder direkt mit `/kurzfassen:kurzfassen` und "Kurzfassen aus".
+
 ## i-have-adhd
 
-Der fremde Mod hinter den Kurzantworten: zuerst die nächste Handlung, dann nummerierte Schritte. Er bringt nur einen Skill mit, keine Befehle. Ein- und ausgeschaltet wird er im Leitstand mit `/kurzantworten-an` und `/kurzantworten-aus` oder dem Knopf 📖/📝.
+Das englische Original von kurzfassen (fremd, bleibt im Katalog). Der Leitstand nutzt es für die Kurzantworten nur, wenn kurzfassen fehlt. Er bringt nur einen Skill mit, keine Befehle.

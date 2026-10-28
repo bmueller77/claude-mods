@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, TEIL_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, TEIL_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 
@@ -100,6 +100,80 @@ async function helperTags($: Engine, surface: (typeof SURFACES)[number], bodyCol
   )
 }
 
+/** The terminal band, mounted with these props, as its tree. */
+async function terminalTree($: Engine, props: { bodyColumns?: number; maxRows?: number } = {}): Promise<Drawn> {
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface: 'terminal' })
+  const tree = (await ui.drawn()) as unknown as Drawn
+  await ui.unmount()
+  return tree
+}
+
+/** Every element of a tree, outermost first, in document order. */
+function elementsOf(node: Drawn | string | null | undefined): Drawn[] {
+  if (node === null || node === undefined || typeof node !== 'object') return []
+  // What another part draws may come without props.
+  return [{ ...node, props: node.props ?? {} }, ...(node.children ?? []).flatMap(kid => elementsOf(kid as Drawn))]
+}
+
+/** The words of an element, as one string. */
+const wordsOf = (node: Drawn | string): string => (typeof node === 'string' ? node : (node.children ?? []).map(wordsOf).join(''))
+
+/**
+ * The lines a terminal draws for a tree, near enough to read the layout: a column's parts under each other, a row's
+ * beside each other with its gap, a row with a width filled as justifyContent says. A plain Button is its label, any
+ * other `[ label ]`; a cell is counted as the band counts it.
+ */
+function paint(node: Drawn | string | number | boolean | null | undefined): string[] {
+  if (node === null || node === undefined || typeof node === 'boolean') return []
+  if (typeof node !== 'object') return [String(node)]
+  if (node.type === 'Text') return wordsOf(node).split('\n')
+  if (node.type === 'Button') {
+    const label = String(node.props.label ?? wordsOf(node))
+    return [node.props.plain === true ? label : `[ ${label} ]`]
+  }
+  const kids = (node.children ?? []).map(kid => paint(kid as Drawn)).filter(lines => lines.length > 0)
+  if (node.type !== 'Box' || node.props.flexDirection === 'column') return kids.flat()
+  const widths = kids.map(lines => Math.max(0, ...lines.map(widthOf)))
+  const gap = Number(node.props.gap ?? node.props.columnGap ?? 0)
+  const used = widths.reduce((sum, one) => sum + one, 0) + gap * Math.max(0, kids.length - 1)
+  const free = typeof node.props.width === 'number' ? Math.max(0, node.props.width - used) : 0
+  const lead = node.props.justifyContent === 'flex-end' ? free : 0
+  const between = node.props.justifyContent === 'space-between' && kids.length > 1 ? free : 0
+  const height = Math.max(0, ...kids.map(lines => lines.length))
+  return Array.from({ length: height }, (_, row) =>
+    ' '.repeat(lead) +
+    kids
+      .map((lines, at) => {
+        const line = lines[row] ?? ''
+        return line + ' '.repeat(Math.max(0, widths[at]! - widthOf(line)))
+      })
+      .reduce((sum, one, at) => (at === 0 ? one : sum + ' '.repeat(gap + (at === 1 ? between : 0)) + one), ''),
+  )
+}
+
+/** The terminal band as the lines it draws, without the spaces at their ends. */
+async function terminalLines($: Engine, props: { bodyColumns?: number; maxRows?: number } = {}): Promise<string[]> {
+  return paint(await terminalTree($, props)).map(line => line.trimEnd())
+}
+
+/** The terminal's row at the bottom left, a line each: each button's key, a bar as dim|; the actions on the right left out. */
+async function terminalRow($: Engine, bodyColumns = 80): Promise<string[][]> {
+  const actions = elementsOf(await terminalTree($, { bodyColumns })).find(one => one.props.key === 'actions')
+  return elementsOf(actions)
+    .filter(one => String(one.props.key ?? '').startsWith('left-'))
+    .map(left =>
+      (left.children as Drawn[]).flatMap(kid =>
+        kid.type === 'Text' ? [`${kid.props.dimColor === true ? 'dim' : ''}${wordsOf(kid) === '│' ? '|' : wordsOf(kid)}`] : elementsOf(kid).filter(one => one.type === 'Button').map(one => String(one.props.key)),
+      ),
+    )
+}
+
+/** The terminal's header at the right, in order: each button's key. */
+async function terminalHeaderRight($: Engine, props: { bodyColumns?: number } = {}): Promise<string[]> {
+  const right = elementsOf(await terminalTree($, props)).find(one => one.props.key === 'header-right')
+  return elementsOf(right).filter(one => one.type === 'Button').map(one => String(one.props.key))
+}
+
 /** Marks a screen reader would say twice: an alt its row's words hold, or one another mark in the row has. */
 function echoes(boxes: unknown[]): string[] {
   // Each element's words apart, as they are drawn: a name and the line under it are two runs of words, not one.
@@ -183,7 +257,7 @@ test('a to-do list plus a 60% report draws done, current, next and up next rows'
     expect(shown).toContain('60%')
     expect(shown).toContain('Als Nächstes')
     expect(shown).toContain('Später')
-    expect(shown).toContain(isTerminal ? 'Leitstand: Einfach' : 'Einfach ▾')
+    expect(shown).toContain(isTerminal ? '● Einfach' : 'Einfach ▾')
     expect(shown).not.toContain('Ansicht')
   }
 })
@@ -209,7 +283,7 @@ test('/leitstand off hides the band but keeps the button', async ($, on) => {
   for (const surface of SURFACES) {
     const shown = (await texts($, surface)).join('\n')
     expect(shown).not.toContain('Verstehe deine Anfrage')
-    expect(shown).toContain(surface === 'terminal' ? 'Leitstand: Aus' : 'Aus ▾')
+    expect(shown).toContain(surface === 'terminal' ? '○ Aus' : 'Aus ▾')
   }
 })
 
@@ -1239,7 +1313,7 @@ test("the simple view hides tokens and low plan usage, not the helper's model; t
   for (const surface of SURFACES) {
     const simple = (await texts($, surface, 120)).join('\n')
     expect(simple).toContain('Find the prices')
-    expect(simple).toContain(surface === 'terminal' ? 'Leitstand: Einfach' : 'Einfach ▾')
+    expect(simple).toContain(surface === 'terminal' ? '● Einfach' : 'Einfach ▾')
     // The tag behind a helper stands in every view.
     expect(simple).toContain('Haiku 4.5')
     expect(simple).not.toMatch(/tokens/i)
@@ -1251,7 +1325,7 @@ test("the simple view hides tokens and low plan usage, not the helper's model; t
   await ui.press({ key: 'toggle' })
   await ui.unmount()
   const detailed = (await texts($, 'terminal', 120)).join('\n')
-  expect(detailed).toContain('Leitstand: Details')
+  expect(detailed).toContain('● Detailliert')
   expect(detailed).toContain('Explore')
   expect(detailed).toContain('Haiku 4.5')
   expect(detailed).toContain('2,4k neu · 10k aus Cache')
@@ -1287,17 +1361,17 @@ test('one button cycles Simple, Details and Minimal; from Off it goes back to Si
     await ui.press({ key: 'toggle' })
     await ui.unmount()
   }
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Einfach')
+  expect((await texts($, 'terminal')).join('\n')).toContain('● Einfach')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Details')
+  expect((await texts($, 'terminal')).join('\n')).toContain('● Detailliert')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Minimal')
+  expect((await texts($, 'terminal')).join('\n')).toContain('● Minimal')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Einfach')
+  expect((await texts($, 'terminal')).join('\n')).toContain('● Einfach')
   await $.command.run({ command: 'leitstand', args: 'off' } as never)
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Aus')
+  expect((await texts($, 'terminal')).join('\n')).toContain('○ Aus')
   await press()
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Einfach')
+  expect((await texts($, 'terminal')).join('\n')).toContain('● Einfach')
 })
 
 test('in details, the current step fills gradually and shows its time; done steps show how long they took', async ($, on) => {
@@ -1725,7 +1799,7 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const working = await drawn()
   // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links.
-  expect(working.menus).toEqual(['Ausführlich / Einfach / Minimal'])
+  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal'])
   expect(working.bottom).toContain('"key":"workmode"')
   expect(working.top).toContain('"type":"Select"')
   expect(working.top).not.toContain('Pause')
@@ -2176,8 +2250,11 @@ test('the band and History draw only symbols every terminal counts as one cell',
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await $.command.run({ command: 'leitstand', args: 'history' } as never)
-  const shown = [...(await texts($, 'terminal')), ...(await paneTexts($))]
+  // But ❓ at the top right: an emoji with Emoji_Presentation, which every terminal draws two cells wide and the band
+  // counts so.
+  const shown = [...(await texts($, 'terminal')).filter(text => text !== '❓'), ...(await paneTexts($))]
   expect(shown.filter(text => WIDE_SYMBOLS.test(text))).toEqual([])
+  expect(widthOf('❓')).toBe(2)
 
   // The day picker's label has no colon of its own; the terminal draws "Tag: Heute, …".
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4619,6 +4696,8 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
   expect(shown).toContain('Willkommen im Leitstand · 1 von 3')
   expect(shown).toContain('Hier erscheint eine Checkliste, wenn du Claude')
   expect(shown).toContain('≣ Verlauf')
+  // The view, ❓ and 🔧 at the top right, as in the app: where the last card points.
+  expect(await terminalHeaderRight($, { bodyColumns: 120 })).toEqual(['toggle', 'help', 'settings'])
   for (const card of ['2 von 3', '3 von 3']) {
     const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
     await band.press({ key: 'tour-next' })
@@ -4626,6 +4705,8 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
     expect((await texts($, 'terminal', 120)).join('\n')).toContain(card)
   }
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('✓ Verstanden')
+  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Schraubenschlüssel findest du alle Optionen.')
+  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Unten unter Einstellungen')
   const last = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await last.press({ key: 'tour-next' })
   await last.unmount()
@@ -5336,18 +5417,19 @@ test('in Simple the percentage moves with time before a step is checked off', as
   expect(percent).toBeLessThan(50)
 })
 
-test('in a narrow window the button gets short and the bars go before step names do', async ($, on) => {
+test('in a narrow window the bars go before step names do; the view button is as short at every width', async ($, on) => {
   world(on)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Read your brand notes', 'Build the pricing section'] })
   const wide = (await texts($, 'terminal', 80)).join('\n')
-  expect(wide).toContain('● Leitstand: Einfach')
+  expect(wide).toContain('● Einfach')
   expect(wide).toContain('░░░░░░░░░░')
 
   // 39, not 36: the status column is 3 cells wider for "Hängt fest", so names get 3 fewer. Still under 40, 50 and 60.
   const narrow = (await texts($, 'terminal', 39)).join('\n')
   expect(narrow).toContain('● Einfach')
-  expect(narrow).not.toContain('Leitstand: Einfach')
+  expect(wide).not.toContain('Leitstand:')
+  expect(narrow).not.toContain('Leitstand:')
   expect(narrow).not.toContain('░░░░')
   expect(narrow).toContain('Read your brand notes')
 })
@@ -5410,7 +5492,7 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   await pick('sound-chime')
   await pick('calm-on')
   shown = await settingsTexts()
-  expect(shown).toContain('● Details')
+  expect(shown).toContain('● Detailliert')
   expect(shown).toContain('● Signalton')
   expect(shown).toContain('Ein kurzer Signalton, wenn Claude dich braucht')
   expect(shown).toContain('▶ Anhören')
@@ -5418,10 +5500,10 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   expect(shown).toContain('mergt, sobald du freigibst')
   expect(shown).toContain('● An')
   expect(played).toEqual(['sounds/needs-you.wav'])
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Details')
+  expect((await texts($, 'terminal')).join('\n')).toContain('● Detailliert')
 
   await pick('view-off')
-  expect((await texts($, 'terminal')).join('\n')).toContain('Leitstand: Aus')
+  expect((await texts($, 'terminal')).join('\n')).toContain('○ Aus')
 
   const result = await $.command.run({ command: 'leitstand', args: 'settings' } as never)
   expect(result.text).toBe('Die Einstellungen sind in der Seitenleiste.')
@@ -5699,7 +5781,10 @@ describe('Arbeitsweise und Grill mich', () => {
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
 
-    expect((await texts($, 'terminal')).some(one => one.endsWith('Grill mich'))).toBe(true)
+    // Im Terminal die Flamme, ohne Wort daneben.
+    const shownInTerminal = await texts($, 'terminal')
+    expect(shownInTerminal).toContain('\u{1F525}')
+    expect(shownInTerminal.some(one => one.includes('Grill mich'))).toBe(false)
     // In der App das Zeichen fuer Dampf, direkt hinter dem Modus-Menue.
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
@@ -5779,8 +5864,8 @@ describe('Arbeitsweise und Grill mich', () => {
     on('session.messages', () => ({ value: state.messages }) as never)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
-    const press = async (key: string) => {
-      const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const press = async (key: string, surface: (typeof SURFACES)[number] = 'desktop') => {
+      const band = await $.ui.mount({ ...BAND, surface })
       await band.press({ key })
       await band.unmount()
     }
@@ -5788,7 +5873,7 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const skill = (name: string) => ({ name, description: name, source: 'plugin' })
 
-  test('in der App stehen hinter Grill mich Vermenschlichen, Kurzantworten, Dateien, Autopilot, Verdecken und Tresor, im Terminal nicht', async ($, on) => {
+  test('hinter Grill mich stehen Vermenschlichen, Kurzantworten, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
     await skillWorld($, on)
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
@@ -5805,7 +5890,8 @@ describe('Arbeitsweise und Grill mich', () => {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
       const keys = (await ui.findAll({ type: 'Button' })).map(one => one.props.key)
       await ui.unmount()
-      for (const key of ['review', 'usage', 'cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).not.toContain(key)
+      for (const key of ['cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).toContain(key)
+      for (const key of ['review', 'usage']) expect(keys).not.toContain(key)
     }
   })
 
@@ -5819,15 +5905,19 @@ describe('Arbeitsweise und Grill mich', () => {
     return left.map(kid => (kid.type === 'Text' ? `${kid.props.dimColor === true ? 'dim' : ''}${(kid.children ?? []).join('')}` : String(kid.props.key)))
   }
 
-  test('in der App trennen Striche die Gruppen unten links: hinter dem Autopiloten, hinter Kurzantworten, hinter Dateien und vor Plan, im Terminal keine', async ($, on) => {
+  test('Striche trennen die Gruppen unten links: hinter dem Autopiloten, hinter Kurzantworten, hinter Dateien und vor Plan, auch im Terminal', async ($, on) => {
     await skillWorld($, on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history'])
-
-    for (const bodyColumns of [50, 80, 140]) {
-      const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
-      const words = (await ui.findAll({ type: 'Text' })).map(one => one.text)
-      await ui.unmount()
-      expect(words).not.toContain('|')
+    const groups = ['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history']
+    expect(await leftRow($)).toEqual(groups)
+    // In a wide terminal on one line, as in the app; narrower, the groups wrap at a bar, which then goes.
+    expect((await terminalRow($, 140)).flat()).toEqual(groups)
+    for (const bodyColumns of [30, 50, 80]) {
+      const lines = await terminalRow($, bodyColumns)
+      expect(lines.flat()).toEqual(groups.filter((one, at) => one !== 'dim|' || lines.some(line => line.includes(groups[at - 1]!) && line.includes(groups[at + 1]!))))
+      for (const line of lines) {
+        expect(line[0]).not.toBe('dim|')
+        expect(line.at(-1)).not.toBe('dim|')
+      }
     }
   })
 
@@ -5862,7 +5952,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(row?.props.marginTop).toBeUndefined()
   })
 
-  test('in der App steht ❓ links neben dem Zahnrad und öffnet das Fenster Leitstand-Knöpfe; im Terminal fehlt es wie das Zahnrad', async ($, on) => {
+  test('❓ steht links neben dem Zahnrad und öffnet das Fenster Leitstand-Knöpfe, in der App und im Terminal', async ($, on) => {
     const opened: string[] = []
     on('ui.open', (_, e) => {
       opened.push(e.id)
@@ -5877,8 +5967,13 @@ describe('Arbeitsweise und Grill mich', () => {
     await ui.unmount()
     expect(opened).toEqual(['leitstand-knoepfe'])
     const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
-    expect((await terminal.findAll({ type: 'Button' })).some(one => one.props.key === 'help')).toBe(false)
+    const help = (await terminal.findAll({ type: 'Button' })).find(one => one.props.key === 'help')
+    expect(help?.props.label).toBe('❓')
+    expect(help?.props.plain).toBe(true)
+    await terminal.press({ key: 'help' })
     await terminal.unmount()
+    expect(opened).toEqual(['leitstand-knoepfe', 'leitstand-knoepfe'])
+    expect(await terminalHeaderRight($)).toEqual(['toggle', 'help', 'settings'])
   })
 
   test('das Fenster Leitstand-Knöpfe nennt jeden Knopf, den das Band zeigt, in beiden Arbeitsweisen', async ($, on) => {
@@ -6030,27 +6125,54 @@ describe('Arbeitsweise und Grill mich', () => {
     return { ...world, sent, variant, label }
   }
 
-  test('Kurzantworten aus: 📖, ein Druck startet den Skill i-have-adhd, danach steht 📝, nie hervorgehoben', async ($, on) => {
+  test('Kurzantworten aus: 📖, ein Druck startet den Skill kurzfassen, auch wenn i-have-adhd daneben steht; danach 📝, nie hervorgehoben', async ($, on) => {
     const { state, press, variant, label } = await adhdWorld($, on)
     expect(await variant()).toBe('secondary')
     expect(await label()).toBe('\u{1F4D6}')
-    state.commands = [skill('i-have-adhd:i-have-adhd')]
+    state.commands = [skill('i-have-adhd:i-have-adhd'), skill('kurzfassen:kurzfassen')]
     await press('adhd')
-    expect(state.runs).toEqual([{ command: 'i-have-adhd:i-have-adhd', args: undefined }])
+    expect(state.runs).toEqual([{ command: 'kurzfassen:kurzfassen', args: undefined }])
     expect(await variant()).toBe('secondary')
     expect(await label()).toBe('\u{1F4DD}')
   })
 
-  test('Kurzantworten an: ein Druck sagt „stop adhd mode“ als die Person, danach steht wieder 📖', async ($, on) => {
-    const { state, press, sent, variant, label } = await adhdWorld($, on)
+  test('Kurzantworten ohne kurzfassen: der Knopf startet i-have-adhd', async ($, on) => {
+    const { state, press, label } = await adhdWorld($, on)
     state.commands = [skill('i-have-adhd:i-have-adhd')]
+    await press('adhd')
+    expect(state.runs).toEqual([{ command: 'i-have-adhd:i-have-adhd', args: undefined }])
+    expect(await label()).toBe('\u{1F4DD}')
+  })
+
+  test('Kurzantworten an: ein Druck sagt „Kurzfassen aus“ als die Person, danach steht wieder 📖', async ($, on) => {
+    const { state, press, sent, variant, label } = await adhdWorld($, on)
+    state.commands = [skill('kurzfassen:kurzfassen')]
     await press('adhd')
     expect(await variant()).toBe('secondary')
     expect(await label()).toBe('\u{1F4DD}')
     await press('adhd')
-    expect(sent).toEqual([{ text: 'stop adhd mode', asUser: true }])
+    expect(sent).toEqual([{ text: 'Kurzfassen aus', asUser: true }])
     expect(state.runs).toHaveLength(1)
     expect(await variant()).toBe('secondary')
+    expect(await label()).toBe('\u{1F4D6}')
+  })
+
+  test('Kurzantworten folgen dem Getippten: /kurzfassen:kurzfassen schaltet an, „Kurzfassen aus“ und „normal antworten“ aus', async ($, on) => {
+    const { label } = await adhdWorld($, on)
+    const composer = { wait: false, origin: { kind: 'composer' } }
+    await $.prompt.submit({ text: '/kurzfassen:kurzfassen', ...composer } as never)
+    expect(await label()).toBe('\u{1F4DD}')
+    await $.prompt.submit({ text: '  Kurzfassen aus  ', ...composer } as never)
+    expect(await label()).toBe('\u{1F4D6}')
+    await $.prompt.submit({ text: '/kurzfassen', command: { name: 'kurzfassen', args: '' }, ...composer } as never)
+    expect(await label()).toBe('\u{1F4DD}')
+    // Only the stop words, not a word that starts like them.
+    await $.prompt.submit({ text: 'Lass uns Kurzfassen ausprobieren', ...composer } as never)
+    expect(await label()).toBe('\u{1F4DD}')
+    await $.prompt.submit({ text: 'Bitte wieder normal antworten', ...composer } as never)
+    expect(await label()).toBe('\u{1F4D6}')
+    // A path is not the call.
+    await $.prompt.submit({ text: 'Lies ~/mods/kurzfassen/SKILL.md', ...composer } as never)
     expect(await label()).toBe('\u{1F4D6}')
   })
 
@@ -6074,10 +6196,10 @@ describe('Arbeitsweise und Grill mich', () => {
     state.commands = []
     await press('adhd')
     expect(state.runs).toEqual([])
-    expect(state.filled).toEqual(['/i-have-adhd:i-have-adhd'])
+    expect(state.filled).toEqual(['/kurzfassen:kurzfassen'])
     expect(await label()).toBe('\u{1F4D6}')
     // Listed, but the run fails: in the prompt again, still off.
-    state.commands = [skill('i-have-adhd:i-have-adhd')]
+    state.commands = [skill('kurzfassen:kurzfassen')]
     state.runFails = true
     await press('adhd')
     expect(state.filled).toHaveLength(2)
@@ -6102,6 +6224,22 @@ describe('Arbeitsweise und Grill mich', () => {
     state.messages = []
     await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
     expect(await label()).toBe('\u{1F4D6}')
+  })
+
+  test('Kurzfassen nach dem Neuladen wie im Verlauf: Aufruf, dann „normal antworten“ aus; nur Aufruf an', async ($, on) => {
+    const { state, label } = await adhdWorld($, on)
+    const call = { role: 'user' as const, text: '<command-name>/kurzfassen:kurzfassen</command-name>', toolUses: [] as never[] }
+    // The skill's own text names the words that stop it; it is not the person's.
+    const body = { role: 'user' as const, text: 'Base directory for this skill: /x/kurzfassen\n\nBleibt an bis „Kurzfassen aus“.', toolUses: [] as never[] }
+    const answer = { role: 'assistant' as const, text: 'Als Nächstes: die Datei öffnen.', toolUses: [] as never[] }
+
+    state.messages = [call, body, answer, { role: 'user', text: 'normal antworten', toolUses: [] }, answer]
+    await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
+    expect(await label()).toBe('\u{1F4D6}')
+
+    state.messages = [call, body, answer]
+    await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
+    expect(await label()).toBe('\u{1F4DD}')
   })
 
   /** Reads Leitstand's wish to end Autopilot from another plugin: /wish answers with it. */
@@ -6347,8 +6485,8 @@ describe('Arbeitsweise und Grill mich', () => {
       const row = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
       await ui.unmount()
       expect(row?.text ?? '').toContain(surface === 'terminal' ? '▶ Startstartet in 30 s' : 'startet in 30 sStart')
-      // On the terminal its room comes from the long labels of the settings and Grill mich: the row still fits.
-      if (surface === 'terminal' && row) expect(row.text.length + 2 * (row.children.length - 1) <= BAND.props.bodyColumns).toBe(true)
+      // On the terminal no line of the band runs past its edge: the actions go onto a line of their own.
+      if (surface === 'terminal') expect((await terminalLines($)).filter(line => widthOf(line) > BAND.props.bodyColumns)).toEqual([])
 
       // In the steps the band redraws in, while Start holds still.
       await clock.advance(5000)
@@ -6424,18 +6562,28 @@ describe('Arbeitsweise und Grill mich', () => {
     expect((await remoteButton($))?.variant).toBe('primary')
   })
 
-  test('im Terminal gibt es kein 🛜', async ($, on) => {
-    const { state } = await skillWorld($, on)
+  test('im Terminal steht statt 🛜 die Antenne 📡, verbunden hervorgehoben; ohne /remote-control fehlt sie', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
     state.commands = [remoteCommand(true)]
     await endTurn($)
     for (const bodyColumns of [50, 80, 140]) {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
-      const keys = (await ui.findAll({ type: 'Button' })).map(one => one.props.key)
+      const remote = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'remote')
       const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
       await ui.unmount()
-      expect(keys).not.toContain('remote')
+      expect(remote?.props.label).toBe('\u{1F4E1}')
+      expect(JSON.stringify(remote)).toContain('"backgroundColor"')
       expect(words).not.toContain('\u{1F6DC}')
     }
+    state.commands = [remoteCommand(false)]
+    await endTurn($)
+    const tree = await terminalTree($)
+    expect(JSON.stringify(elementsOf(tree).find(one => one.props.key === 'remote'))).not.toContain('"backgroundColor"')
+    await press('remote', 'terminal')
+    expect(state.runs).toEqual([{ command: 'remote-control', args: undefined }])
+    state.commands = []
+    await endTurn($)
+    expect(elementsOf(await terminalTree($)).some(one => one.props.key === 'remote')).toBe(false)
   })
 
   test('App-Schalter: on und connecting heben 🛜 hervor, off zeigt ihn schlicht, unavailable blendet ihn aus', async ($, on) => {
@@ -6632,14 +6780,20 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(String(asked.text)).toContain('Auto-Modus:')
   })
 
-  test('im Terminal hat die Leiste in keiner Breite einen Umschalter für die Arbeitsweise', async ($, on) => {
+  test('im Terminal steht die Arbeitsweise in jeder Breite vorn unten links, als 👤 oder 👥, und schaltet um', async ($, on) => {
     world(on)
     for (const bodyColumns of [50, 80, 140]) {
-      const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
-      const all = [...(await ui.findAll({ type: 'Button' })), ...(await ui.findAll({ type: 'Select' })), ...(await ui.findAll({ type: 'Box' }))]
-      expect(all.some(one => one.props.key === 'workmode')).toBe(false)
-      await ui.unmount()
+      expect((await terminalRow($, bodyColumns))[0]?.[0]).toBe('workmode')
     }
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const knopf = async () => (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'workmode')
+    expect((await knopf())?.props.label).toBe('\u{1F464}')
+    expect((await knopf())?.props.plain).toBe(true)
+    await ui.press({ key: 'workmode' })
+    expect((await knopf())?.props.label).toBe('\u{1F465}')
+    await ui.press({ key: 'workmode' })
+    expect((await knopf())?.props.label).toBe('\u{1F464}')
+    await ui.unmount()
   })
 
   test('mit Leitstand aus gibt es keinen Umschalter für die Arbeitsweise', async ($, on) => {
@@ -6652,6 +6806,209 @@ describe('Arbeitsweise und Grill mich', () => {
       await ui.unmount()
     }
     expect((await texts($, 'desktop')).some(one => one.startsWith('Auto-Modus') || one.startsWith('Gruppenarbeit'))).toBe(false)
+  })
+
+  /** The keys at the top right, in order, as `surface` draws them; the app's menu is its key, view. */
+  const headerRightOn = async ($: Engine, surface: (typeof SURFACES)[number]) => {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const tree = (await ui.drawn()) as unknown as Drawn
+    await ui.unmount()
+    const right = elementsOf(tree).find(one => one.props.key === 'header-right')
+    return elementsOf(right).filter(one => one.type === 'Button' || one.type === 'Select').map(one => String(one.props.key))
+  }
+  /** What the band draws as its words and labels, every Text and every Button's label. */
+  const terminalWords = async ($: Engine) =>
+    elementsOf(await terminalTree($, { bodyColumns: 140 })).flatMap(one => (one.type === 'Text' ? [wordsOf(one)] : one.type === 'Button' ? [String(one.props.label)] : []))
+  const finishBoth = async ($: Engine) => {
+    await callTool($, { tool: PROGRESS, task: 'Lies die Markennotizen', percent: 100 })
+    await callTool($, { tool: PROGRESS, task: 'Baue die Preistabelle', percent: 100 })
+    await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  }
+
+  test('im Terminal stehen oben rechts und unten links dieselben Knöpfe wie in der App, in derselben Reihenfolge und mit Strichen zwischen denselben Gruppen', async ($, on) => {
+    const { press } = await skillWorld($, on)
+    const same = async (state: string) => {
+      const app = await leftRow($)
+      expect({ state, row: (await terminalRow($, 140)).flat() }).toEqual({ state, row: app })
+      expect({ state, top: await headerRightOn($, 'terminal') }).toEqual({ state, top: (await headerRightOn($, 'desktop')).map(one => (one === 'view' ? 'toggle' : one)) })
+    }
+    // Auto-Modus: at work, then done.
+    await same('Auto, arbeitet')
+    await finishBoth($)
+    await same('Auto, fertig')
+    // Gruppenarbeit: a plan that waits for Start, with Autopilot on, with masking off and Remote Control there.
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't2' })
+    await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+    await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
+    await same('Gruppenarbeit, Plan wartet')
+    await $.command.run({ command: 'autopilot', args: 'an' } as never)
+    await press('privacy')
+    await same('Gruppenarbeit, Autopilot an, Verdecken aus')
+    expect((await terminalRow($, 140)).flat()[0]).toBe('workmode')
+  })
+
+  test('im Terminal passt ein fertiger Auftrag bei 80 Spalten in eine Zeile; ein wartender Plan mit Autopilot setzt die Aktionen rechtsbündig darunter', async ($, on) => {
+    await skillWorld($, on)
+    await finishBoth($)
+    let lines = await terminalLines($, { bodyColumns: 75 })
+    const done = lines.filter(line => line.includes('≣ Verlauf'))
+    expect(done).toHaveLength(1)
+    expect(done[0]).toContain('↻ Neuer Chat')
+    expect(done[0]!.startsWith('\u{1F464}')).toBe(true)
+    expect(widthOf(done[0]!)).toBe(75)
+    expect(lines.filter(line => widthOf(line) > 75)).toEqual([])
+
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+    await $.command.run({ command: 'autopilot', args: 'an' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't2' })
+    await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle', 'Prüfe die Seite', 'Schreib die Doku'] })
+    await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    lines = await terminalLines($, { bodyColumns: 75 })
+    const places = lines.findIndex(line => line.includes('≣ Verlauf'))
+    const start = lines.findIndex(line => line.includes('▶ Start'))
+    expect(start).toBe(places + 1)
+    expect(lines[start]!.startsWith(' ')).toBe(true)
+    expect(lines[start]!.endsWith('startet in 30 s')).toBe(true)
+    expect(widthOf(lines[start]!)).toBe(75)
+    expect(lines[places]!.startsWith('\u{1F465}')).toBe(true)
+    expect(lines.filter(line => widthOf(line) > 75)).toEqual([])
+
+    // The steps keep the room the two lines leave: header, four steps, two lines of buttons in seven rows (the
+    // Autopilot's line and the line over the band are not counted), and with one row fewer one step makes way for
+    // the line that says so.
+    const steps = ['Lies die Notizen', 'Baue die Tabelle', 'Prüfe die Seite', 'Schreib die Doku']
+    const band = (lines: string[]) => lines.slice(lines.findIndex(line => line.startsWith('─')) + 1)
+    const roomy = band(await terminalLines($, { bodyColumns: 75, maxRows: 7 }))
+    expect(roomy.length).toBe(7)
+    for (const step of steps) expect(roomy.join('\n')).toContain(step)
+    const tight = band(await terminalLines($, { bodyColumns: 75, maxRows: 6 }))
+    expect(tight.length).toBe(6)
+    expect(tight.join('\n')).toContain('Lies die Notizen')
+    expect(tight.join('\n')).toMatch(/… \d+ weitere Schritte?/)
+  })
+
+  test('im Terminal steht in keiner Beschriftung des Bands U+FE0F oder U+200D; jedes Zeichen eines Knopfs ist zwei Zellen breit', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [remoteCommand(true), skill('kurzfassen:kurzfassen')]
+    await endTurn($)
+    const shown = [...(await terminalWords($))]
+    await $.command.run({ command: 'autopilot', args: 'an' } as never)
+    await press('privacy', 'terminal')
+    await press('adhd', 'terminal')
+    await press('vault', 'terminal')
+    await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+    shown.push(...(await terminalWords($)))
+    expect(shown).toContain('\u{1F510} Noch mal drücken')
+    expect(shown.filter(one => one.includes('️') || one.includes('‍'))).toEqual([])
+    const signs = ['\u{1F464}', '\u{1F465}', '\u{1F916}', '\u{1F525}', '\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4DD}', '\u{1F4D6}', '\u{1F4C2}', '\u{1F4E1}', '\u{1F512}', '\u{1F513}', '\u{1F510}', '❓', '\u{1F527}']
+    for (const sign of signs) {
+      expect(shown).toContain(sign)
+      expect({ sign, cells: widthOf(sign), points: Array.from(sign).length }).toEqual({ sign, cells: 2, points: 1 })
+    }
+  })
+
+  test('im Terminal tun 🤖, 🔥, 🧹, 🧍, 📝, 🔒 und 🔐 dasselbe wie in der App', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.runHangs = true
+    const lit = async (key: string) => JSON.stringify(elementsOf(await terminalTree($)).find(one => one.props.key === key)).includes('"backgroundColor"')
+    const labelOf = async (key: string) => elementsOf(await terminalTree($)).find(one => one.props.key === key)?.props.label
+
+    expect(await lit('nightshift')).toBe(false)
+    expect(await pressBack(key => press(key, 'terminal'), 'nightshift')).toBe('back')
+    expect(state.toasts.some(one => one.startsWith('Der Autopilot ist an'))).toBe(true)
+    expect(await lit('nightshift')).toBe(true)
+    await press('nightshift', 'terminal')
+    expect(await lit('nightshift')).toBe(false)
+    state.runHangs = false
+
+    state.commands = [skill('anthropic-skills:grill-me'), skill('clean-code'), skill('anthropic-skills:vermenschlichen'), skill('kurzfassen:kurzfassen')]
+    await press('grill', 'terminal')
+    expect(state.runs.at(-1)?.command).toBe('anthropic-skills:grill-me')
+    expect(state.runs.at(-1)?.args).toContain('zum aktuellen Plan')
+    await press('cleancode', 'terminal')
+    expect(state.runs.at(-1)).toEqual({ command: 'clean-code', args: undefined })
+    state.messages = [{ role: 'assistant', text: 'Ich habe die Preisseite gebaut, und die Tests sind jetzt grün.', toolUses: [] }]
+    await press('humanize', 'terminal')
+    expect(state.runs.at(-1)?.command).toBe('anthropic-skills:vermenschlichen')
+    expect(await labelOf('adhd')).toBe('\u{1F4D6}')
+    await press('adhd', 'terminal')
+    expect(state.runs.at(-1)).toEqual({ command: 'kurzfassen:kurzfassen', args: undefined })
+    expect(await labelOf('adhd')).toBe('\u{1F4DD}')
+
+    // Masking is on from the start, as in the app: lit; a press turns it off.
+    expect(await labelOf('privacy')).toBe('\u{1F512}')
+    expect(await lit('privacy')).toBe(true)
+    await press('privacy', 'terminal')
+    expect(await labelOf('privacy')).toBe('\u{1F513}')
+    expect(await lit('privacy')).toBe(false)
+
+    // The vault wants a second press, as in the app.
+    await press('vault', 'terminal')
+    expect(await labelOf('vault')).toBe('\u{1F510} Noch mal drücken')
+    await press('vault', 'terminal')
+    expect(await labelOf('vault')).toBe('\u{1F510}')
+  })
+
+  test('im Terminal startet 🪞 die Selbstkritik, und 📂 öffnet Dateien, wo das Fenster stehen kann; sonst sagt es, was /dateien sagt', async ($, on) => {
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(String((e as unknown as { id: string }).id))
+      return { value: { isPlaced: true } } as never
+    })
+    const { state, press } = await skillWorld($, on)
+    state.runHangs = true
+    expect(await pressBack(key => press(key, 'terminal'), 'reflect')).toBe('back')
+    expect(state.runs).toEqual([])
+    expect(state.filled).toEqual([])
+    expect(opened).toContain('leitstand-selbstkritik')
+
+    opened.length = 0
+    expect(await pressBack(key => press(key, 'terminal'), 'filetree')).toBe('back')
+    expect(opened).toEqual(['leitstand-dateien'])
+
+    const pressAt = async (viewport: { columns: number; rows: number; isFullscreen: boolean }) => {
+      const band = await $.ui.mount({ ...BAND, surface: 'terminal', viewport })
+      await band.press({ key: 'filetree' })
+      await band.unmount()
+    }
+    opened.length = 0
+    await pressAt({ columns: 140, rows: 40, isFullscreen: true })
+    expect(opened).toEqual(['leitstand-dateien'])
+    opened.length = 0
+    await pressAt({ columns: 140, rows: 40, isFullscreen: false })
+    await pressAt({ columns: 100, rows: 40, isFullscreen: true })
+    expect(opened).toEqual([])
+    expect(state.toasts.slice(-2)).toEqual([
+      'Das Fenster Dateien steht in der Seitenleiste, und die braucht das Vollbild-Layout. Führ /tui fullscreen aus, dann /dateien.',
+      'Das Fenster Dateien steht in der Seitenleiste, und die braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /dateien.',
+    ])
+  })
+
+  test('das Fenster Leitstand-Knöpfe nennt im Terminal die Zeichen des Terminals, in der App die der App', async ($, on) => {
+    world(on)
+    const paneOn = async (surface: (typeof SURFACES)[number]) => {
+      const pane = await $.ui.mount({
+        plugin: 'leitstand',
+        component: 'Pane',
+        requestId: 'leitstand-knoepfe',
+        surface,
+        props: { title: 'Leitstand-Knöpfe', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} },
+      })
+      const text = (await pane.findAll({ type: 'Text' })).map(one => one.text).join('\n')
+      await pane.unmount()
+      return text
+    }
+    const terminalSigns = ['\u{1F464}', '\u{1F465}', '\u{1F916}', '\u{1F525}', '\u{1F510}', '\u{1F527}', '\u{1F4E1}']
+    const appSigns = ['\u{1F468}‍\u{1F4BC}', '\u{1F170}️', '♨️', '\u{1F6E1}️', '⚙️', '\u{1F6DC}']
+    const terminal = await paneOn('terminal')
+    for (const sign of terminalSigns) expect(terminal).toContain(sign)
+    for (const sign of appSigns) expect(terminal).not.toContain(sign)
+    expect(terminal).not.toMatch(/[️‍]/)
+    const app = await paneOn('desktop')
+    for (const sign of appSigns) expect(app).toContain(sign)
+    for (const sign of terminalSigns) expect(app).not.toContain(sign)
   })
 })
 
@@ -6710,9 +7067,9 @@ describe('Ansicht Minimal', () => {
       expect(line).not.toContain('Ansicht')
       expect(line).toContain('Verlauf')
       expect(line).toContain('Pause')
-      expect(line).toContain(surface === 'terminal' ? 'Grill' : '♨️')
+      expect(line).toContain(surface === 'terminal' ? '\u{1F525}' : '♨️')
       if (surface === 'desktop') expect(shown).toContain('\u{1F468}\u200D\u{1F4BC}')
-      expect(line).toContain(surface === 'terminal' ? 'Leitstand: Minimal' : 'Minimal ▾')
+      expect(line).toContain(surface === 'terminal' ? '● Minimal' : 'Minimal ▾')
     }
   })
 
@@ -6744,7 +7101,7 @@ describe('Ansicht Minimal', () => {
     const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const menu = (await band.findAll({ type: 'Select' })).find(one => one.props.key === 'view')
     await band.unmount()
-    expect((menu?.props.options as { label: string }[]).map(one => one.label)).toEqual(['Ausführlich', 'Einfach', 'Minimal'])
+    expect((menu?.props.options as { label: string }[]).map(one => one.label)).toEqual(['Detailliert', 'Einfach', 'Minimal'])
     expect(menu?.props.label).toBeUndefined()
 
     const settings = await $.ui.mount({
@@ -6824,13 +7181,41 @@ describe('Zahnrad für die Einstellungen', () => {
     expect(gear?.props.label).toBe('\u2699\uFE0F')
   })
 
-  test('im Terminal bleiben die Einstellungen unten bei Verlauf', async ($, on) => {
+  test('im Terminal stehen die Einstellungen als 🔧 oben rechts hinter ❓, in jeder Lage; unten fehlt der Knopf', async ($, on) => {
     world(on)
+    const opened: string[] = []
+    on('ui.open', (_, e) => {
+      opened.push(e.id)
+      return { value: { isPlaced: true } } as never
+    })
+    const order = ['toggle', 'help', 'settings']
+    expect(await terminalHeaderRight($)).toEqual(order)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+    expect(await terminalHeaderRight($)).toEqual(order)
     const shown = (await texts($, 'terminal', 100)).join('\n')
-    expect(shown).toContain('Einstellungen')
+    expect(shown).toContain('\u{1F527}')
+    expect(shown).not.toContain('Einstellungen')
     expect(shown).not.toContain(GEAR_LABEL)
+    expect(shown).not.toContain('⚙')
+    expect((await terminalRow($, 100)).flat()).not.toContain('settings')
+    await detailsOn($)
+    expect(await terminalHeaderRight($)).toEqual(order)
+    expect((await texts($, 'terminal')).join('\n')).toContain('● Detailliert')
+    const toMinimal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await toMinimal.press({ key: 'toggle' })
+    await toMinimal.unmount()
+    expect(await texts($, 'terminal')).toContain('● Minimal')
+    expect(await terminalHeaderRight($)).toEqual(order)
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
+    expect(await terminalHeaderRight($)).toEqual(order)
+    expect(await texts($, 'terminal')).toContain('○ Aus')
+
+    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await band.press({ key: 'settings' })
+    await band.press({ key: 'help' })
+    await band.unmount()
+    expect(opened).toEqual(['leitstand-settings', 'leitstand-knoepfe'])
   })
 })
 
@@ -8271,6 +8656,8 @@ describe('Einstellungen je Chat', () => {
       calm: false, guard: true, mask: true, approve: false, ship: false,
     })
     expect(defaultSettings({ ansicht: 'einfach' })).toMatchObject({ enabled: true, detail: 'simple' })
+    expect(defaultSettings({ ansicht: 'detailliert' })).toMatchObject({ enabled: true, detail: 'detailed' })
+    // The name until leitstand 0.60, still read.
     expect(defaultSettings({ ansicht: 'ausfuehrlich' })).toMatchObject({ enabled: true, detail: 'detailed' })
     expect(defaultSettings({ ansicht: 'aus' })).toMatchObject({ enabled: false, detail: 'simple' })
     expect(defaultSettings({ ansicht: 'bunt' })).toMatchObject({ enabled: true, detail: 'minimal' })
@@ -8475,7 +8862,13 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(await run($, 'leitstand-an')).toBe('Der Befehl heißt jetzt /leitstand:an.')
     expect(await run($, 'leitstand-adhs-an')).toBe('Der Befehl heißt jetzt /leitstand:kurzantworten-an, kurz /kurzantworten-an.')
     expect(await run($, 'adhs-aus')).toBe('Der Befehl heißt jetzt /leitstand:kurzantworten-aus, kurz /kurzantworten-aus.')
-    expect(registered.find(one => one.name.startsWith('leitstand-') || one.name.startsWith('adhs-'))).toBeUndefined()
+    // Ausführlich became Detailliert: the short form, the old dash name and the long form say the new one.
+    const detailliert = 'Der Befehl heißt jetzt /leitstand:ansicht-detailliert, kurz /ansicht-detailliert.'
+    expect(await run($, 'ansicht-ausfuehrlich')).toBe(detailliert)
+    expect(await run($, 'leitstand-ansicht-ausfuehrlich')).toBe(detailliert)
+    expect(await run($, 'leitstand:ansicht-ausfuehrlich')).toBe(detailliert)
+    expect(await stateOf($, 'detailLevel')).not.toBe('detailed')
+    expect(registered.find(one => one.name.startsWith('leitstand-') || one.name.startsWith('adhs-') || one.name.endsWith('-ausfuehrlich'))).toBeUndefined()
     // Asking for help changes nothing.
     expect(await stateOf($, 'glanceEnabled')).toBe(true)
     expect(await stateOf($, 'masksPrivate')).toBe(true)
@@ -8500,7 +8893,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     const cases: [string, string, unknown, string, unknown][] = [
       ['leitstand:aus', 'glanceEnabled', false, 'enabled', false],
       ['leitstand:an', 'glanceEnabled', true, 'enabled', true],
-      ['leitstand:ansicht-ausfuehrlich', 'detailLevel', 'detailed', 'detail', 'detailed'],
+      ['leitstand:ansicht-detailliert', 'detailLevel', 'detailed', 'detail', 'detailed'],
       ['leitstand:ansicht-minimal', 'detailLevel', 'minimal', 'detail', 'minimal'],
       ['leitstand:ansicht-einfach', 'detailLevel', 'simple', 'detail', 'simple'],
       ['leitstand:arbeitsmodus-gruppenarbeit', 'workMode', 'dynamisch', 'workMode', 'dynamisch'],
@@ -8568,7 +8961,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     const clock = world(on)
     const runs: string[] = []
     const sent: string[] = []
-    on('command.list', () => ({ value: [{ name: 'i-have-adhd:i-have-adhd', description: 'ADHS', source: 'plugin' }] }) as never)
+    on('command.list', () => ({ value: [{ name: 'kurzfassen:kurzfassen', description: 'Kurzfassen', source: 'plugin' }] }) as never)
     on('command.run', (_, e) => {
       runs.push(e.command)
       return { text: '' }
@@ -8580,14 +8973,14 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(await run($, 'leitstand:kurzantworten-aus')).toBe('Kurzantworten sind schon aus.')
     expect(await run($, 'leitstand:kurzantworten-an')).toBe('Kurzantworten gehen an (nur in diesem Chat): Claude antwortet mit dem nächsten Schritt zuerst.')
     await settle(clock)
-    expect(runs).toEqual(['i-have-adhd:i-have-adhd'])
+    expect(runs).toEqual(['kurzfassen:kurzfassen'])
     expect(await stateOf($, 'adhdMode')).toBe(true)
     expect(await run($, 'leitstand:kurzantworten-an')).toBe('Kurzantworten sind schon an.')
     expect(runs).toHaveLength(1)
     expect(await run($, 'leitstand:kurzantworten-aus')).toBe('Kurzantworten gehen aus (nur in diesem Chat).')
     await settle(clock)
     expect(await stateOf($, 'adhdMode')).toBe(false)
-    expect(sent).toEqual(['stop adhd mode'])
+    expect(sent).toEqual(['Kurzfassen aus'])
   })
 
   test('Remote Control an und aus wie 🛜; ohne Remote Control sagt der Befehl, dass es hier nicht geht', async ($, on) => {

@@ -1,6 +1,6 @@
 {
   "name": "leitstand",
-  "version": "0.60.0",
+  "version": "0.61.0",
   "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Modus und Gruppenarbeit. In der Knopfzeile Schalter für Kurzantworten, Remote Control und Verdecken. Eingebaut sind Selbstkritik und Regeln 🪞 (früher Reflect), Dateien 📂 (früher Filetree) und der Autopilot 🅰️; läuft er, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"
@@ -11,9 +11,9 @@
     "ansicht": {
       "type": "string",
       "title": "Ansicht",
-      "description": "Wie viel der Leitstand zeigt: einfach (Schritte und Fortschritt), ausfuehrlich (dazu Modelle, Zeit und Tokens), minimal (eine Zeile) oder aus. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "Wie viel der Leitstand zeigt: einfach (Schritte und Fortschritt), detailliert (dazu Zeit und Tokens), minimal (eine Zeile) oder aus. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
       "default": "minimal",
-      "options": ["einfach", "ausfuehrlich", "minimal", "aus"]
+      "options": ["einfach", "detailliert", "minimal", "aus"]
     },
     "arbeitsweise": {
       "type": "string",
