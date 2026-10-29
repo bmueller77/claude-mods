@@ -15,6 +15,39 @@ Umgestellte Instanz auf den neuesten Stand bringen: Prompt in [UPDATE.md](UPDATE
 
 In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/statistik`, `/warmhalten`, `/zusammenfassung`, `/replay`, `/reflect`, `/better`). Nach `~/.claude/commands/` kopiert, kennt die App diese Befehle schon in der ersten Nachricht einer Sitzung.
 
+## So sieht es aus
+
+Die Bilder stammen aus einer Übersichtsseite, gebaut mit [Archify](https://archify.si/):
+[docs/praesentation/bjoern-mods.html](docs/praesentation/bjoern-mods.html). GitHub zeigt davon nur den Quelltext,
+also herunterladen und im Browser öffnen; dort lassen sich die Diagramme anklicken und Schritt für Schritt
+durchgehen. Die englischen Knöpfe in den Bildern ("Ask", "Open interactive view") gehören zu Archify.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/uebersicht-dunkel.png">
+  <img alt="Was können Björns Mods für Claude Code? Fazit und vier Gründe" src="docs/bilder/uebersicht-hell.png">
+</picture>
+
+Was mit einer Nachricht passiert, vom Passwortschutz bis zur Statistik:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/nachricht-dunkel.png">
+  <img alt="Ablauf: Du schreibst, Passwortschutz, Prompt Upgrade, Modellwahl, Plan im Band, Claude arbeitet, danach Zusammenfassung, Nächste Schritte und Statistik" src="docs/bilder/nachricht-hell.png">
+</picture>
+
+Die Knöpfe des Leitstands, nach Aufgaben geordnet:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/leitstand-dunkel.png">
+  <img alt="Baum der Leitstand-Knöpfe: Arbeitsweise, Helfer, Fenster, Schutz, Steuerung" src="docs/bilder/leitstand-hell.png">
+</picture>
+
+Gruppenarbeit: Claude plant und prüft, Arbeiter setzen um, und der Plan wartet auf deine Freigabe:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/gruppenarbeit-dunkel.png">
+  <img alt="Ablauf der Gruppenarbeit zwischen dir, Claude als Leiter, dem Leitstand und den Arbeitern" src="docs/bilder/gruppenarbeit-hell.png">
+</picture>
+
 ## Befehle für jeden Knopf
 
 Alle Befehle je Mod, jeder mit einer Zeile Erklärung, stehen in [BEFEHLE.md](BEFEHLE.md).
