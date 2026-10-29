@@ -1,5 +1,5 @@
 ---
-description: "Kurz erklären, was die Modellwahl tut und welche Befehle es gibt"
+description: "Erklärt Modellwahl: wie du damit arbeitest, es einstellst und welche Befehle es gibt"
 argument-hint: "[hilfe]"
 disable-model-invocation: true
 ---

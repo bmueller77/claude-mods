@@ -1,5 +1,5 @@
 ---
-description: "Alle Befehle der Statistik mit einer Zeile Erklärung"
+description: "Zeigt, wie die Statistik arbeitet, was die Leiste bedeutet, wie du sie einstellst, und alle Befehle"
 disable-model-invocation: true
 ---
 

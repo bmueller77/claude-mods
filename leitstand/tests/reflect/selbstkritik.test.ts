@@ -272,9 +272,10 @@ test('/reflect hilfe nennt die neuen Namen und wie es im Chat steht; ein Fehler 
   })
   await start($)
   const text = await befehl($, 'hilfe')
-  for (const b of REFLECT_BEFEHLE) expect(text).toContain(`/${b.name.slice('leitstand:'.length)}${b.argumentHint ? ` ${b.argumentHint}` : ''}: ${b.description}`)
-  for (const teil of ['/reflect [Schwerpunkt], zeigen, regeln, speichern <Nr> [global|projekt|chat], verwerfen <Nr>, pruefung an|aus, auto an|aus', 'Korrekturen prüfen ist an', 'Selbstkritik nach Dateiänderungen ist aus', 'merke: <Regel>', '/leitstand:hilfe'])
+  for (const b of REFLECT_BEFEHLE) expect(text).toContain(`/${b.name.slice('leitstand:'.length)}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`)
+  for (const teil of ['zeigen, regeln, speichern <Nr> [global|projekt|chat], verwerfen <Nr>, pruefung an|aus und auto an|aus', 'Korrekturen prüfen ist an', 'Selbstkritik nach Dateiänderungen ist aus', 'merke: <Regel>', '/leitstand:hilfe unter Einstellen'])
     expect(text).toContain(teil)
   kaputt = true
-  expect(await befehl($, 'pruefung aus')).toBe('Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect hilfe zeigt die Befehle.')
+  expect(await befehl($, 'pruefung aus')).toBe('Das hat nicht geklappt: Im Leitstand ging beim Ausführen etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.')
+  expect(text).not.toMatch(/Einstellungsmenü|gehören jetzt|früher/)
 })

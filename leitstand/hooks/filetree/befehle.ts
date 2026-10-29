@@ -1,25 +1,25 @@
 import type { LeitstandBefehl } from '../logic'
 
 /**
- * Das Fenster von Dateien in der Seitenleiste. Die Fenster des Leitstands selbst heißen leitstand-history, -plan,
+ * Das Seitenfenster Dateien. Die Fenster des Leitstands selbst heißen leitstand-history, -plan,
  * -recap und -settings. Wer es öffnet ($.ui.open mit dieser id), sieht den Baum, den Dateien seit dem Start hält.
  */
 export const DATEIEN_FENSTER = 'leitstand-dateien'
 
 const GRUPPE = 'Dateien'
-const KOPF = 'im Kopf des Fensters Dateien'
+const KOPF = 'oben im Fenster Dateien'
 
-/** Die Befehle von Dateien (früher der Mod Filetree), in der Reihenfolge der Übersicht. */
+/** Die Befehle von Dateien (bis 2026-10-26 der Mod Filetree), in der Reihenfolge der Übersicht. */
 export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
   {
     name: 'leitstand:dateien',
-    description: 'Dateien in der Seitenleiste zeigen',
+    description: 'Dateien im Seitenfenster zeigen',
     argumentHint: '[Pfad]',
     gruppe: GRUPPE,
-    tut: 'Öffnet das Fenster Dateien in der Seitenleiste, wie /filetree. Ohne Pfad folgt es dem Arbeitsordner, mit Pfad bleibt es bei diesem Ordner. Es leuchtet auf, was Claude liest (Lila), schreibt (Orange) oder committet (Grün). Geht nur am Computer.',
-    knopf: `📂 im Leitstand; ohne Pfad auch ⌂ ${KOPF}`,
+    tut: 'Öffnet das Fenster Dateien: die Dateien des Projekts als Baum. Was Claude liest, leuchtet lila, was er schreibt orange, was er committet grün. Ohne Pfad folgt es dem Arbeitsordner, mit Pfad bleibt es bei diesem Ordner. Geht nur am Rechner.',
+    knopf: `Button: 📂 unten links in der Leiste; ohne Pfad auch ⌂ ${KOPF}`,
     gilt: 'chat',
-    argumente: 'Optional ein Ordner: absolut, relativ zum Arbeitsordner oder mit ~ für dein Benutzerverzeichnis.',
+    argumente: 'Pfad (freiwillig): ein Ordner, absolut, relativ zum Arbeitsordner oder mit ~ für dein Benutzerverzeichnis.',
     beispiel: '/leitstand:dateien src',
   },
   {
@@ -27,7 +27,7 @@ export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Versteckte Dateien zeigen (◉)',
     gruppe: GRUPPE,
     tut: 'Zeigt im Fenster Dateien auch versteckte Dateien und Ordner, die mit einem Punkt beginnen.',
-    knopf: `○ ${KOPF} (steht dann auf ◉)`,
+    knopf: `Button: ○ ${KOPF}; danach zeigt er ◉.`,
     gilt: 'chat',
     argumente: '',
     beispiel: '/leitstand:dateien-versteckte-an',
@@ -37,7 +37,7 @@ export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Versteckte Dateien ausblenden (○)',
     gruppe: GRUPPE,
     tut: 'Blendet im Fenster Dateien versteckte Dateien und Ordner aus, die mit einem Punkt beginnen.',
-    knopf: `◉ ${KOPF} (steht dann auf ○)`,
+    knopf: `Button: ◉ ${KOPF}; danach zeigt er ○.`,
     gilt: 'chat',
     argumente: '',
     beispiel: '/leitstand:dateien-versteckte-aus',
@@ -46,9 +46,10 @@ export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
     name: 'leitstand:dateien-groessen-an',
     description: 'Dateien: Größe statt Datum zeigen (Σ)',
     gruppe: GRUPPE,
-    tut: 'Die rechte Spalte im Fenster Dateien zeigt die Größe statt des Datums; Ordner werden im Hintergrund zusammengezählt.',
-    knopf: `Σ ${KOPF} (leuchtet dann)`,
+    tut: 'Die rechte Spalte im Fenster Dateien zeigt die Größe statt des Datums; die Größe von Ordnern zählt der Leitstand im Hintergrund zusammen.',
+    knopf: `Button: Σ ${KOPF}; leuchtet danach.`,
     gilt: 'einstellung',
+    option: 'Dateien: rechte Spalte',
     argumente: '',
     beispiel: '/leitstand:dateien-groessen-an',
   },
@@ -57,8 +58,9 @@ export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Dateien: Datum statt Größe zeigen (Σ)',
     gruppe: GRUPPE,
     tut: 'Die rechte Spalte im Fenster Dateien zeigt wieder das Datum der letzten Änderung.',
-    knopf: `Σ ${KOPF} (ist dann blass)`,
+    knopf: `Button: Σ ${KOPF}; ist danach blass.`,
     gilt: 'einstellung',
+    option: 'Dateien: rechte Spalte',
     argumente: '',
     beispiel: '/leitstand:dateien-groessen-aus',
   },
@@ -67,7 +69,7 @@ export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Dateien neu einlesen (↻)',
     gruppe: GRUPPE,
     tut: 'Liest im Fenster Dateien die offenen Ordner, den Git-Stand und die Größen neu ein und wiederholt eine laufende Suche.',
-    knopf: `↻ ${KOPF}`,
+    knopf: `Button: ↻ ${KOPF}`,
     gilt: 'einmal',
     argumente: '',
     beispiel: '/leitstand:dateien-neu-laden',
@@ -77,7 +79,7 @@ export const FILETREE_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Dateien: alle Ordner einklappen (⊟)',
     gruppe: GRUPPE,
     tut: 'Klappt im Fenster Dateien alle Ordner ein; zu sehen bleibt die oberste Ebene.',
-    knopf: `⊟ ${KOPF}`,
+    knopf: `Button: ⊟ ${KOPF}`,
     gilt: 'einmal',
     argumente: '',
     beispiel: '/leitstand:dateien-einklappen',

@@ -1,5 +1,5 @@
 ---
-description: Prompt-Cache warm halten. Ohne Angabe 6 h, eine Dauer wie 90m, immer, aus oder status (Statistik)
+description: "Hält den Cache warm: ohne Angabe 6 Stunden, eine Dauer wie 90m, immer, aus oder status (Statistik)"
 argument-hint: "[6h | 90m | immer | aus | status]"
 disable-model-invocation: true
 ---

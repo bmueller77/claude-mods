@@ -1,5 +1,5 @@
 ---
-description: "Die Zusammenfassung vom letzten Compact in einem Fenster zeigen"
+description: "Zeigt die Zusammenfassung vom letzten Verdichten dieses Chats"
 disable-model-invocation: true
 ---
 

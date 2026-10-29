@@ -80,12 +80,14 @@ const FENSTER_LETZTER_STAND = 'statistik-letzter-stand'
 
 /** Das Fenster Zusammenfassung: der Text vom letzten Compact dieses Chats. */
 const FENSTER_ZUSAMMENFASSUNG = 'statistik-zusammenfassung'
+/** Sein Titel; nicht nur "Zusammenfassung", damit es nicht wie der Mod Zusammenfassung heißt. */
+export const TITEL_ZUSAMMENFASSUNG = 'Zusammenfassung vom Verdichten'
 /** So viel vom Text zeigen Fenster und Befehl hoechstens. */
 const ZUSAMMENFASSUNG_GRENZE = 10_000
 
 /** Was Befehl und Fenster sagen, solange in diesem Chat kein Compact lief. */
-export const OHNE_ZUSAMMENFASSUNG = 'In diesem Chat lief noch kein Compact, es gibt keine Zusammenfassung.'
-export const FENSTER_OHNE_ZUSAMMENFASSUNG = 'Noch kein Compact in diesem Chat.'
+export const OHNE_ZUSAMMENFASSUNG = 'In diesem Chat wurde noch nicht verdichtet, es gibt also keine Zusammenfassung.'
+export const FENSTER_OHNE_ZUSAMMENFASSUNG = 'In diesem Chat wurde noch nicht verdichtet.'
 
 /** Was Claude vor dem Aufraeumen schreibt, im Fork ueber den eigenen Verlauf (wie bisher im Leitstand). */
 const SICHERUNGSPUNKT_PROMPT = `Dieser Chat wird gleich verdichtet, um Platz zu schaffen. Schreib einen Sicherungspunkt, damit die Arbeit weitergeht,
@@ -540,10 +542,11 @@ export function limitZeit(f: Fenster, jetzt: number, mitTag: boolean): string {
     return `(${mitTag ? wochentagZeit(f.bis) : restUhr(f.bis - jetzt)})`
 }
 
-/** Ein Limit ganz: "SL: 15% (02:59)". */
+/** Ein Limit ganz, für die Übersicht als Text: "SL: 15 % (02:59)". Die Leiste schreibt es kürzer mit `limitWert`. */
 function limitText(kurzname: string, f: Fenster, jetzt: number, mitTag: boolean): string {
     const zeit = limitZeit(f, jetzt, mitTag)
-    return zeit ? `${limitWert(kurzname, f.prozent)} ${zeit}` : limitWert(kurzname, f.prozent)
+    const wert = `${kurzname}: ${Math.round(f.prozent)} %`
+    return zeit ? `${wert} ${zeit}` : wert
 }
 
 /** Ein Fenster aus `$.session.usage()` oder `session.measure` lesen. */
@@ -646,26 +649,26 @@ export function uhrZeichen(anteil: number | null): string {
 /** Woher die Cache-Laufzeit stammt, als Satzteil. */
 const HERKUNFT: Record<CacheSample['ttlSource'], string> = {
     gemeldet: 'von der Sitzung selbst gemeldet',
-    gemessen: 'gemessen: einen Cache-Treffer nach über fünf Minuten Pause gibt es nur bei einer Stunde',
-    konfiguriert: 'so in den Einstellungen des Mods festgelegt',
+    gemessen: 'gemessen: Kam nach mehr als fünf Minuten Pause noch etwas aus dem Cache, läuft er eine Stunde',
+    konfiguriert: 'so in der Option Cache-Laufzeit festgelegt; meldet Claude Code die Laufzeit oder misst der Mod sie, gilt das',
     geraten:
-        'nur angenommen, weil es noch keinen Beleg gibt; daher das Fragezeichen. ' +
-        'In den Einstellungen des Mods lässt sie sich fest auf 5m oder 1h stellen',
+        'nur angenommen, weil Claude Code sie nicht gemeldet und der Mod sie noch nicht gemessen hat; daher das Fragezeichen. ' +
+        'Was bis dahin gilt, legt die Option Cache-Laufzeit fest, siehe /statistik:hilfe unter Einstellen',
 }
 
 /** Tooltip der Cache-Uhr: Restzeit, Laufzeit und die Trefferquote der letzten Antwort. */
 function tippCache(c: CacheSample | null, l: Lage, rest: number | null, verstrichen: number, laufzeit: number): string {
     if (l.letzteAnfrage <= 0 || rest == null) {
         return l.istKompaktiert
-            ? 'Prompt-Cache\n\nNach dem Compact ist der Cache neu. Die Uhr läuft wieder ab der nächsten Antwort.'
+            ? 'Prompt-Cache\n\nNach dem Verdichten ist der Cache neu. Die Uhr läuft wieder ab der nächsten Antwort.'
             : 'Prompt-Cache\n\nNoch keine Antwort in dieser Sitzung, also auch noch kein Cache. Die Uhr beginnt mit der ersten Antwort.'
     }
     const vor = Math.round(verstrichen)
     const kopf = rest <= 0 ? 'Prompt-Cache: abgelaufen' : `Prompt-Cache: noch ${Math.ceil(rest)} von ${laufzeit} Minuten warm`
     const treffer =
         !c || c.hitPercent == null
-            ? 'Treffer der letzten Antwort: unbekannt, die Runde lieferte keine Token-Zahlen.'
-            : `Treffer der letzten Antwort: ${c.hitPercent} %` +
+            ? 'Aus dem Cache gelesen bei der letzten Antwort: unbekannt, sie kam ohne Token-Zahlen.'
+            : `Aus dem Cache gelesen bei der letzten Antwort: ${c.hitPercent} %` +
               (c.inputTokens != null && c.cacheReadTokens != null
                   ? `, ${kurz(c.cacheReadTokens)} von ${kurz(c.inputTokens)} Eingabe-Tokens aus dem Cache.`
                   : '.') +
@@ -698,7 +701,7 @@ function tippKontext(k: ContextSample | null): string {
             (k.isThresholdKnown ? '.' : ' (angenommen, weil die Sitzung ihre Schwelle nicht nennt).'),
         `Der Ring ist grün bis ${prozent(s / 2)} %, gelb bis ${prozent(s * 0.8)} %, rot darüber.`,
         '',
-        'Bei Rot ist der Schwamm hervorgehoben.',
+        'Bei Rot ist der Schwamm 🧽 (Aufräumen) hervorgehoben.',
     ].join('\n')
 }
 
@@ -783,7 +786,7 @@ async function zeigeKontext($: EngineInterface): Promise<void> {
         await $.command.run({ command: 'context' })
     } catch {
         await $.prompt.fill({ text: '/context' }).catch(() => {})
-        $.ui.toast('Drück Enter, dann zeigt die App den Kontext.')
+        $.ui.toast('Im Eingabefeld steht /context. Drück Enter, dann zeigt Claude Code den Kontext.')
     }
 }
 
@@ -864,7 +867,7 @@ async function setzeLimits(
 async function holeFable($: EngineInterface): Promise<Fenster | null> {
     const anmeldung = await $.session.authorize()
     if (!anmeldung) {
-        z.fableFehler = 'die Sitzung hat keine Anthropic-Anmeldung'
+        z.fableFehler = 'diese Sitzung ist nicht bei Anthropic angemeldet'
         return null
     }
     const r = await $.http.fetch(NUTZUNG_URL, {
@@ -872,11 +875,11 @@ async function holeFable($: EngineInterface): Promise<Fenster | null> {
         headers: { accept: 'application/json', 'anthropic-beta': 'oauth-2025-04-20' },
     })
     if (!r.ok) {
-        z.fableFehler = `der Nutzungs-Endpunkt antwortete mit ${r.status}`
+        z.fableFehler = `die Nutzungsdaten waren gerade nicht abrufbar (Fehler ${r.status}); der Mod fragt nach der nächsten Antwort wieder, höchstens alle fünf Minuten`
         return null
     }
     const f = fableAus(JSON.parse(r.text))
-    z.fableFehler = f ? null : 'die Antwort enthielt kein Fable-Fenster'
+    z.fableFehler = f ? null : 'die Nutzungsdaten nennen kein eigenes Limit für Fable'
     return f
 }
 
@@ -902,7 +905,7 @@ async function fableNeu($: EngineInterface, erzwingen = false): Promise<void> {
     try {
         f = await holeFable($)
     } catch (fehler) {
-        z.fableFehler = `die Anfrage ging schief (${fehler instanceof Error ? fehler.message : String(fehler)})`
+        z.fableFehler = `die Nutzungsdaten waren gerade nicht abrufbar (${fehler instanceof Error ? fehler.message : String(fehler)})`
     }
     await update($, nutzung, n => ({ ...n, fl: f ?? n.fl }))
 }
@@ -1037,7 +1040,7 @@ async function ping($: EngineInterface): Promise<void> {
             antwort.reason === 'nothing-to-fork'
                 ? 'es gibt noch keinen Verlauf zum Warmhalten'
                 : antwort.reason === 'api-error'
-                  ? 'die API-Anfrage ging schief'
+                  ? 'Anthropic hat den Ping mit einem Fehler beantwortet'
                   : antwort.reason === 'aborted'
                     ? 'der Ping wurde unterbrochen'
                     : 'der Ping kam ohne Antwort zurück'
@@ -1058,7 +1061,7 @@ async function ping($: EngineInterface): Promise<void> {
     if (!warm) {
         await stoppe(
             $,
-            `der Ping fand den Cache schon kalt vor (${kurz(u.cache_read_input_tokens)} gelesen, ${kurz(u.cache_creation_input_tokens)} neu geschrieben)`,
+            `der Ping fand den Cache schon kalt vor (${kurz(u.cache_read_input_tokens)} Tokens gelesen, ${kurz(u.cache_creation_input_tokens)} neu geschrieben)`,
         )
         return
     }
@@ -1157,10 +1160,10 @@ function mitZahlen(vorher: number | undefined, nachher: number | undefined): vor
     return vorher != null && nachher != null && vorher > 0
 }
 
-/** Die Kopfzeile der Zusammenfassung: "Compact um 14:32, 412k auf 38k Tokens", in Berliner Zeit. */
+/** Die Kopfzeile der Zusammenfassung: "Verdichtet um 14:32, von 412k auf 38k Tokens", in Berliner Zeit. */
 export function zusammenfassungKopf(z: Zusammenfassung, jetzt: number): string {
-    const um = `Compact ${gespeichertUm(z.am, jetzt)}`
-    return mitZahlen(z.tokensVorher, z.tokensNachher) ? `${um}, ${kurz(z.tokensVorher)} auf ${kurz(z.tokensNachher ?? 0)} Tokens` : um
+    const um = `Verdichtet ${gespeichertUm(z.am, jetzt)}`
+    return mitZahlen(z.tokensVorher, z.tokensNachher) ? `${um}, von ${kurz(z.tokensVorher)} auf ${kurz(z.tokensNachher ?? 0)} Tokens` : um
 }
 
 /**
@@ -1180,8 +1183,8 @@ async function protokolliere(
     const text = r.messages?.[0]?.text?.trim() ?? ''
     const zahlen = mitZahlen(vorher, nachher)
     const zeile = zahlen
-        ? `Compact: ${kurz(vorher)} auf ${kurz(nachher ?? 0)} Tokens, ${Math.round((1 - (nachher ?? 0) / vorher) * 100)} Prozent weniger`
-        : 'Compact durchgelaufen, die Token-Zahlen hat die Engine nicht festgehalten'
+        ? `Verdichtet: von ${kurz(vorher)} auf ${kurz(nachher ?? 0)} Tokens, ${Math.round((1 - (nachher ?? 0) / vorher) * 100)} % weniger`
+        : 'Verdichtet; wie viele Tokens es vorher und nachher waren, hat Claude Code nicht gemeldet'
     $.ui.log(text ? `${zeile}. Zusammenfassung: /statistik:zusammenfassung-zeigen` : zeile)
     if (text) {
         const am = await $.clock.now()
@@ -1454,7 +1457,7 @@ async function letzterStand($: EngineInterface, vomHandy: boolean): Promise<stri
     if (!vomHandy) {
         const offen = await $.ui.open({ id: FENSTER_LETZTER_STAND, title: 'Letzter Stand', closeOnEscape: true }).catch(() => null)
         if (offen?.isPlaced) {
-            return 'Der letzte Stand steht im Fenster daneben.'
+            return 'Der Sicherungspunkt steht im Fenster "Letzter Stand".'
         }
     }
     return `Letzter Stand, gespeichert ${gespeichertUm(punkt.am, await $.clock.now())}:\n\n${await zeigbar($, punkt.notiz)}`
@@ -1470,9 +1473,9 @@ async function zusammenfassungZeigen($: EngineInterface, vomHandy: boolean): Pro
         return OHNE_ZUSAMMENFASSUNG
     }
     if (!vomHandy) {
-        const offen = await $.ui.open({ id: FENSTER_ZUSAMMENFASSUNG, title: 'Zusammenfassung', closeOnEscape: true }).catch(() => null)
+        const offen = await $.ui.open({ id: FENSTER_ZUSAMMENFASSUNG, title: TITEL_ZUSAMMENFASSUNG, closeOnEscape: true }).catch(() => null)
         if (offen?.isPlaced) {
-            return 'Die Zusammenfassung vom letzten Compact steht im Fenster Zusammenfassung.'
+            return `Die Zusammenfassung vom letzten Verdichten steht im Fenster "${TITEL_ZUSAMMENFASSUNG}".`
         }
     }
     return `${zusammenfassungKopf(z, await $.clock.now())}\n\n${await verdeckt($, z.text.slice(0, ZUSAMMENFASSUNG_GRENZE))}`
@@ -1590,7 +1593,7 @@ export function karte(jetzt: number, c: CacheSample | null, k: ContextSample | n
     const zeilen: string[] = []
     zeilen.push(`Modell        ${z.modell ?? 'noch keins gesehen'}`)
     const zustand = z.kompaktiert
-        ? 'nach Compact neu, wartet auf die nächste Runde'
+        ? 'nach dem Verdichten neu, die Uhr läuft ab der nächsten Antwort'
         : !z.letzteAnfrage
           ? 'noch keine Anfrage in dieser Sitzung'
           : istKalt(jetzt)
@@ -1598,17 +1601,17 @@ export function karte(jetzt: number, c: CacheSample | null, k: ContextSample | n
             : `warm, noch ${dauer(z.letzteAnfrage + z.laufzeitMs - jetzt)}`
     zeilen.push(`Cache         ${zustand}`)
     zeilen.push(`Laufzeit      ${laufzeit} min${c ? ` (${QUELLE_KURZ[c.ttlSource]})` : ''}`)
-    zeilen.push(`Treffer       ${c?.hitPercent == null ? 'unbekannt' : `${c.hitPercent} % bei der letzten Antwort`}`)
+    zeilen.push(`Aus Cache     ${c?.hitPercent == null ? 'unbekannt' : `${c.hitPercent} % der letzten Antwort kamen aus dem Cache`}`)
     if (k && k.window > 0) {
         zeilen.push(
             `Kontext       ${prozent((k.tokens / k.window) * 100)} % (${kurz(k.tokens)} von ${kurz(k.window)} Tokens), ` +
-                `Compact bei ${prozent((k.threshold / k.window) * 100)} %`,
+                `verdichtet von selbst bei ${prozent((k.threshold / k.window) * 100)} %`,
         )
     } else {
         zeilen.push('Kontext       unbekannt')
     }
     zeilen.push(
-        `Kalt kostet   bis zu ${dollar(preis ? (z.ctx * preis[1]) / 1e6 : null)} fürs Neuschreiben, ` +
+        `Kalt kostet   die nächste Nachricht bis zu ${dollar(preis ? (z.ctx * preis[1]) / 1e6 : null)}, weil sie den Chat neu in den Cache schreibt; ` +
             `warm ${dollar(preis ? (z.ctx * preis[0]) / 1e6 : null)}`,
     )
     const naechster = z.naechsterPing > jetzt ? `, nächster Ping in ${dauer(z.naechsterPing - jetzt)}` : ''
@@ -1626,8 +1629,8 @@ export function karte(jetzt: number, c: CacheSample | null, k: ContextSample | n
     if (preis && z.ctx > 0) {
         const n = Math.floor(preis[1] / preis[0])
         zeilen.push(
-            `Lohnt bis     ${n} Pings kosten so viel wie einmal kalt neu schreiben, ` +
-                `bei einem Ping alle ${dauer(pingAbstand())} also etwa ${dauer(n * pingAbstand())} Pause`,
+            `Pings lohnen  ${n} Pings kosten so viel wie ein kalter Cache. Bei einem Ping alle ${dauer(pingAbstand())} ` +
+                `lohnt Warmhalten also für Pausen bis etwa ${dauer(n * pingAbstand())}`,
         )
     }
     zeilen.push(
@@ -1635,7 +1638,7 @@ export function karte(jetzt: number, c: CacheSample | null, k: ContextSample | n
             (z.letzterPing ? `, der letzte las ${kurz(z.letzterPing.read)} Tokens für ${dollar(z.letzterPing.usd)}` : ''),
     )
     const bezahlt = z.neuschriebe.reduce((a, n) => a + (n.usd ?? 0), 0)
-    zeilen.push(`Kalt bezahlt  ${z.neuschriebe.length}x in dieser Sitzung, ${dollar(bezahlt)}`)
+    zeilen.push(`Kalter Cache  ${z.neuschriebe.length}x in dieser Sitzung neu geschrieben, zusammen ${dollar(bezahlt)}`)
     if (n.sl || n.wl || n.fl) {
         const teile: string[] = []
         if (n.sl) {
@@ -1701,7 +1704,7 @@ async function warmhaltenAn($: EngineInterface, args: string): Promise<string> {
     const wort = args.trim().toLowerCase()
     const ms = wort === '' ? FENSTER_MS : leseDauer(wort)
     if (ms == null) {
-        return '/statistik:warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.'
+        return 'Das hat nicht geklappt: Das ist keine Dauer. Schreib sie wie 3h, 90m oder 1h30m, etwa /statistik:warmhalten-an 3h. Ohne Angabe sind es 6 Stunden.'
     }
     return warmFenster($, ms)
 }
@@ -1753,8 +1756,8 @@ async function kontextBefehl($: EngineInterface, vomHandy: boolean): Promise<str
         const zeile =
             k && k.window > 0
                 ? `Kontext: ${kurz(k.tokens)} von ${kurz(k.window)} Tokens belegt (${Math.round((k.tokens / k.window) * 100)} %), verdichtet wird bei ${kurz(k.threshold)}.`
-                : 'Den Kontext konnte ich gerade nicht messen.'
-        return `${zeile} Die ausführliche Kontext-Anzeige gibt es nur am Rechner.`
+                : 'Den Kontext konnte der Mod gerade nicht messen.'
+        return `${zeile} Die ausführliche Kontext-Anzeige (/context) gibt es nur am Rechner.`
     }
     $.clock.after(0, () => void zeigeKontext($).catch(() => {}))
     return 'Die Kontext-Anzeige (/context) geht gleich auf.'
@@ -1766,20 +1769,44 @@ export type Befehl = {
     /** Die eine Zeile in der Befehlsliste. */
     description: string
     argumentHint?: string
-    /** Was er tut. */
+    /** Der Titel hinter dem Namen in der ersten Zeile der Hilfe. */
+    titel: string
+    /** Was er tut, Verb vorn, mit jeder Nebenwirkung. */
     was: string
-    /** Welchem Knopf er entspricht. */
+    /** Welchem Button er entspricht, oder "keiner." */
     knopf: string
-    /** Wo er gilt. */
+    /** Wie weit er wirkt. */
     gilt: string
     argumente: string
-    beispiel: string
+    /** Ein Beispiel, nur bei Befehlen mit Argument. */
+    beispiel?: string
 }
 
-/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform. */
-const KURZFORMEN: readonly { name: string; description: string }[] = [
-    { name: 'statistik', description: 'Cache, Kontext, Kosten und Warmhalten im Überblick (Kurzform)' },
-    { name: 'warmhalten', description: 'Warmhalten mit Dauer, immer, aus oder status (Kurzform)' },
+const GILT_EINMAL = 'einmal, sofort; ändert keine Einstellung.'
+const GILT_CHAT = 'nur in diesem Chat.'
+
+/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform und haben eine eigene Hilfe. */
+export const KURZFORMEN: readonly Befehl[] = [
+    {
+        name: 'statistik',
+        description: 'Zeigt Cache, Kontext, Kosten, Limits und Warmhalten dieses Chats als Text',
+        titel: 'Übersicht (Kurzform)',
+        was: 'Zeigt Modell, Cache, Kontext, Kosten, Nutzungslimits und Warmhalten dieses Chats als Text, wie /statistik:zeigen.',
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine. /statistik allein zeigt die Übersicht.',
+    },
+    {
+        name: 'warmhalten',
+        description: 'Hält den Cache warm: ohne Angabe 6 Stunden, eine Dauer wie 90m, immer, aus oder status',
+        argumentHint: '[6h | 90m | immer | aus | status]',
+        titel: 'Warmhalten (Kurzform)',
+        was: 'Schaltet das Warmhalten des Caches: ohne Angabe für 6 Stunden, mit einer Dauer so lange, mit immer bis dieser Chat endet, mit aus sofort aus. status sagt nur, wie es steht. Jeder Ping kostet Tokens, siehe /statistik:hilfe unter Kosten.',
+        knopf: '🔥 oder ❄️ in der Leiste (je Druck 3 Stunden mehr), ✖️ schaltet aus.',
+        gilt: GILT_CHAT,
+        argumente: '[Dauer | immer | aus | status] (freiwillig): eine Dauer wie 90m, 2h oder 1h30m, oder immer, aus oder status. Ohne Angabe 6 Stunden.',
+        beispiel: '/warmhalten 90m',
+    },
 ]
 
 /**
@@ -1790,94 +1817,95 @@ const KURZFORMEN: readonly { name: string; description: string }[] = [
 export const BEFEHLE: readonly Befehl[] = [
     {
         name: 'statistik:hilfe',
-        description: 'Alle Befehle der Statistik mit einer Zeile Erklärung',
-        was: 'Listet alle Befehle der Statistik mit einer Zeile Erklärung.',
-        knopf: 'keiner',
-        gilt: 'zeigt nur Text, ändert nichts',
-        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/statistik:hilfe',
+        description: 'Zeigt, wie die Statistik arbeitet, was die Leiste bedeutet, wie du sie einstellst, und alle Befehle',
+        titel: 'Hilfe',
+        was: 'Zeigt, was die Statistik tut, was die Leiste bedeutet, wie du sie einstellst, was sie kostet und alle Befehle.',
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:zeigen',
-        description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick, wie /statistik',
-        was: 'Zeigt Modell, Cache, Kontext, Kosten, Nutzungslimits und Warmhalten dieser Sitzung als Text, wie /statistik.',
-        knopf: 'keiner; dasselbe wie /statistik',
-        gilt: 'für diesen Chat; ändert nichts',
-        argumente: 'keine',
-        beispiel: '/statistik:zeigen',
+        description: 'Zeigt Cache, Kontext, Kosten, Limits und Warmhalten dieses Chats als Text, wie /statistik',
+        titel: 'Übersicht',
+        was: 'Zeigt Modell, Cache, Kontext, Kosten, Nutzungslimits und Warmhalten dieses Chats als Text, auch vom Handy.',
+        knopf: 'keiner. Dasselbe tut /statistik.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:kontext-zeigen',
-        description: 'Den Kontext im Detail zeigen: /context, die Anzeige der App',
-        was: 'Öffnet die Kontext-Anzeige über /context, sobald die Sitzung still ist. Vom Handy kommt stattdessen eine Zeile mit belegtem Kontext und Schwelle.',
-        knopf: '📊 in der Statistik-Leiste',
-        gilt: 'für diesen Chat; ändert nichts',
-        argumente: 'keine',
-        beispiel: '/statistik:kontext-zeigen',
+        description: 'Zeigt den Kontext im Detail mit /context, vom Handy als eine Zeile',
+        titel: 'Kontext im Detail',
+        was: 'Öffnet die Kontext-Anzeige von Claude Code (/context), sobald Claude gerade nichts tut. Vom Handy kommt stattdessen eine Zeile: wie viel Kontext belegt ist und ab wann Claude verdichtet.',
+        knopf: '📊 in der Leiste.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:warmhalten-an',
-        description: 'Prompt-Cache warm halten, ohne Angabe 6 h, sonst so lange wie angegeben',
+        description: 'Hält den Cache warm, ohne Angabe 6 Stunden, sonst so lange wie angegeben',
         argumentHint: '[Dauer, z. B. 3h oder 90m]',
-        was: 'Hält den Prompt-Cache warm: Kurz vor jedem Ablauf stellt ein Ping eine winzige Anfrage. Ohne Angabe 6 h wie /warmhalten, sonst die angegebene Dauer.',
-        knopf: '🔥 bzw. ❄️ in der Statistik-Leiste; der Button legt je Klick 3 h drauf',
-        gilt: 'nur in diesem Chat',
-        argumente: 'eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe 6 h',
+        titel: 'Warmhalten mit Frist',
+        was: 'Hält den Cache warm: Kurz vor jedem Ablauf liest ein Ping, eine winzige Anfrage, den Chat aus dem Cache. Jeder Ping kostet Tokens, siehe /statistik:hilfe unter Kosten.',
+        knopf: '🔥 oder ❄️ in der Leiste; der Button legt je Druck 3 Stunden drauf.',
+        gilt: GILT_CHAT,
+        argumente: '[Dauer] (freiwillig): etwa 3h, 90m oder 1h30m. Ohne Angabe 6 Stunden.',
         beispiel: '/statistik:warmhalten-an 3h',
     },
     {
         name: 'statistik:warmhalten-immer',
-        description: 'Prompt-Cache ohne Ende warm halten, bis dieser Chat endet',
-        was: 'Hält den Prompt-Cache ohne Ende warm, bis der Chat endet.',
-        knopf: '🔥 in der Statistik-Leiste, bei 12:00 noch einmal gedrückt',
-        gilt: 'nur in diesem Chat, bis er endet',
-        argumente: 'keine',
-        beispiel: '/statistik:warmhalten-immer',
+        description: 'Hält den Cache warm, bis dieser Chat endet',
+        titel: 'Warmhalten ohne Ende',
+        was: 'Hält den Cache ohne Frist warm, bis dieser Chat endet. Jeder Ping kostet Tokens, siehe /statistik:hilfe unter Kosten.',
+        knopf: '🔥 oder ❄️ in der Leiste, bei 12:00 noch einmal gedrückt; dann steht "immer" darauf.',
+        gilt: 'nur in diesem Chat, bis er endet.',
+        argumente: 'keine.',
     },
     {
         name: 'statistik:warmhalten-aus',
-        description: 'Warmhalten des Prompt-Caches sofort ausschalten',
-        was: 'Schaltet das Warmhalten sofort aus, ob mit Frist oder ohne Ende.',
-        knopf: '✖️ neben dem Warmhalten-Schalter',
-        gilt: 'nur in diesem Chat',
-        argumente: 'keine',
-        beispiel: '/statistik:warmhalten-aus',
+        description: 'Schaltet das Warmhalten des Caches sofort aus',
+        titel: 'Warmhalten aus',
+        was: 'Schaltet das Warmhalten sofort aus, ob mit Frist oder ohne Ende. Der Cache läuft danach von selbst ab.',
+        knopf: '✖️ neben dem Warmhalten-Button in der Leiste.',
+        gilt: GILT_CHAT,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:chat-aufraeumen',
-        description: 'Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown',
-        was: 'Räumt den Chat auf: Claude schreibt erst einen Sicherungspunkt der Arbeit (Ziel, Erledigtes, Offenes, Entscheidungen, nächster Schritt), dann wird mit /compact verdichtet, und die Verdichtung behält den Sicherungspunkt. Danach liest Claude ihn für den Rest des Chats mit; /statistik:letzter-stand-zeigen zeigt ihn. Sofort, ohne Countdown; ein laufender Countdown endet dabei.',
-        knopf: '🧽 neben der Chatlänge, aber ohne die zehn Sekunden Countdown',
-        gilt: 'für diesen Chat',
-        argumente: 'keine',
-        beispiel: '/statistik:chat-aufraeumen',
+        description: 'Räumt den Chat auf: erst ein Sicherungspunkt, dann verdichten, sofort ohne Countdown',
+        titel: 'Aufräumen',
+        was: 'Räumt den Chat auf und verdichtet ihn dabei: Claude schreibt erst einen Sicherungspunkt der Arbeit (Ziel, Erledigtes, Offenes, Entscheidungen, nächster Schritt), dann wird verdichtet (/compact), und die Zusammenfassung behält den Sicherungspunkt. Danach liest Claude ihn für den Rest des Chats mit; /statistik:letzter-stand-zeigen zeigt ihn. Läuft sofort, ohne die 10 Sekunden des Buttons und ohne Rückfrage; ein laufender Countdown endet dabei. Kostet Tokens für den Sicherungspunkt und das Verdichten.',
+        knopf: '🧽 in der Leiste, rechts neben der Chatlänge; der Button wartet erst 10 Sekunden.',
+        gilt: `${GILT_EINMAL} Der Sicherungspunkt gilt bis zum Ende dieses Chats.`,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:letzter-stand-zeigen',
-        description: 'Den Sicherungspunkt zeigen, den Claude beim letzten Aufräumen gespeichert hat',
-        was: 'Zeigt den Sicherungspunkt, den Claude beim letzten Aufräumen dieses Chats geschrieben hat, im Fenster Letzter Stand, mit der Uhrzeit. Vom Handy kommt er als Text. Ist im Leitstand Verdecken an, sind Passwörter und persönliche Daten darin verdeckt.',
-        knopf: 'keiner',
-        gilt: 'für diesen Chat; ändert nichts',
-        argumente: 'keine',
-        beispiel: '/statistik:letzter-stand-zeigen',
+        description: 'Zeigt den Sicherungspunkt vom letzten Aufräumen dieses Chats',
+        titel: 'Sicherungspunkt zeigen',
+        was: 'Zeigt den Sicherungspunkt, den Claude beim letzten Aufräumen dieses Chats geschrieben hat, mit Uhrzeit im Fenster "Letzter Stand". Vom Handy kommt er als Text. Ist im Leitstand Verdecken an, sind Passwörter und persönliche Daten darin verdeckt; das gilt nur für den Bildschirm, Claude liest alles.',
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:zusammenfassung-zeigen',
-        description: 'Die Zusammenfassung vom letzten Compact in einem Fenster zeigen',
-        was: 'Zeigt die Zusammenfassung, die beim letzten Compact dieses Chats entstand, im Fenster Zusammenfassung, mit Uhrzeit und Tokens vorher und nachher. Vom Handy kommt sie als Text. Im Verlauf steht nach einem Compact nur eine Zeile mit diesem Befehl.',
-        knopf: 'keiner',
-        gilt: 'für diesen Chat; ändert nichts',
-        argumente: 'keine',
-        beispiel: '/statistik:zusammenfassung-zeigen',
+        description: 'Zeigt die Zusammenfassung vom letzten Verdichten dieses Chats',
+        titel: 'Zusammenfassung zeigen',
+        was: `Zeigt die Zusammenfassung vom letzten Verdichten dieses Chats im Fenster "${TITEL_ZUSAMMENFASSUNG}", mit Uhrzeit und Tokens vorher und nachher. Vom Handy kommt sie als Text. Im Chat steht nach jedem Verdichten nur eine Zeile, die auf diesen Befehl zeigt. Verdecken des Leitstands gilt auch hier.`,
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'statistik:verdichten',
-        description: 'Den Kontext verdichten (/compact), sofort ohne Countdown',
-        was: 'Verdichtet den Kontext mit /compact, zwischen zwei Runden sofort, sonst sobald Claude fertig ist. Ohne Countdown; ein laufender Countdown endet dabei.',
-        knopf: '🔻 am Kontext, aber ohne die zehn Sekunden Countdown',
-        gilt: 'für diesen Chat',
-        argumente: 'keine',
-        beispiel: '/statistik:verdichten',
+        description: 'Verdichtet den Chat (/compact), sofort ohne Countdown',
+        titel: 'Verdichten',
+        was: 'Verdichtet den Chat mit /compact: Claude fasst ihn zusammen und arbeitet mit der Zusammenfassung weiter. Tut Claude gerade nichts, sofort, sonst sobald er fertig ist. Ohne die 10 Sekunden des Buttons und ohne Rückfrage; ein laufender Countdown endet dabei. Kostet Tokens für die Zusammenfassung.',
+        knopf: '🔻 in der Leiste, neben dem Kontext; der Button wartet erst 10 Sekunden.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
 ]
 
@@ -1898,20 +1926,71 @@ export function istHilfe(args: string): boolean {
     return a === 'hilfe' || a === '?'
 }
 
-/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+/** Die Hilfe eines Befehls: Name und Titel, dann Was, Button, Gilt, Argumente und, bei einem Argument, ein Beispiel. */
 export function hilfeText(b: Befehl): string {
-    return [`/${b.name}: ${b.was}`, `Button: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+    return [
+        `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.titel}`,
+        `Was: ${b.was}`,
+        `Button: ${b.knopf}`,
+        `Gilt: ${b.gilt}`,
+        `Argumente: ${b.argumente}`,
+        ...(b.beispiel ? [`Beispiel: ${b.beispiel}`] : []),
+    ].join('\n')
 }
 
 /** Was ein Befehl sagt, wenn er scheitert. */
 export function fehlerText(name: string): string {
-    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+    return `Das hat nicht geklappt: Bei /${name} ist im Mod ein Fehler aufgetreten. Versuch es gleich noch einmal; /statistik:hilfe zeigt die Befehle.`
 }
 
-/** Alle Befehle des Mods, je eine Zeile. */
+/** Was /statistik:hilfe vor der Liste der Befehle zeigt. */
+const HILFE = [
+    'Was der Mod tut',
+    'Statistik ist ein Mod, also eine Erweiterung für Claude Code. Er zeigt über dem Eingabefeld eine Leiste: wie lang der Chat ist, wie voll der Kontext ist, wie lange der Cache noch warm ist und wie viel von deinen Nutzungslimits verbraucht ist. Mit ihren Buttons hältst du den Cache warm, verdichtest den Chat oder räumst ihn mit Sicherungspunkt auf.',
+    '',
+    'So arbeitest du damit',
+    '- Schau auf die Leiste. In der App zeigt jeder Ring Einzelheiten, wenn du mit der Maus darüberfährst.',
+    '- Wird der Kontext rot, drück 🧽 (Aufräumen): Claude schreibt erst einen Sicherungspunkt (Ziel, Erledigtes, Offenes, nächster Schritt), dann verdichtet er den Chat und behält den Sicherungspunkt. Verdichten (/compact) heißt: Claude fasst den Chat zusammen und arbeitet mit der Zusammenfassung weiter. 🔻 verdichtet ohne Sicherungspunkt. Beide Buttons warten erst 10 Sekunden (🔟 bis 1️⃣); "Abbrechen" daneben oder derselbe Button noch einmal stoppt das.',
+    '- Machst du eine Pause und willst danach im selben Chat weiter, drück 🔥 oder ❄️ (Warmhalten). ✖️ schaltet es wieder aus.',
+    '- /statistik ohne Argument zeigt alles als Text, auch was ein kalter Cache und ein Ping gerade kosten. 📊 zeigt den Kontext im Detail (/context).',
+    `- Nach dem Aufräumen zeigt /statistik:letzter-stand-zeigen den Sicherungspunkt, nach jedem Verdichten /statistik:zusammenfassung-zeigen die Zusammenfassung im Fenster "${TITEL_ZUSAMMENFASSUNG}". Im Chat steht dann nur eine Zeile.`,
+    '',
+    'Die Leiste, von links nach rechts',
+    '- 💬 42 · 312k: die Chatlänge, also Nachrichten und geschätzte Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit) seit Beginn dieses Chats. Ein ≥ davor heißt: Es sind mehr, als der Mod zählen konnte.',
+    '- Ring mit 20 %: der Kontext, also was Claude vom Chat gerade liest, als Anteil dessen, was er auf einmal lesen kann. Nach dem Verdichten ist er viel kleiner als die Chatlänge. Der Ring ist grün, ab der Hälfte des Wegs zur Schwelle gelb, ab vier Fünfteln rot. An der Schwelle (meist 83 %) verdichtet Claude von selbst.',
+    '- Uhr mit 37 min: wie lange der Cache noch warm ist. Ein ? dahinter heißt: Die Laufzeit von 1 Stunde ist nur angenommen, weil Claude Code sie noch nicht gemeldet und der Mod sie noch nicht gemessen hat. "Cache leer" heißt: noch keine Antwort in diesem Chat, oder gerade verdichtet.',
+    '- 🔥 heißt Cache warm, ❄️ kalt. Derselbe Button schaltet das Warmhalten: Der erste Druck hält 3 Stunden warm, jeder weitere 3 Stunden mehr bis 12, dann "immer" (bis der Chat endet), dann wieder aus. Solange es an ist, steht die Restzeit in Stunden und Minuten darauf: 🔥 6:00 heißt noch 6 Stunden.',
+    '- SL: 15% (02:59): das Sitzungslimit über 5 Stunden. 15% sind genutzt, und in 2 Stunden 59 Minuten wird es zurückgesetzt; die Zahl in Klammern ist eine Restzeit. WL: 42% (Fr 09:00): das Wochenlimit; in Klammern steht hier der Zeitpunkt des Zurücksetzens, Freitag um 9 Uhr. FL: das eigene Limit für Fable, nur wenn Fable antwortet. Die Prozente zeigen, was genutzt ist, nicht was übrig ist; ab 75 % wird der Ring gelb, ab 90 % rot.',
+    '- Haiku, Sonnet, Opus und Fable sind Modelle von Claude, von klein und günstig bis groß.',
+    '- Im Terminal stehen statt der Ringe die Zeichen ○ ◔ ◑ ◕ ●.',
+    '',
+    'Cache und Warmhalten',
+    'Bei jeder Nachricht liest Claude den ganzen bisherigen Chat. Aus dem Cache, einem Zwischenspeicher bei Anthropic, kostet das nur ein Zehntel. Kommt eine Weile keine Anfrage (meist 1 Stunde, manchmal 5 Minuten), wird der Cache kalt, und die nächste Nachricht schreibt den Chat neu hinein; das kostet bei den meisten Modellen zwanzigmal so viel wie das Lesen aus dem warmen Cache. Warmhalten schickt kurz vor dem Ablauf einen Ping: eine winzige Anfrage, die den Chat aus dem Cache liest und ihn so warm hält. /warmhalten ohne Argument hält 6 Stunden warm, der Button geht in Schritten zu 3 Stunden.',
+    'Dollarbeträge in /statistik und in den Ringen rechnet der Mod nach der Preisliste der API von Anthropic. Im Abo zahlst du sie nicht so; dort zählen dieselben Tokens als Anteil an deinem Limit.',
+    '',
+    'Einstellen',
+    'Nur in diesem Chat: das Warmhalten, mit 🔥 oder ❄️ und ✖️ in der Leiste oder mit /warmhalten und /statistik:warmhalten-an, /statistik:warmhalten-immer, /statistik:warmhalten-aus. Jeder neue Chat beginnt mit Warmhalten aus; dafür gibt es keinen Standard.',
+    'Standard für neue Chats:',
+    '- Cache-Laufzeit, im Chat nicht umstellbar: auto, 5m oder 1h. Sie gilt nur, solange Claude Code die Laufzeit nicht gemeldet und der Mod sie nicht gemessen hat; danach zählt das Gemeldete oder Gemessene. auto: 1 Stunde angenommen, an der Uhr mit ?. 5m: 5 Minuten. 1h: 1 Stunde. Eingebaut: auto.',
+    'Sag Claude zum Beispiel: Stell bei Statistik den Standard für neue Chats: Cache-Laufzeit auf 1h. Claude macht das mit `claude plugin configure statistik@bm-mods`. Im Terminal geht es auch selbst: `claude plugin configure statistik@bm-mods` zeigt die Optionen. Setzen geht mit `--values-stdin`, etwa `echo \'{"cacheLaufzeit": "1h"}\' | claude plugin configure statistik@bm-mods --values-stdin`. Das gilt für Chats, die danach beginnen. "not set" heißt dort: Es gilt der eingebaute Standard.',
+    'Ältere Installationen heißen `statistik@bjoern-mods`; `claude plugin list` zeigt den Namen.',
+    'Die Leiste lässt sich nicht ausblenden.',
+    'Ganz abschalten: `claude plugin disable statistik@bm-mods` (wieder an mit `enable`), oder sag Claude, er soll den Mod abschalten. Das wirkt nach einem Neustart von Claude Code.',
+    '',
+    'Kosten',
+    'Tokens kosten nur zwei Dinge. Warmhalten: Jeder Ping liest den Chat aus dem Cache, bei 1 Stunde Laufzeit etwa alle 50 Minuten, bei 5 Minuten alle 4. Verdichten, mit 🔻 oder beim Aufräumen: Claude liest den Chat einmal und schreibt die Zusammenfassung, wie bei /compact. Beim Aufräumen schreibt Claude vorher noch den Sicherungspunkt (eine Anfrage, bis 300 Wörter) und liest ihn danach bei jeder Nachricht mit. Die Leiste, die Übersicht und alle Fenster kosten nichts.',
+    '',
+    'Vom Handy (Remote Control)',
+    'Dort gibt es keine Leiste und keine Buttons. /statistik zeigt alles als Text, /statistik:kontext-zeigen den Kontext in einer Zeile, /statistik:letzter-stand-zeigen und /statistik:zusammenfassung-zeigen schicken ihren Text. /warmhalten schaltet das Warmhalten. /statistik:chat-aufraeumen und /statistik:verdichten laufen sofort, ohne die 10 Sekunden und ohne Rückfrage.',
+    '',
+    'Befehle',
+    'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+]
+
+/** Was /statistik:hilfe zeigt: wie man mit dem Mod arbeitet, wie man ihn einstellt, am Ende alle Befehle. */
 export function uebersicht(): string {
-    const zeilen = [...BEFEHLE, ...KURZFORMEN]
-    return ['Befehle der Statistik (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
+    const zeilen = [...BEFEHLE, ...KURZFORMEN].map(b => `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`)
+    return [...HILFE, ...zeilen, 'Mehr zu jedem Befehl: hilfe dahinter, etwa /statistik:warmhalten-an hilfe.'].join('\n')
 }
 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
@@ -2001,7 +2080,7 @@ export const register: Register = (on, options) => {
         await $.command
             .register({
                 name: 'warmhalten',
-                description: 'Prompt-Cache warm halten: ohne Angabe 6 h, eine Dauer wie 90m, immer, aus oder status (Statistik)',
+                description: `${KURZFORMEN[1]!.description} (Statistik)`,
                 argumentHint: '[6h | 90m | immer | aus | status]',
                 immediate: true,
             })
@@ -2009,7 +2088,7 @@ export const register: Register = (on, options) => {
         await $.command
             .register({
                 name: 'statistik',
-                description: 'Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick (Statistik)',
+                description: `${KURZFORMEN[0]!.description} (Statistik)`,
                 immediate: true,
             })
             .catch(() => {})
@@ -2315,6 +2394,10 @@ export const register: Register = (on, options) => {
     }).catch(($, e, next) => next(e))
 
     on('command.run', { command: 'warmhalten' }, async ($, e) => {
+        // hilfe oder ? zeigt nur die Hilfe und schaltet nichts.
+        if (istHilfe(String(e.args ?? ''))) {
+            return { text: hilfeText(KURZFORMEN[1]!) }
+        }
         const wort = String(e.args ?? '')
             .trim()
             .toLowerCase()
@@ -2346,7 +2429,7 @@ export const register: Register = (on, options) => {
         }
         const ms = wort === undefined || wort === 'an' ? FENSTER_MS : leseDauer(wort)
         if (ms == null) {
-            return { text: '/warmhalten nimmt eine Dauer wie 90m oder 2h, oder immer, aus oder status.' }
+            return { text: 'Das hat nicht geklappt: Das ist keine Dauer. Schreib eine Dauer wie 90m oder 2h, oder immer, aus oder status, etwa /warmhalten 2h.' }
         }
         await starteFenster($, ms)
         return {
@@ -2356,7 +2439,11 @@ export const register: Register = (on, options) => {
         }
     })
 
-    on('command.run', { command: 'statistik' }, async $ => {
+    on('command.run', { command: 'statistik' }, async ($, e) => {
+        // hilfe oder ? zeigt nur die Hilfe dieser Kurzform.
+        if (istHilfe(String(e.args ?? ''))) {
+            return { text: hilfeText(KURZFORMEN[0]!) }
+        }
         const jetzt = await $.clock.now()
         return { text: karte(jetzt, await read($, cache), await read($, context), await read($, nutzung)) }
     })

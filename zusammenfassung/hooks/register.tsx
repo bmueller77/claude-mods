@@ -106,21 +106,25 @@ const istOffen = atom({ plugin: 'zusammenfassung', key: 'istOffen' } as const, f
 const isAus = atom({ plugin: 'zusammenfassung', key: 'isAus' } as const, false)
 const letzter = atom({ plugin: 'zusammenfassung', key: 'letzter' } as const, null as string | null)
 
-const SYSTEM =
-    'Du fasst eine Arbeitsrunde eines KI-Assistenten fuer die Person zusammen, fuer die er arbeitet. ' +
-    'Du bekommst das Ende der Runde: die letzten Nachrichten, die letzte Antwort des Assistenten und die geaenderten Dateien. ' +
-    'Antworte mit genau zwei Zeilen, auf Deutsch, ohne Anrede, ohne Einleitung, ohne Aufzaehlungszeichen und ohne Beschriftung.\n' +
-    'Zeile 1: was in der Runde getan wurde und mit welchem Ergebnis, konkret (Datei, Funktion, Test), hoechstens 120 Zeichen.\n' +
-    'Zeile 2: eine Sache, die die Person wissen sollte und leicht uebersieht: eine stille Annahme des Assistenten, ' +
-    'ein Nebeneffekt, den er nicht erwaehnt, ein Abweichen von dem, was die Person vorher gesagt hat, ' +
-    'oder ein Schritt, der nur behauptet und nicht geprueft wurde. Hoechstens 160 Zeichen, nichts, was der Assistent selbst schon gesagt hat. ' +
+export const SYSTEM =
+    'Du fasst eine Runde eines KI-Assistenten für die Person zusammen, für die er arbeitet. ' +
+    'Du bekommst das Ende der Runde: die letzten Nachrichten, die letzte Antwort des Assistenten und die geänderten Dateien. ' +
+    'Antworte mit genau zwei Zeilen, auf Deutsch, ohne Anrede, ohne Einleitung, ohne Aufzählungszeichen und ohne Beschriftung. ' +
+    'Schreib echte Umlaute (ä, ö, ü, ß), nie ae, oe, ue oder ss an ihrer Stelle.\n' +
+    'Zeile 1: was in der Runde getan wurde und mit welchem Ergebnis, konkret (Datei, Funktion, Test), höchstens 120 Zeichen.\n' +
+    'Zeile 2: eine Sache, die die Person wissen sollte und leicht übersieht: eine stille Annahme des Assistenten, ' +
+    'ein Nebeneffekt, den er nicht erwähnt, ein Abweichen von dem, was die Person vorher gesagt hat, ' +
+    'oder ein Schritt, der nur behauptet und nicht geprüft wurde. Höchstens 160 Zeichen, nichts, was der Assistent selbst schon gesagt hat. ' +
     'Gibt es nichts dergleichen, steht in Zeile 2 nur das Wort NONE.\n' +
-    'Kein Lob, keine Bewertung, keine Gedankenstriche.'
+    'Kein Lob, keine Bewertung, keine Gedankenstriche.\n' +
+    'Beispiel:\nLeiste in src/leiste.ts gebaut, Test in src/leiste.test.ts ergänzt, er läuft grün.\n' +
+    'Der Test prüft nur das Terminal; ob die Leiste in der App gleich aussieht, ist ungeprüft.'
 
-const SYSTEM_MEHR =
-    'Du hast der Person eben einen kurzen Hinweis zu einer Arbeitsrunde eines KI-Assistenten gegeben. ' +
-    'Erklaere ihn jetzt ausfuehrlicher: worauf er sich im Verlauf stuetzt, was daraus folgen kann, und was die Person tun koennte. ' +
-    'Hoechstens 150 Woerter, auf Deutsch, ohne Anrede, ohne Aufzaehlung, ohne Gedankenstriche.'
+export const SYSTEM_MEHR =
+    'Du hast der Person eben einen kurzen Hinweis zu einer Runde eines KI-Assistenten gegeben. ' +
+    'Erkläre ihn jetzt ausführlicher: worauf er sich im Verlauf stützt, was daraus folgen kann, und was die Person tun könnte. ' +
+    'Höchstens 150 Wörter, auf Deutsch, ohne Anrede, ohne Aufzählung, ohne Gedankenstriche. ' +
+    'Schreib echte Umlaute (ä, ö, ü, ß), nie ae, oe, ue oder ss an ihrer Stelle.'
 
 // --- Diff fuer das Replay ---
 
@@ -257,6 +261,20 @@ async function schritteAus($: EngineInterface, werkzeug: string, x: Record<strin
         return [{ werkzeug: 'Write', datei, diff: diff(vorher, x.content), notiz: istNeu ? 'neue Datei' : 'überschrieben' }]
     }
     return []
+}
+
+/**
+ * Was ein Schritt getan hat, in Worten statt mit dem Namen des Werkzeugs: "Stelle geändert",
+ * "Stelle geändert, Teil 1 von 2", "Datei neu angelegt".
+ */
+export function schrittArt(s: Schritt): string {
+    if (s.werkzeug === 'Write') {
+        return s.notiz === 'neue Datei' ? 'Datei neu angelegt' : 'Datei ganz neu geschrieben'
+    }
+    if (s.werkzeug === 'Edit' && s.notiz === 'alle ersetzt') {
+        return 'Stelle geändert, an jeder Fundstelle'
+    }
+    return s.notiz ? `Stelle geändert, ${s.notiz}` : 'Stelle geändert'
 }
 
 /** Die geaenderten Dateien mit ihren Zeilen, in der Reihenfolge der ersten Aenderung. */
@@ -516,7 +534,7 @@ async function hatBlock($: EngineInterface): Promise<boolean> {
 /** Wie der Chevron, aber in eine Richtung: auf (mit Erklaerung, wie beim Aufklappen) oder zu. */
 async function klappeNach($: EngineInterface, modell: string, offen: boolean): Promise<string> {
     if (!(await hatBlock($))) {
-        return 'Gerade steht keine Zusammenfassung über dem Eingabefeld, die sich auf- oder zuklappen ließe.'
+        return 'Gerade steht keine Zusammenfassung in der Leiste über dem Eingabefeld. Sie kommt nach der nächsten Runde, in der Claude arbeitet.'
     }
     await update($, istOffen, () => offen)
     if (!offen) {
@@ -536,7 +554,7 @@ export function replayAlsText(s: readonly Schritt[]): string {
     const zeilen = [`Replay: ${aenderungenText(s)}.`]
     s.forEach((schritt, k) => {
         const { plus, minus } = zaehle(schritt.diff)
-        zeilen.push(`${k + 1}. ${schritt.datei} (${schritt.werkzeug}${schritt.notiz ? `, ${schritt.notiz}` : ''}) +${plus} −${minus}`)
+        zeilen.push(`${k + 1}. ${schritt.datei} (${schrittArt(schritt)}) +${plus} −${minus}`)
     })
     return zeilen.join('\n')
 }
@@ -548,7 +566,7 @@ async function replayBefehl($: EngineInterface, vomHandy: boolean): Promise<stri
         return 'Replay: keine Dateiänderungen in der letzten Runde.'
     }
     if (vomHandy) {
-        return `${replayAlsText(s)}\nDas Fenster mit den Diffs gibt es nur am Rechner.`
+        return `${replayAlsText(s)}\nDas Fenster mit den geänderten Zeilen gibt es nur am Rechner.`
     }
     $.clock.after(0, () => void oeffneReplay($).catch(() => {}))
     return `Replay: ${aenderungenText(s)}. Das Fenster geht gleich auf.`
@@ -559,6 +577,8 @@ async function replayBefehl($: EngineInterface, vomHandy: boolean): Promise<stri
 /** Ein Befehl des Mods mit allem, was seine Hilfe sagt. */
 export type Befehl = {
     name: string
+    /** Der Titel hinter dem Namen in der ersten Zeile der Hilfe. */
+    titel: string
     /** Die eine Zeile in der Befehlsliste. */
     description: string
     argumentHint?: string
@@ -566,17 +586,20 @@ export type Befehl = {
     was: string
     /** Welchem Knopf er entspricht. */
     knopf: string
-    /** Wo er gilt. */
+    /** Wie weit er wirkt. */
     gilt: string
     argumente: string
-    beispiel: string
+    /** Nur bei einem Befehl mit Argument. */
+    beispiel?: string
 }
 
-/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform. */
-const KURZFORMEN: readonly { name: string; description: string }[] = [
-    { name: 'zusammenfassung', description: 'schaltet die Zusammenfassung in diesem Chat um (Kurzform)' },
-    { name: 'replay', description: 'zeigt die Dateiänderungen der letzten Runde Schritt für Schritt (Kurzform)' },
-]
+/** Die Fassungen fuer "Gilt" aus dem Leitfaden. */
+const GILT_STANDARD = 'nur in diesem Chat. Standard für neue Chats: Option "Zusammenfassung", siehe /zusammenfassung:hilfe unter Einstellen.'
+const GILT_CHAT = 'nur in diesem Chat.'
+const GILT_EINMAL = 'einmal, sofort; ändert keine Einstellung.'
+
+/** Wo die Knoepfe stehen. */
+const IN_DER_LEISTE = 'neben "Zusammenfassung" in der Leiste über dem Eingabefeld (im Terminal und in der Desktop-App gleich)'
 
 /**
  * Die Einzelbefehle, in der Reihenfolge der Uebersicht. Jeder ist eine Datei in commands/ des Mods
@@ -586,57 +609,85 @@ const KURZFORMEN: readonly { name: string; description: string }[] = [
 export const BEFEHLE: readonly Befehl[] = [
     {
         name: 'zusammenfassung:hilfe',
-        description: 'Alle Befehle der Zusammenfassung mit einer Zeile Erklärung',
-        was: 'Listet alle Befehle der Zusammenfassung mit einer Zeile Erklärung.',
-        knopf: 'keiner',
-        gilt: 'zeigt nur Text, ändert nichts',
-        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/zusammenfassung:hilfe',
+        titel: 'Hilfe',
+        description: 'Was die Zusammenfassung tut, wie du sie einstellst, alle Befehle',
+        was: 'Zeigt, was die Zusammenfassung tut, wie du mit ihr arbeitest und sie einstellst, und listet alle Befehle.',
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'zusammenfassung:an',
-        description: 'Die Zusammenfassung nach jeder Arbeitsrunde in diesem Chat einschalten',
-        was: 'Schaltet die Zusammenfassung nach jeder Arbeitsrunde ein, wie /zusammenfassung, wenn sie aus ist.',
-        knopf: 'keiner; dasselbe wie /zusammenfassung',
-        gilt: 'nur in diesem Chat; der Standard für neue Chats steht in den Einstellungen des Mods',
-        argumente: 'keine',
-        beispiel: '/zusammenfassung:an',
+        titel: 'Einschalten',
+        description: 'Die Zusammenfassung nach jeder Runde in diesem Chat einschalten',
+        was: 'Schaltet die Zusammenfassung nach jeder Runde ein. Ist sie schon an, bleibt sie an.',
+        knopf: 'keiner.',
+        gilt: GILT_STANDARD,
+        argumente: 'keine.',
     },
     {
         name: 'zusammenfassung:aus',
+        titel: 'Ausschalten',
         description: 'Die Zusammenfassung in diesem Chat ausschalten; das Replay bleibt',
-        was: 'Schaltet die Zusammenfassung nach jeder Arbeitsrunde aus, wie /zusammenfassung, wenn sie an ist. Das Replay der Dateiänderungen bleibt.',
-        knopf: 'keiner; dasselbe wie /zusammenfassung',
-        gilt: 'nur in diesem Chat; der Standard für neue Chats steht in den Einstellungen des Mods',
-        argumente: 'keine',
-        beispiel: '/zusammenfassung:aus',
+        was: 'Schaltet die Zusammenfassung nach jeder Runde aus; dann ruft der Mod dafür kein Modell mehr auf. Das Replay bleibt: ⟲ und /replay gehen weiter.',
+        knopf: 'keiner.',
+        gilt: GILT_STANDARD,
+        argumente: 'keine.',
     },
     {
         name: 'zusammenfassung:aufklappen',
-        description: 'Die Zusammenfassung aufklappen: ungekürzt, mit Erklärung zum Hinweis und Dateiliste',
-        was: 'Klappt die Zusammenfassung über dem Eingabefeld auf: beide Zeilen ungekürzt, die Erklärung zum Hinweis und die geänderten Dateien.',
-        knopf: `${SYMBOL_AUF} neben „Zusammenfassung“`,
-        gilt: 'in diesem Chat, bis die nächste Arbeitsrunde die Zusammenfassung ersetzt',
-        argumente: 'keine',
-        beispiel: '/zusammenfassung:aufklappen',
+        titel: 'Aufklappen',
+        description: 'Die Zusammenfassung aufklappen: ganze Zeilen, Erklärung zum Hinweis, geänderte Dateien',
+        was:
+            'Klappt die Zusammenfassung in der Leiste auf: beide Zeilen ganz, eine längere Erklärung zum Hinweis "Beachte:" und die geänderten Dateien. ' +
+            'Für die Erklärung ruft der Mod einmal das Modell auf, nur wenn es einen Hinweis gibt. Die nächste Runde klappt wieder zu.',
+        knopf: `${SYMBOL_AUF} ${IN_DER_LEISTE}.`,
+        gilt: GILT_CHAT,
+        argumente: 'keine.',
     },
     {
         name: 'zusammenfassung:zuklappen',
+        titel: 'Zuklappen',
         description: 'Die aufgeklappte Zusammenfassung wieder zuklappen',
-        was: 'Klappt die Zusammenfassung über dem Eingabefeld wieder zu.',
-        knopf: `${SYMBOL_ZU} neben „Zusammenfassung“`,
-        gilt: 'in diesem Chat',
-        argumente: 'keine',
-        beispiel: '/zusammenfassung:zuklappen',
+        was: 'Klappt die Zusammenfassung in der Leiste wieder auf zwei Zeilen zu.',
+        knopf: `${SYMBOL_ZU} ${IN_DER_LEISTE}.`,
+        gilt: GILT_CHAT,
+        argumente: 'keine.',
     },
     {
         name: 'zusammenfassung:replay',
-        description: 'Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen',
-        was: 'Öffnet das Replay der Dateiänderungen der letzten Runde, wie /replay. Vom Handy kommt statt des Fensters eine Liste der Schritte als Text.',
-        knopf: `${SYMBOL_REPLAY} neben „Zusammenfassung“`,
-        gilt: 'für die letzte Arbeitsrunde in diesem Chat',
-        argumente: 'keine',
-        beispiel: '/zusammenfassung:replay',
+        titel: 'Replay',
+        description: 'Jede Dateiänderung der letzten Runde Schritt für Schritt zeigen',
+        was:
+            'Öffnet das Replay der letzten Runde im Seitenfenster: jede Änderung an einer Datei als eigener Schritt, mit den geänderten Zeilen. ' +
+            'Vom Handy kommt stattdessen eine Liste der Schritte als Text.',
+        knopf: `${SYMBOL_REPLAY} ${IN_DER_LEISTE}.`,
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
+    },
+]
+
+/** Die Befehle aus der Zeit vor den Einzelbefehlen; sie bleiben als Kurzform und sind angemeldet. */
+export const KURZFORMEN: readonly Befehl[] = [
+    {
+        name: 'zusammenfassung',
+        titel: 'Ein- und ausschalten',
+        description: 'Die Zusammenfassung nach jeder Runde in diesem Chat aus- oder einschalten (Zusammenfassung)',
+        was: 'Ohne Argument: schaltet die Zusammenfassung nach jeder Runde aus, wenn sie an ist, sonst ein. Das Replay bleibt in beiden Fällen.',
+        knopf: 'keiner.',
+        gilt: GILT_STANDARD,
+        argumente: 'keine.',
+    },
+    {
+        name: 'replay',
+        titel: 'Replay',
+        description: 'Jede Dateiänderung der letzten Runde Schritt für Schritt zeigen (Zusammenfassung)',
+        was:
+            'Ohne Argument: öffnet das Replay der letzten Runde im Seitenfenster, wie /zusammenfassung:replay, mit derselben Antwort. Ohne Änderungen sagt der Befehl das und öffnet nichts. ' +
+            'Vom Handy kommt stattdessen eine Liste der Schritte als Text.',
+        knopf: `${SYMBOL_REPLAY} ${IN_DER_LEISTE}.`,
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
 ]
 
@@ -657,33 +708,120 @@ export function istHilfe(args: string): boolean {
     return a === 'hilfe' || a === '?'
 }
 
-/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+/** Die Hilfe eines Befehls: Name und Titel, was er tut, welcher Knopf, wie weit er wirkt, Argumente. */
 export function hilfeText(b: Befehl): string {
-    return [`/${b.name}: ${b.was}`, `Button: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+    return [
+        `/${b.name} · ${b.titel}`,
+        `Was: ${b.was}`,
+        `Button: ${b.knopf}`,
+        `Gilt: ${b.gilt}`,
+        `Argumente: ${b.argumente}`,
+        ...(b.beispiel ? [`Beispiel: ${b.beispiel}`] : []),
+    ].join('\n')
 }
 
 /** Was ein Befehl sagt, wenn er scheitert. */
 export function fehlerText(name: string): string {
-    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+    return `Das hat nicht geklappt: /${name} ist an einem Fehler im Mod gescheitert. Versuch es gleich noch einmal.`
 }
 
-/** Alle Befehle des Mods, je eine Zeile. */
-export function uebersicht(): string {
-    const zeilen = [...BEFEHLE, ...KURZFORMEN]
-    return ['Befehle der Zusammenfassung (jeder versteht hilfe oder ? als Argument):', ...zeilen.map(z => `/${z.name}: ${z.description}`)].join('\n')
+/** So heisst der Mod in Claude Code, wenn sich der Katalog nicht lesen laesst. */
+const MOD_ID_STANDARD = 'zusammenfassung@bm-mods'
+
+/**
+ * Die volle ID eines Mods (`<name>@<katalog>`) aus `enabledPlugins` der Settings: die eingeschaltete,
+ * sonst die erste. Null, wenn keine dabei ist (etwa bei `--plugin-dir`).
+ */
+export function modIdAus(eingeschaltet: unknown, name: string): string | null {
+    if (typeof eingeschaltet !== 'object' || eingeschaltet === null) {
+        return null
+    }
+    const werte = eingeschaltet as Record<string, unknown>
+    const ids = Object.keys(werte).filter(k => k.startsWith(`${name}@`) && k !== `${name}@inline`)
+    return ids.find(k => werte[k] === true) ?? ids[0] ?? null
+}
+
+/** Die volle ID dieses Mods, wie `claude plugin configure` sie braucht; null, wenn sie sich nicht lesen laesst. */
+async function ladeModId($: EngineInterface): Promise<string | null> {
+    try {
+        return modIdAus(await $.settings.read({ key: 'enabledPlugins' }), 'zusammenfassung')
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Alles, was /zusammenfassung:hilfe sagt. `id` ist die volle ID des Mods; ohne sie steht dort
+ * zusammenfassung@bm-mods mit dem Hinweis auf den alten Katalognamen.
+ */
+export function uebersicht(id: string | null = null): string {
+    const mod = id ?? MOD_ID_STANDARD
+    const befehle = [...BEFEHLE, ...KURZFORMEN]
+    return [
+        'Zusammenfassung · Hilfe',
+        '',
+        'Was der Mod tut',
+        'Zusammenfassung ist ein Mod, also eine Erweiterung für Claude Code. Nach jeder Runde (eine Antwort von Claude auf deine Nachricht, mit allem, was er dabei tut) ' +
+            'steht in der Leiste über dem Eingabefeld eine kurze Zusammenfassung: eine Zeile, was Claude getan hat, und eine Zeile "Beachte:" mit dem, was man leicht übersieht. ' +
+            'Dazu kommt das Replay: Es zeigt jede Änderung an deinen Dateien in dieser Runde Schritt für Schritt, mit den geänderten Zeilen.',
+        '',
+        'So arbeitest du damit',
+        '- Lies nach einer Runde die zwei Zeilen in der Leiste. Zusammengefasst werden Runden, in denen Claude ein Werkzeug benutzt hat ' +
+            '(etwa eine Datei gelesen oder geändert oder einen Befehl ausgeführt), und Runden, die mindestens 60 Sekunden gedauert haben (einstellbar, siehe Einstellen).',
+        '- Neben "Zusammenfassung" steht etwa "5 Änderungen in 3 Dateien". Eine Änderung ist eine Stelle, die Claude in einer Datei geändert hat, oder eine Datei, die er ganz neu geschrieben hat.',
+        `- ${SYMBOL_AUF} klappt auf: beide Zeilen ganz, eine längere Erklärung zum Hinweis und die geänderten Dateien mit der Zahl neuer (+) und entfernter (−) Zeilen. ` +
+            `${SYMBOL_ZU} klappt wieder zu. Als Befehl: /zusammenfassung:aufklappen und /zusammenfassung:zuklappen.`,
+        `- ${SYMBOL_REPLAY} öffnet das Replay im Seitenfenster. ◀ Zurück und Weiter ▶ blättern durch die Schritte, die Zahlen oben zeigen, bei welchem du bist. ` +
+            'Grün mit + sind neue Zeilen, rot mit - entfernte, blass die unveränderten drumherum; ⋯ steht für ausgelassene Zeilen. ' +
+            'Im Terminal gehen auch die Tasten z (zurück), w (weiter) und s (schließen), Escape schließt das Fenster. Als Befehl: /replay.',
+        '- /zusammenfassung ohne Argument schaltet die Zusammenfassung in diesem Chat aus, wenn sie an ist, sonst ein. ' +
+            `Ist sie aus, steht nach einer Runde mit Dateiänderungen nur noch die Kopfzeile mit der Zahl der Änderungen und ${SYMBOL_REPLAY} in der Leiste; ` +
+            'nach einer Runde ohne Dateiänderungen steht dort nichts. Das Replay geht weiter, auch mit /replay.',
+        '',
+        'Einstellen',
+        'Nur in diesem Chat: /zusammenfassung (umschalten), /zusammenfassung:an und /zusammenfassung:aus.',
+        'Standard für neue Chats:',
+        '- Zusammenfassung: an oder aus (im Terminal true oder false). Eingebaut: an.',
+        '- Modell für die Zusammenfassung: haiku, sonnet oder opus. Eingebaut: haiku. Im Chat nicht umstellbar.',
+        '- Mindestdauer einer Runde (Sekunden): so lange muss eine Runde ohne Werkzeug dauern, damit sie zusammengefasst wird. Eingebaut: 60. Im Chat nicht umstellbar.',
+        'Haiku, Sonnet und Opus sind Modelle von Claude, von klein und günstig bis groß.',
+        `Sag Claude zum Beispiel: Stell bei Zusammenfassung den Standard für neue Chats: Zusammenfassung auf aus. Claude macht das mit \`claude plugin configure ${mod}\`. ` +
+            `Im Terminal geht es auch selbst: \`claude plugin configure ${mod}\` zeigt die Optionen. ` +
+            `Setzen geht mit \`--values-stdin\`, etwa \`echo '{"an": false}' | claude plugin configure ${mod} --values-stdin\`. ` +
+            'Das gilt für Chats, die danach beginnen. "not set" heißt dort: Es gilt der eingebaute Standard.',
+        `Ganz abschalten: \`claude plugin disable ${mod}\` (wieder an mit \`enable\`), oder sag Claude, er soll den Mod abschalten. Das wirkt nach einem Neustart von Claude Code.`,
+        ...(id === null ? ['Ältere Installationen heißen `zusammenfassung@bjoern-mods`; `claude plugin list` zeigt den Namen.'] : []),
+        '',
+        'Kosten',
+        'Jede zusammengefasste Runde kostet einen Aufruf des eingestellten Modells (eingebaut Haiku): Es liest die letzten zehn Nachrichten und schreibt zwei Zeilen. ' +
+            'Das sind Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit). ' +
+            'Aufklappen kostet einen zweiten, kleinen Aufruf für die Erklärung, nur wenn es einen Hinweis gibt. ' +
+            'Der Aufruf läuft auch, wenn du nur vom Handy schreibst und die Zeilen nie siehst. ' +
+            'Ist die Zusammenfassung aus, kostet sie nichts; das Replay kostet nie etwas.',
+        '',
+        'Vom Handy (Remote Control)',
+        'Dort gibt es keine Leiste und keine Buttons, also auch die zwei Zeilen nicht: Die gibt es nur am Rechner. ' +
+            '/replay und /zusammenfassung:replay schicken dir die Schritte des Replays als Liste. Ein- und ausschalten geht auch vom Handy; ' +
+            'wenn du dort nur liest, spart /zusammenfassung:aus die Aufrufe.',
+        '',
+        'Befehle',
+        'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+        ...befehle.map(z => `/${z.name} · ${z.description.replace(/ \(Zusammenfassung\)$/, '')}`),
+        'Mehr zu jedem Befehl: hilfe dahinter, etwa /zusammenfassung:replay hilfe.',
+    ].join('\n')
 }
 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
 async function wirke($: EngineInterface, name: string, modell: string, vomHandy: boolean): Promise<string> {
     switch (name) {
         case 'zusammenfassung:hilfe':
-            return uebersicht()
+            return uebersicht(await ladeModId($))
         case 'zusammenfassung:an':
             await setzeAus($, false)
             return 'Die Zusammenfassung ist in diesem Chat an.'
         case 'zusammenfassung:aus':
             await setzeAus($, true)
-            return 'Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.'
+            return `Die Zusammenfassung ist in diesem Chat aus. Das Replay bleibt: ${SYMBOL_REPLAY} oder /replay.`
         case 'zusammenfassung:aufklappen':
             return klappeNach($, modell, true)
         case 'zusammenfassung:zuklappen':
@@ -710,20 +848,9 @@ export const register: Register = (on, options) => {
         // Befehle nicht als unbekannt gelten, liegen gleichnamige Befehlsdateien in
         // ~/.claude/commands; den Lauf beantwortet trotzdem dieser Mod. Angemeldet werden
         // nur die Kurzformen; die Einzelbefehle /zusammenfassung:… sind Dateien in commands/.
-        await $.command
-            .register({
-                name: 'zusammenfassung',
-                description: 'Die Zusammenfassung nach jeder Arbeitsrunde aus- oder einschalten; das Replay bleibt (Zusammenfassung)',
-                immediate: true,
-            })
-            .catch(() => {})
-        await $.command
-            .register({
-                name: 'replay',
-                description: 'Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen (Zusammenfassung)',
-                immediate: true,
-            })
-            .catch(() => {})
+        for (const k of KURZFORMEN) {
+            await $.command.register({ name: k.name, description: k.description, immediate: true }).catch(() => {})
+        }
         const sid = await $.session.id()
         const jetzt = await $.clock.now()
         const aus = await ladeAus($, sid, standardAus, jetzt)
@@ -739,22 +866,27 @@ export const register: Register = (on, options) => {
         return next({ ...e, message: { ...e.message, content } })
     }).catch(($, e, next) => next(e))
 
-    on('command.run', { command: 'zusammenfassung' }, async $ => {
+    // Die Kurzformen: hilfe oder ? zeigt ihre Hilfe und schaltet nichts um.
+    const [kurzUmschalten, kurzReplay] = KURZFORMEN as [Befehl, Befehl]
+    on('command.run', { command: 'zusammenfassung' }, async ($, e) => {
+        if (istHilfe(e.args)) {
+            return { text: hilfeText(kurzUmschalten) }
+        }
         const aus = !(await read($, isAus))
         await setzeAus($, aus)
         return {
             text: aus
-                ? 'Die Zusammenfassung ist aus, das Replay bleibt. Derselbe Befehl schaltet sie wieder ein.'
-                : 'Die Zusammenfassung ist an.',
+                ? 'Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt. /zusammenfassung schaltet sie wieder ein.'
+                : 'Die Zusammenfassung ist in diesem Chat an.',
         }
     })
 
-    on('command.run', { command: 'replay' }, async $ => {
-        const s = await read($, schritte)
-        if (!(await oeffneReplay($))) {
-            return { text: 'Replay: keine Dateiänderungen in der letzten Runde.' }
+    on('command.run', { command: 'replay' }, async ($, e) => {
+        if (istHilfe(e.args)) {
+            return { text: hilfeText(kurzReplay) }
         }
-        return { text: `Replay: ${aenderungenText(s)}` }
+        // Wie /zusammenfassung:replay, mit derselben Antwort; vom Handy (Remote Control) als Liste, ohne Fenster.
+        return { text: await replayBefehl($, (e.origin as { kind?: string } | undefined)?.kind === 'bridge') }
     })
 
     // Die Einzelbefehle: jeder versteht hilfe und ?, und ein Fehler wird ein schlichter Satz.
@@ -971,8 +1103,18 @@ export const register: Register = (on, options) => {
                 {/* Die Breite auch hier: ob die App sie vom Block uebernimmt, ist nicht sicher. */}
                 <Box flexDirection="column" width={appBreite}>
                     {kopf}
-                    {zeilen}
-                    {erklaerung}
+                    {/* Nur in der App: Die Buttons der Kopfzeile ragen 4 px ueber ihre Zeile hinaus
+                        und beruehren sonst die erste Textzeile. Senkrechte Zahlen zaehlen dort halbe
+                        Zeilen zu 10 px, 0.2 sind also 2 px mehr Luft. Im Terminal gibt es keinen
+                        Bruchteil einer Zeile, dort bleibt alles wie es ist. */}
+                    {inApp && (zeilen.length > 0 || erklaerung) ? (
+                        <Box key="zf-text" flexDirection="column" marginTop={0.2}>
+                            {zeilen}
+                            {erklaerung}
+                        </Box>
+                    ) : (
+                        [...zeilen, erklaerung]
+                    )}
                     {dateien.length > 0 ? (
                         <Box key="zf-dateien" flexDirection="column" marginTop={1}>
                             {dateien}
@@ -1048,7 +1190,7 @@ export const register: Register = (on, options) => {
                     {schritt.datei}
                 </Text>
                 <Box flexDirection="row" gap={2}>
-                    <Text dimColor>{`${schritt.werkzeug}${schritt.notiz ? ` · ${schritt.notiz}` : ''}`}</Text>
+                    <Text dimColor>{schrittArt(schritt)}</Text>
                     <Text color="success">{`+${plus}`}</Text>
                     <Text color="error">{`−${minus}`}</Text>
                 </Box>

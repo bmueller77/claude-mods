@@ -366,6 +366,8 @@ test('Abfangen: was ins Fenster geht und was unveraendert durchgeht', () => {
     expect(leseBefehl('verlauf')).toEqual({ art: 'verlauf' })
     expect(leseBefehl('')).toEqual({ art: 'leer' })
     expect(leseBefehl(' Mach was ')).toEqual({ art: 'prompt', text: 'Mach was' })
+    // an, aus und verlauf nur allein, so sagt es die Hilfe.
+    expect(leseBefehl('an die Kunden schreiben')).toEqual({ art: 'prompt', text: 'an die Kunden schreiben' })
 })
 
 test('Fragen lesen: JSON, im Zaun, als Zeilen, gekappt und gesaeubert', () => {
@@ -507,8 +509,8 @@ test('Abdeckung lesen: Schreibweisen und Reihenfolge egal, fehlt oder kaputt hei
     // Die Zeile: so lang wie sie passt, dann kuerzere Namen, zuletzt nur die Zaehlung.
     const ab = { auftrag: true, warum: false, leitplanken: true, fertig: true }
     const zeile = (b: number) => abdeckungZeile(ab, b).map(t => t.text).join('')
-    expect(zeile(120)).toBe('✓ Auftrag  – Warum  ✓ Leitplanken  ✓ Fertig wenn')
-    expect(zeile(48)).toBe('✓ Auftrag  – Warum  ✓ Leitplanken  ✓ Fertig wenn')
+    expect(zeile(120)).toBe('✓ Auftrag  – Warum  ✓ Grenzen  ✓ Fertig wenn')
+    expect(zeile(44)).toBe('✓ Auftrag  – Warum  ✓ Grenzen  ✓ Fertig wenn')
     expect(zeile(40)).toBe('✓ Auftrag  – Warum  ✓ Grenzen  ✓ Fertig')
     expect(zeile(36)).toBe('✓ Auftrag – Warum ✓ Grenzen ✓ Fertig')
     expect(zeile(30)).toBe('3/4 Kernteile')
@@ -603,7 +605,7 @@ test('der ganze Weg: /better, Fragen, Umschreiben, Pruefen, Ausfuehren', async (
         // Die Abdeckung: enthaltene Kernteile mit Haekchen, fehlende mit Strich, vor den Knoepfen.
         expect(text).toContain('✓ Auftrag')
         expect(text).toContain('– Warum')
-        expect(text).toContain('– Leitplanken')
+        expect(text).toContain('– Grenzen')
         expect(text).toContain('✓ Fertig wenn')
         expect(text.indexOf('✓ Auftrag')).toBeLessThan(text.indexOf('[ausfuehren]'))
         expect((await ui.find({ type: 'Text', text: /^✓ Auftrag$/ }))?.props.color).toBe('#3DD68C')
@@ -880,7 +882,7 @@ test('Fehlerkarte: Prompt ist sicher, Erneut versuchen, Original senden', async 
         let text = await inhalt(ui)
         expect(text).toContain('DAS HAT NICHT GEKLAPPT')
         expect(text).toContain('Dein Prompt ist sicher; gesendet wurde nichts.')
-        expect(text).toContain('Status 529')
+        expect(text).toContain('Der Dienst ist gerade überlastet (Fehler 529).')
         expect(text).toContain('[erneut]')
         expect(text).toContain('[original]')
         expect(text).toContain('[abbrechen]')
@@ -894,7 +896,7 @@ test('Fehlerkarte: Prompt ist sicher, Erneut versuchen, Original senden', async 
         await ui.press({ key: 'rest' })
         await clock.settle()
         text = await inhalt(ui)
-        expect(text).toContain('Das Modell hat nichts geantwortet.')
+        expect(text).toContain('Das Modell hat nicht geantwortet.')
         expect(text).toContain('3 Umschreiben')
 
         await ui.press({ key: 'original' })
@@ -1149,7 +1151,7 @@ test('Breiten: bei 40 und 120 Spalten ist keine Zeile breiter als das Fenster', 
                 if (mitAbdeckung) {
                     const text = await inhalt(ui)
                     expect(text).toContain('✓ Auftrag')
-                    expect(text).toContain(breite === 40 ? '– Grenzen' : '– Leitplanken')
+                    expect(text).toContain('– Grenzen')
                     expect(text).toContain(breite === 40 ? '✓ Fertig' : '✓ Fertig wenn')
                 }
                 await ui.unmount()

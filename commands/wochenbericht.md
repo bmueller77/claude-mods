@@ -1,5 +1,5 @@
 ---
-description: "Teambericht für diese Woche als Text (Leitstand)"
+description: "Wochenbericht für diese Woche als Text (Leitstand)"
 disable-model-invocation: true
 ---
 

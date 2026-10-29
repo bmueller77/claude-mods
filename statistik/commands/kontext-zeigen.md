@@ -1,5 +1,5 @@
 ---
-description: "Den Kontext im Detail zeigen: /context, die Anzeige der App"
+description: "Zeigt den Kontext im Detail mit /context, vom Handy als eine Zeile"
 disable-model-invocation: true
 ---
 

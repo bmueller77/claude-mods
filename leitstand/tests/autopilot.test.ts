@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 
-import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE, AUTOPILOT_GRUNDBEFEHL } from '../hooks/autopilot/befehle'
+import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE, AUTOPILOT_GRUNDBEFEHL, AUTOPILOT_TUT } from '../hooks/autopilot/befehle'
 import { FERTIG, FRAGE_ABGELEHNT, GRUND_FERTIG, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, fehlerText, istFertig } from '../hooks/autopilot/teil'
 import { ALTE_BEFEHLE, LEITSTAND_BEFEHLE, befehlsHilfe, kurzform } from '../hooks/logic'
 
@@ -224,7 +224,7 @@ test('die Antworten von /autopilot stehen in sauberem Deutsch', OHNE_LEITSTAND, 
   await start($ as never)
   expect(await befehl($ as never)).toBe(
     'Der Autopilot ist an: Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe. ' +
-      'Freigabe-Dialoge halten ihn trotzdem an. /autopilot schaltet ihn wieder aus.',
+      'Fragt Claude Code um Erlaubnis für ein Werkzeug, wartet er trotzdem auf dich. Aus geht er mit 🅰️ oder /leitstand:autopilot-aus.',
   )
   expect(await befehl($ as never, 'an')).toBe('Der Autopilot läuft schon. /autopilot aus beendet ihn.')
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
@@ -816,7 +816,7 @@ test('ein Druck auf 🅰️ beendet die Schicht am Ende der Runde, statt anzusch
   expect(angeschoben(eingang)).toHaveLength(1)
 
   // Das Aus des Knopfs kommt an, sobald die Sitzung still ist, und meldet die beendete Schicht.
-  expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot ist aus: 1x angeschoben.')
+  expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot ist aus. Er hat Claude 1-mal angeschoben.')
 
   // Eine neue Schicht beginnt nach dem Druck: Der alte Wunsch gilt ihr nicht.
   expect(await befehl$($ as never, 'autopilot-an')).toContain('Der Autopilot ist an')
@@ -824,6 +824,16 @@ test('ein Druck auf 🅰️ beendet die Schicht am Ende der Runde, statt anzusch
   expect(eingang.at(-1)?.context).toContain(KONTEXT)
   await runde($ as never, 't4', 'Teil C halb.')
   expect(angeschoben(eingang)).toHaveLength(2)
+})
+
+test('vom Handy sagt das Aus, wo der Bericht steht und wie die Fragen hierher kommen', OHNE_LEITSTAND, async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  boden(on)
+  await start($ as never)
+  await befehl$($ as never, 'autopilot-an', '', 'bridge')
+  expect(await befehl$($ as never, 'leitstand:autopilot-aus', '', 'bridge')).toBe(
+    'Der Autopilot ist aus. Er hat Claude 0-mal angeschoben. Den Bericht in der Leiste siehst du am Rechner; die selbst entschiedenen Fragen zeigt hier /leitstand:autopilot-fragen-zeigen.',
+  )
 })
 
 test('kommt das Aus des Knopfs, während die Sitzung still ist, beendet es die Schicht mit dem Grund 🅰️', OHNE_LEITSTAND, async ($, on) => {
@@ -834,7 +844,7 @@ test('kommt das Aus des Knopfs, während die Sitzung still ist, beendet es die S
   await befehl$($ as never, 'autopilot-an')
   await clock.advance(1000)
   druck(1_001_000)
-  expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot ist aus: 0x angeschoben.')
+  expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot ist aus. Er hat Claude 0-mal angeschoben.')
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
   expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_KNOPF}`)
 })
@@ -902,7 +912,7 @@ test('ohne Druck auf 🅰️ schiebt der Autopilot weiter an', OHNE_LEITSTAND, a
   await runde($ as never, 't1', 'Weiter?')
   await runde($ as never, 't2', 'Weiter?')
   expect(angeschoben(eingang)).toHaveLength(2)
-  expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus: 2x angeschoben.')
+  expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus. Er hat Claude 2-mal angeschoben.')
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
   expect(await leiste(ui as never)).toContain('du hast ihn beendet')
 })
@@ -919,7 +929,7 @@ test('ist der Wunsch keine Zeit, gibt es keinen Wunsch', OHNE_LEITSTAND, async (
   druck('9999999999999')
   await runde($ as never, 't1', 'Weiter?')
   expect(angeschoben(eingang)).toHaveLength(1)
-  expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus: 1x angeschoben.')
+  expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus. Er hat Claude 1-mal angeschoben.')
 })
 
 // --- Die Schlange: höchstens ein Anstoß unterwegs ---
@@ -1077,7 +1087,7 @@ for (const b of AUTOPILOT_BEFEHLE) {
       for (const arg of ['hilfe', '?', ' Hilfe ']) {
         const t = await befehl$($ as never, name, arg)
         expect(t).toBe(befehlsHilfe(b))
-        for (const teil of [`/${b.name}: `, '\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:', `\nKurzform: /${kurzform(b.name)}`]) {
+        for (const teil of [`/${b.name} · `, '\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: keine.', `\nKurzform: /${kurzform(b.name)}`]) {
           expect(t).toContain(teil)
         }
       }
@@ -1095,8 +1105,9 @@ test('/autopilot hilfe erklärt den Grundbefehl und schaltet nichts', OHNE_LEITS
   for (const arg of ['hilfe', '?']) {
     const t = await befehl($ as never, arg)
     expect(t).toBe(befehlsHilfe(AUTOPILOT_GRUNDBEFEHL))
-    expect(t).toStartWith('/autopilot: ')
-    expect(t).toContain('Argumente: an oder aus. Ohne Argument schaltet er um.')
+    expect(t).toStartWith('/autopilot · ')
+    expect(t).toContain('Argumente: an oder aus (freiwillig). Ohne Argument schaltet er um.')
+    expect(t).toContain('\nBeispiel: /autopilot an')
   }
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
   expect(await leiste(ui as never)).not.toContain('Autopilot:')
@@ -1108,10 +1119,13 @@ test('/leitstand:hilfe nennt die Befehle des Autopiloten unter Autopilot, je mit
   await start($ as never)
   const zeilen = (await befehl$($ as never, 'leitstand:hilfe')).split('\n')
   const gruppe = zeilen.indexOf('Autopilot')
-  expect(gruppe).toBeGreaterThan(zeilen.indexOf('Helfer'))
+  expect(gruppe).toBeGreaterThan(zeilen.indexOf('Werkzeuge'))
+  // Unter dem Namen der Gruppe ein Satz, was der Autopilot tut; dann die Befehle und der Grundbefehl /autopilot.
+  expect(zeilen[gruppe + 1]).toBe(AUTOPILOT_TUT)
   for (const [i, b] of AUTOPILOT_BEFEHLE.entries()) {
-    expect(zeilen[gruppe + 1 + i]).toBe(`/${b.name}: ${b.description}`)
+    expect(zeilen[gruppe + 2 + i]).toBe(`/${b.name} · ${b.description}`)
   }
+  expect(zeilen[gruppe + 2 + AUTOPILOT_BEFEHLE.length]).toBe(`/autopilot [an|aus] · ${AUTOPILOT_GRUNDBEFEHL.description}`)
 })
 
 test('/leitstand:autopilot-an und -aus wirken wie /autopilot an und der Knopf Beenden, die Kurzformen ebenso', OHNE_LEITSTAND, async ($, on) => {
@@ -1128,7 +1142,7 @@ test('/leitstand:autopilot-an und -aus wirken wie /autopilot an und der Knopf Be
     expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rückfragen weiter')
     expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeDefined()
 
-    expect(await befehl$($ as never, aus)).toBe('Der Autopilot ist aus: 0x angeschoben.')
+    expect(await befehl$($ as never, aus)).toBe('Der Autopilot ist aus. Er hat Claude 0-mal angeschoben.')
     const danach = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
     expect(await leiste(danach as never)).toContain('vorbei, du hast ihn beendet')
     expect(await danach.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
@@ -1142,7 +1156,7 @@ test('/autopilot-an schiebt nach einer Runde gleich an, wie /autopilot an', OHNE
   await start($ as never)
   await person($ as never, 'Bau das.')
   await runde($ as never, 't1', 'Soll ich weitermachen?')
-  expect(await befehl$($ as never, 'autopilot-an')).toContain('Es macht jetzt gleich weiter.')
+  expect(await befehl$($ as never, 'autopilot-an')).toContain('Claude macht jetzt gleich weiter.')
   await clock.advance(1000)
   expect(angeschoben(eingang)).toHaveLength(1)
 })
@@ -1213,7 +1227,9 @@ test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', OHNE_LEITSTAND
   expect(await befehl$($ as never, 'leitstand:autopilot-an')).toBe(fehlerText('leitstand:autopilot-an'))
   expect(await befehl$($ as never, 'autopilot-aus')).toBe(fehlerText('leitstand:autopilot-aus'))
   expect(await befehl($ as never, 'an')).toBe(fehlerText('autopilot'))
-  expect(fehlerText('leitstand:autopilot-an')).toBe('/leitstand:autopilot-an hat nicht geklappt. Versuch es gleich noch einmal.')
+  expect(fehlerText('leitstand:autopilot-an')).toBe(
+    'Das hat nicht geklappt: Im Leitstand ging beim Ausführen von /leitstand:autopilot-an etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.',
+  )
 })
 
 // --- Herkunft in der gespeicherten Zeile ---

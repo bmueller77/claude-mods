@@ -1,6 +1,6 @@
 ---
-description: "Verbessert einen Prompt im Seitenfenster, bevor er rausgeht (wie /better <Prompt>)"
-argument-hint: "<Prompt>"
+description: "Öffnet deinen Prompt im Seitenfenster zum Verbessern; gesendet wird erst mit Ausführen"
+argument-hint: "[Prompt]"
 disable-model-invocation: true
 ---
 

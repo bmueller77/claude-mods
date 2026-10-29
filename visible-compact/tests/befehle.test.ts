@@ -3,7 +3,7 @@ import type { CommandSpec, On, SessionAppendInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
-import { BEFEHLE, BEFEHL_FEHLER } from '../hooks/register'
+import { BEFEHLE, BEFEHL_FEHLER, KURZFORM } from '../hooks/register'
 
 const DIR = '/tmp/visible-compact/sessions/sitzung-1'
 const META = {
@@ -11,9 +11,9 @@ const META = {
   at: Date.UTC(2026, 9, 17, 9, 44),
   durationMs: 80_800,
   trigger: 'manual',
-  tokensBefore: 763_000,
+  tokensBefore: 163_000,
   tokensAfter: 16_000,
-  messages: { before: 1, after: 2 },
+  messages: { before: 240, after: 2 },
   chunks: { before: 1, after: 1 },
 }
 const PANE = {
@@ -122,8 +122,8 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?', async ($, on) => {
   for (const name of NAMEN) {
     for (const arg of ['hilfe', '?', 'Hilfe']) {
       const text = await befehl($, name, arg)
-      expect(text).toContain(`/${name}`)
-      for (const teil of ['Button:', 'Gilt:', 'Argumente:', 'Beispiel:']) expect(text).toContain(teil)
+      expect(text).toContain(`/${name} · `)
+      for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:']) expect(text).toContain(teil)
     }
   }
   // Hilfe ändert nichts.
@@ -131,11 +131,44 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?', async ($, on) => {
   expect(w.store.has('translate:sitzung-1')).toBe(false)
 })
 
-test('/visible-compact:hilfe listet alle Befehle mit einer Zeile', async ($, on) => {
-  welt(on)
+test('/show-last-compact hilfe und ? zeigen nur die Hilfe und öffnen kein Fenster', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  for (const arg of ['hilfe', '?', 'Hilfe']) {
+    const text = await befehl($, 'show-last-compact', arg)
+    expect(text).toContain('/show-last-compact · ')
+    for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:']) expect(text).toContain(teil)
+  }
+  expect(w.geoeffnet).toEqual([])
+  // Vom Handy dieselbe Textantwort wie /visible-compact:zeigen, kein Fenster.
+  const handy = await befehl($, 'show-last-compact', '', 'bridge')
+  expect(handy).toBe(await befehl($, 'visible-compact:zeigen', '', 'bridge'))
+  expect(handy).toContain('Vom Handy öffnet sich kein Fenster.')
+  expect(w.geoeffnet).toEqual([])
+  // Ohne Argument öffnet er am Rechner das Fenster wie bisher.
+  expect(await befehl($, 'show-last-compact')).toBe('"Verdichtungen des Chats" ist geöffnet.')
+  expect(w.geoeffnet).toEqual(['visible-compact'])
+})
+
+test('/visible-compact:hilfe erklärt Arbeiten, Einstellen, Kosten, Handy und listet alle Befehle', async ($, on) => {
+  const w = welt(on)
   await start($)
   const text = await befehl($, 'visible-compact:hilfe')
-  for (const b of BEFEHLE) expect(text).toContain(`/${b.name} – ${b.description}`)
+  for (const b of [...BEFEHLE, KURZFORM]) expect(text).toContain(`/${b.name} · ${b.description}`)
+  // Das gemeinsame Gerüst: diese Überschriften in dieser Reihenfolge, unter Befehle zuerst der Satz zu den Umlauten.
+  const zeilen = text.split('\n')
+  const stellen = ['Was der Mod tut', 'So arbeitest du damit', 'Wo der Chat liegt', 'Einstellen', 'Kosten', 'Vom Handy (Remote Control)', 'Befehle'].map(k => zeilen.indexOf(k))
+  expect(stellen.every(i => i >= 0)).toBe(true)
+  expect([...stellen].sort((a, b) => a - b)).toEqual(stellen)
+  expect(zeilen[stellen[6]! + 1]).toBe('Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.')
+  expect(zeilen[zeilen.length - 1]).toMatch(/^Mehr zu jedem Befehl: hilfe dahinter, etwa /)
+  for (const teil of ['--values-stdin', 'Das gilt für Chats, die danach beginnen.', 'Das wirkt nach einem Neustart von Claude Code.', 'im Chat nicht umstellbar'])
+    expect(text).toContain(teil)
+  for (const teil of ['So arbeitest du damit', 'Einstellen', 'Nur in diesem Chat:', 'Standard für neue Chats:', 'claude plugin configure visible-compact@bm-mods', 'visible-compact@bjoern-mods', 'claude plugin disable visible-compact@bm-mods', 'Kosten', 'Vom Handy', 'Mehr zu jedem Befehl: hilfe dahinter'])
+    expect(text).toContain(teil)
+  // Keine Gedankenstriche, typografischen Anführungszeichen oder Auslassungszeichen im neuen Text.
+  expect(text).not.toMatch(/[\u2013\u2014\u201c\u201d\u201e\u2026]/)
+  expect(w.geoeffnet).toEqual([])
 })
 
 test('zeigen: Text sofort, Fenster dahinter; vom Handy nur Text; ohne Verdichtung ein Satz', async ($, on) => {
@@ -144,8 +177,8 @@ test('zeigen: Text sofort, Fenster dahinter; vom Handy nur Text; ohne Verdichtun
   expect(await befehl($, 'visible-compact:zeigen')).toBe('"Verdichtungen des Chats" öffnet sich.')
   expect(w.geoeffnet).toEqual(['visible-compact'])
   const handy = await befehl($, 'visible-compact:zeigen', '', 'bridge')
-  expect(handy).toContain('Das Fenster geht nur am Rechner.')
-  expect(handy).toContain('16k von 763k')
+  expect(handy).toContain('Vom Handy öffnet sich kein Fenster.')
+  expect(handy).toContain('von 163k auf 16k Tokens, 240 Nachrichten vorher, 2 danach')
   expect(w.geoeffnet).toEqual(['visible-compact'])
 })
 

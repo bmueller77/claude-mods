@@ -156,14 +156,16 @@ test('jeder Befehl erklärt sich mit hilfe und ?, lang und kurz, und ändert nic
     for (const befehl of [name, kurz(name)]) {
       for (const arg of ['hilfe', '?', 'Hilfe']) {
         const text = await run($, befehl, arg)
-        expect(text.startsWith(`/${name}: `)).toBe(true)
-        for (const teil of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:']) expect(text).toContain(teil)
+        expect(text.startsWith(`/${name} · `)).toBe(true)
+        for (const teil of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ']) expect(text).toContain(teil)
+        // Ein Beispiel nur bei einem Befehl mit Argument.
+        expect(text.includes('\nBeispiel: /leitstand:')).toBe(name === 'leitstand:dateien')
         expect(text.endsWith(`\nKurzform: /${kurz(name)}`)).toBe(true)
       }
     }
   }
   // /filetree hilfe erklärt /leitstand:dateien, statt einen Ordner namens hilfe zu öffnen.
-  expect((await run($, 'filetree', 'hilfe')).startsWith('/leitstand:dateien: ')).toBe(true)
+  expect((await run($, 'filetree', 'hilfe')).startsWith('/leitstand:dateien · ')).toBe(true)
   await w.clock.settle()
   expect(w.opens.length).toBe(before)
   expect(await texts($)).toBe(shown)
@@ -174,7 +176,14 @@ test('/leitstand:hilfe zeigt die Befehle von Dateien als eigene Gruppe, je eine 
   const lines = (await run($, 'leitstand:hilfe')).split('\n')
   const kopf = lines.indexOf('Dateien')
   expect(kopf).toBeGreaterThan(0)
-  expect(lines.slice(kopf + 1, kopf + 1 + NAMEN.length)).toEqual(FILETREE_BEFEHLE.map(b => `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''}: ${b.description}`))
+  // Unter dem Namen der Gruppe ein Satz, was das Fenster ist; dann die Befehle.
+  expect(lines[kopf + 1]?.startsWith('/')).toBe(false)
+  expect(lines.slice(kopf + 2, kopf + 2 + NAMEN.length)).toEqual(FILETREE_BEFEHLE.map(b => `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`))
+})
+
+test('die Befehle von Dateien sagen vom Handy, dass es das Fenster nur am Rechner gibt', { timeoutMs: 20_000 }, async ($, on) => {
+  await started($, on)
+  for (const name of NAMEN.filter(n => n !== 'leitstand:dateien')) expect(await run($, name, '', 'bridge')).toContain('nur am Rechner')
 })
 
 test('dateien: wie /filetree, die Antwort zuerst und das Fenster dahinter; das Handy bekommt einen Hinweis', { timeoutMs: 20_000 }, async ($, on) => {

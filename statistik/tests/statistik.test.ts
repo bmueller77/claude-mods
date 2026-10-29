@@ -6,6 +6,7 @@ import {
     ALTE_BEFEHLE,
     BEFEHLE,
     FENSTER_OHNE_ZUSAMMENFASSUNG,
+    KURZFORMEN,
     OHNE_SICHERUNGSPUNKT,
     OHNE_ZUSAMMENFASSUNG,
     behalteAnweisung,
@@ -346,7 +347,7 @@ test('nach einer Antwort: volle Uhr, Kontext-Kuchen, Flamme, alles in einer Zeil
     // Erst der Kontext, dann der Cache; die Chatlaenge ist Text, die Flamme ein Knopf, ihr Tooltip steht an der Uhr.
     expect(bilder[0]).toContain('20 % des Fensters')
     expect(bilder[1]).toContain('noch 60 von 60 Minuten warm')
-    expect(bilder[1]).toContain('Treffer der letzten Antwort: 95 %')
+    expect(bilder[1]).toContain('Aus dem Cache gelesen bei der letzten Antwort: 95 %')
     expect(bilder[1]).toContain('Cache warm.')
     expect(bilder[1]).toContain('Warmhalten aus.')
     expect((await desktop.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('🔥')
@@ -636,7 +637,7 @@ test('der Schwamm steht rechts neben der Chatlänge, das Dreieck 🔻 am Kontext
     expect(zeile.indexOf('💬')).toBeLessThan(zeile.indexOf('20 %'))
     expect(zeile.indexOf('20 %')).toBeLessThan(zeile.indexOf('min'))
     // Der Tooltip am Kontext nennt den Schwamm.
-    expect(String((await grafiken(ui as never))[0]?.props.alt)).toContain('Bei Rot ist der Schwamm hervorgehoben.')
+    expect(String((await grafiken(ui as never))[0]?.props.alt)).toContain('Bei Rot ist der Schwamm 🧽 (Aufräumen) hervorgehoben.')
 
     stand.tokens = 150_000
     await runde($ as never, { input: 2_000, cacheRead: 148_000, cacheWrite: 0 })
@@ -931,7 +932,7 @@ test('/warmhalten mit Dauer, status, immer und aus', async ($, on) => {
 
     expect(await befehl($ as never, 'warmhalten', '90m')).toContain('Warmhalten an für 1 h 30 min')
     expect(await befehl($ as never, 'warmhalten', 'status')).toContain('noch 1 h 30 min')
-    expect(await befehl($ as never, 'warmhalten', 'bald')).toContain('nimmt eine Dauer')
+    expect(await befehl($ as never, 'warmhalten', 'bald')).toContain('keine Dauer')
     // Immer gilt nur fuer diesen Chat, wie der Schalter.
     const immer = await befehl($ as never, 'warmhalten', 'immer')
     expect(immer).toContain('ohne Ende in diesem Chat')
@@ -954,7 +955,7 @@ test('/statistik zeigt Cache, Kontext, Kosten und Warmhalten', async ($, on) => 
     const k = await befehl($ as never, 'statistik')
     expect(k).toContain('Modell        claude-opus-5')
     expect(k).toContain('Cache         warm, noch 1 h')
-    expect(k).toContain('Treffer       95 %')
+    expect(k).toContain('Aus Cache     95 %')
     expect(k).toContain('Kontext       20 %')
     // 40000 Tokens zum Schreibpreis von Opus 5, 10 $ je Million.
     expect(k).toContain('bis zu 0,40 $')
@@ -1079,12 +1080,12 @@ test('eine Runde direkt nach einer Verdichtung belegt keine Stunde und zaehlt ke
     await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'Hallo', toolUses: [] }] } as never)
     await clock.advance(10 * MIN)
     await rundeMitSchritt($ as never, { input: 500, cacheRead: 0, cacheWrite: 40_000 })
-    expect(await befehl($ as never, 'statistik')).toContain('Kalt bezahlt  0x in dieser Sitzung')
+    expect(await befehl($ as never, 'statistik')).toContain('Kalter Cache  0x in dieser Sitzung')
 
     // Die Runde danach misst wieder: derselbe Neuschrieb zaehlt jetzt.
     await clock.advance(10 * MIN)
     await rundeMitSchritt($ as never, { input: 500, cacheRead: 0, cacheWrite: 40_000 })
-    expect(await befehl($ as never, 'statistik')).toContain('Kalt bezahlt  1x in dieser Sitzung')
+    expect(await befehl($ as never, 'statistik')).toContain('Kalter Cache  1x in dieser Sitzung')
 })
 
 test('die Leiste weicht einer Umfrage', async ($, on) => {
@@ -1229,7 +1230,7 @@ test('FL unter 24 Stunden zeigt die Restzeit wie SL', async ($, on) => {
 
     const text = await leiste((await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })) as never)
     expect(text).toContain('FL: 12% (05:30)')
-    expect(await befehl($ as never, 'statistik')).toContain('SL: 23% (02:41), FL: 12% (05:30), WL: 72% (Do 09:00)')
+    expect(await befehl($ as never, 'statistik')).toContain('SL: 23 % (02:41), FL: 12 % (05:30), WL: 72 % (Do 09:00)')
 })
 
 test('antwortet der Endpunkt nicht, fehlt FL still, und /statistik sagt warum', async ($, on) => {
@@ -1243,7 +1244,7 @@ test('antwortet der Endpunkt nicht, fehlt FL still, und /statistik sagt warum', 
     expect(text).toContain('SL: 23% (02:41)')
     expect(text).not.toContain('FL')
     expect(b.logs).toEqual([])
-    expect(await befehl($ as never, 'statistik')).toContain('Fable-Limit   nicht abrufbar: der Nutzungs-Endpunkt antwortete mit 500')
+    expect(await befehl($ as never, 'statistik')).toContain('Fable-Limit   nicht abrufbar: die Nutzungsdaten waren gerade nicht abrufbar (Fehler 500)')
 })
 
 test('ohne Limits gibt es keine zweite Zeile', async ($, on) => {
@@ -1356,7 +1357,7 @@ test('lehnt die Engine /context ab, steht es im Eingabefeld, und ein Toast sagt:
     await ui.press({ key: 'details' })
     expect(b.befehle).toEqual([])
     expect(entwuerfe).toEqual(['/context'])
-    expect(toasts).toEqual(['Drück Enter, dann zeigt die App den Kontext.'])
+    expect(toasts).toEqual(['Im Eingabefeld steht /context. Drück Enter, dann zeigt Claude Code den Kontext.'])
     expect(geoeffnet).toEqual([])
 })
 
@@ -1600,7 +1601,7 @@ for (const b of BEFEHLE) {
         for (const arg of ['hilfe', '?', ' Hilfe ']) {
             const t = await befehl($ as never, b.name, arg)
             expect(t).toBe(hilfeText(b))
-            for (const teil of [`/${b.name}: `, 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+            for (const teil of [`/${b.name}`, ' · ', 'Was: ', 'Button: ', 'Gilt: ', 'Argumente: ', ...(b.argumentHint ? ['Beispiel: /'] : [])]) {
                 expect(t).toContain(teil)
             }
         }
@@ -1621,6 +1622,30 @@ test('angemeldet sind nur die Kurzformen /warmhalten und /statistik, kein alter 
     expect(angemeldet.map(a => a.name)).toEqual(['warmhalten', 'statistik'])
     expect(angemeldet.every(a => a.immediate === true)).toBe(true)
     expect(angemeldet.find(a => a.name === 'warmhalten')?.argumentHint).toBe('[6h | 90m | immer | aus | status]')
+})
+
+test('/statistik und /warmhalten mit hilfe oder ? zeigen nur ihre Hilfe und ändern nichts', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    for (const arg of ['hilfe', '?', ' Hilfe ']) {
+        const statistik = await befehl($ as never, 'statistik', arg)
+        expect(statistik).toBe(hilfeText(KURZFORMEN[0]!))
+        expect(statistik).toContain('/statistik · ')
+        expect(statistik).not.toContain('Modell        ')
+        const warm = await befehl($ as never, 'warmhalten', arg)
+        expect(warm).toBe(hilfeText(KURZFORMEN[1]!))
+        for (const teil of ['/warmhalten [6h | 90m | immer | aus | status] · ', 'Was: ', 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /warmhalten 90m']) {
+            expect(warm).toContain(teil)
+        }
+    }
+    await clock.advance(0)
+    expect(b.befehle).toEqual([])
+    expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
+    expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
 })
 
 test('ein alter Name sagt den neuen und tut sonst nichts', async ($, on) => {
@@ -1662,11 +1687,21 @@ test('/statistik:hilfe listet alle Befehle des Mods mit einer Zeile, die Kurzfor
     mock.store(on, {})
     boden(on, STAND)
     await start($ as never)
-    const zeilen = (await befehl($ as never, 'statistik:hilfe')).split('\n')
+    const text = await befehl($ as never, 'statistik:hilfe')
+    const zeilen = text.split('\n')
     for (const name of [...NEUE, 'statistik', 'warmhalten']) {
-        expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
+        expect(zeilen.filter(z => z.startsWith(`/${name} `) && z.includes(' · '))).toHaveLength(1)
     }
-    expect(zeilen).toHaveLength(NEUE.length + 3)
+    const stellen = ['Was der Mod tut', 'So arbeitest du damit', 'Einstellen', 'Kosten', 'Vom Handy (Remote Control)', 'Befehle'].map(k => zeilen.indexOf(k))
+    expect(stellen.every(i => i >= 0)).toBe(true)
+    expect([...stellen].sort((a, b) => a - b)).toEqual(stellen)
+    expect(zeilen[stellen[5]! + 1]).toBe('Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.')
+    expect(zeilen[zeilen.length - 1]).toMatch(/^Mehr zu jedem Befehl: hilfe dahinter, etwa /)
+    for (const teil of ['--values-stdin', 'Das gilt für Chats, die danach beginnen.', 'Das wirkt nach einem Neustart von Claude Code.', 'im Chat nicht umstellbar', 'So arbeitest du damit', 'Die Leiste', 'Cache und Warmhalten', 'Einstellen', 'Nur in diesem Chat:', 'Standard für neue Chats:', 'claude plugin configure statistik@bm-mods', 'statistik@bjoern-mods', 'claude plugin disable statistik@bm-mods', 'Kosten', 'Vom Handy', 'Mehr zu jedem Befehl: hilfe dahinter']) {
+        expect(text).toContain(teil)
+    }
+    // Keine Gedankenstriche, typografischen Anführungszeichen oder Auslassungszeichen.
+    expect(text).not.toMatch(/[\u2013\u2014\u201c\u201d\u201e\u2026]/)
 })
 
 test('/statistik:zeigen zeigt dasselbe wie /statistik', async ($, on) => {
@@ -1705,7 +1740,7 @@ test('/statistik:kontext-zeigen vom Handy: eine Zeile Text statt der Anzeige', a
     await start($ as never)
     await runde($ as never)
     expect(await vomHandy($ as never, 'statistik:kontext-zeigen')).toBe(
-        'Kontext: 68k von 200k Tokens belegt (34 %), verdichtet wird bei 166k. Die ausführliche Kontext-Anzeige gibt es nur am Rechner.',
+        'Kontext: 68k von 200k Tokens belegt (34 %), verdichtet wird bei 166k. Die ausführliche Kontext-Anzeige (/context) gibt es nur am Rechner.',
     )
     await clock.advance(0)
     expect(b.befehle).toEqual([])
@@ -1727,7 +1762,7 @@ test('/statistik:warmhalten-an: ohne Angabe 6 h wie /warmhalten, mit Dauer so la
     expect(await befehl($ as never, 'statistik:warmhalten-an', '3h')).toContain('Warmhalten an für 3 h')
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 3:00', variant: 'primary', kreuz: true })
     expect(await befehl($ as never, 'statistik:warmhalten-an', 'bald')).toBe(
-        '/statistik:warmhalten-an nimmt eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe sind es 6 h.',
+        'Das hat nicht geklappt: Das ist keine Dauer. Schreib sie wie 3h, 90m oder 1h30m, etwa /statistik:warmhalten-an 3h. Ohne Angabe sind es 6 Stunden.',
     )
     expect(await schalterStand(ui as never)).toEqual({ label: '🔥 3:00', variant: 'primary', kreuz: true })
 })
@@ -1844,7 +1879,7 @@ test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) 
     await start($ as never)
     kaputt = true
     expect(await befehl($ as never, 'statistik:warmhalten-an', '3h')).toBe(fehlerText('statistik:warmhalten-an'))
-    expect(fehlerText('statistik:warmhalten-an')).toBe('/statistik:warmhalten-an hat nicht geklappt. Versuch es gleich noch einmal.')
+    expect(fehlerText('statistik:warmhalten-an')).toBe('Das hat nicht geklappt: Bei /statistik:warmhalten-an ist im Mod ein Fehler aufgetreten. Versuch es gleich noch einmal; /statistik:hilfe zeigt die Befehle.')
 })
 
 test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', async ($, on) => {
@@ -1935,7 +1970,7 @@ test('im Terminal zwischen zwei Runden verdichtet der Schwamm direkt, mit der An
     // Eine Zeile zum Compact, der Text der Zusammenfassung steht nicht im Verlauf.
     expect(b.logs).toEqual([
         'Sicherungspunkt gespeichert. /statistik:letzter-stand-zeigen zeigt ihn.',
-        'Compact: 40k auf 8,0k Tokens, 80 Prozent weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen',
+        'Verdichtet: von 40k auf 8,0k Tokens, 80 % weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen',
     ])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
 })
@@ -1993,7 +2028,7 @@ test('/statistik:letzter-stand-zeigen am Rechner: das Fenster Letzter Stand mit 
     boden(on, STAND)
     const geoeffnet = fensterZaehler(on)
     await start($ as never)
-    expect(await befehl($ as never, 'statistik:letzter-stand-zeigen')).toBe('Der letzte Stand steht im Fenster daneben.')
+    expect(await befehl($ as never, 'statistik:letzter-stand-zeigen')).toBe('Der Sicherungspunkt steht im Fenster "Letzter Stand".')
     expect(geoeffnet).toEqual(['statistik-letzter-stand'])
     for (const surface of FLAECHEN) {
         const ui = await $.ui.mount({ ...FENSTER, surface })
@@ -2103,7 +2138,7 @@ test('Sicherungspunkte anderer Chats, 30 Tage unberührt, gehen höchstens einma
 /** Ein Compact am 15. Juli 2026 um 12:32 UTC: 14:32 in Berlin. */
 const COMPACT_AM = Date.UTC(2026, 6, 15, 12, 32)
 const ZUSAMMENFASSUNG = '## Ziel\nDie Statistik zeigt die Zusammenfassung im Fenster.\n\n## Offen\nTests.'
-const HINWEIS = 'Compact: 412k auf 38k Tokens, 91 Prozent weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen'
+const HINWEIS = 'Verdichtet: von 412k auf 38k Tokens, 91 % weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen'
 
 const FENSTER_Z = {
     plugin: 'statistik',
@@ -2159,7 +2194,7 @@ test('ohne Text der Zusammenfassung steht kein Hinweis auf den Befehl da', async
     fensterZaehler(on)
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
-    expect(b.logs).toEqual(['Compact: 412k auf 38k Tokens, 91 Prozent weniger'])
+    expect(b.logs).toEqual(['Verdichtet: von 412k auf 38k Tokens, 91 % weniger'])
     expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
 })
 
@@ -2171,10 +2206,10 @@ test('ohne Token-Zahlen: eigene Zeile mit Hinweis, im Fenster nur die Uhrzeit', 
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
     expect(b.logs).toEqual([
-        'Compact durchgelaufen, die Token-Zahlen hat die Engine nicht festgehalten. Zusammenfassung: /statistik:zusammenfassung-zeigen',
+        'Verdichtet; wie viele Tokens es vorher und nachher waren, hat Claude Code nicht gemeldet. Zusammenfassung: /statistik:zusammenfassung-zeigen',
     ])
     const ui = await $.ui.mount({ ...FENSTER_Z, surface: 'desktop' })
-    expect((await ui.find({ type: 'Text', text: /^Compact/ }))?.text).toBe('Compact um 14:32')
+    expect((await ui.find({ type: 'Text', text: /^Verdichtet/ }))?.text).toBe('Verdichtet um 14:32')
 })
 
 test('/statistik:zusammenfassung-zeigen öffnet das Fenster Zusammenfassung mit Kopfzeile und Text', async ($, on) => {
@@ -2186,11 +2221,11 @@ test('/statistik:zusammenfassung-zeigen öffnet das Fenster Zusammenfassung mit 
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
     await clock.advance(30 * MIN)
-    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Compact steht im Fenster Zusammenfassung.')
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Verdichten steht im Fenster "Zusammenfassung vom Verdichten".')
     expect(geoeffnet).toEqual(['statistik-zusammenfassung'])
     for (const surface of FLAECHEN) {
         const ui = await $.ui.mount({ ...FENSTER_Z, surface })
-        expect((await ui.find({ type: 'Text', text: /^Compact/ }))?.text).toBe('Compact um 14:32, 412k auf 38k Tokens')
+        expect((await ui.find({ type: 'Text', text: /^Verdichtet/ }))?.text).toBe('Verdichtet um 14:32, von 412k auf 38k Tokens')
         expect((await ui.find({ type: 'Markdown' }))?.text).toBe(ZUSAMMENFASSUNG)
         expect(Boolean(await ui.find({ type: 'Button', key: 'schliessen' }))).toBe(surface === 'terminal')
         await ui.unmount()
@@ -2206,7 +2241,7 @@ test('ist das Fenster nicht platziert, kommt die Zusammenfassung als Antwort, ge
     on('ui.open', () => ({ value: { isPlaced: false, reason: 'keine Fläche' } }) as never)
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
-    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`Compact um 14:32, 412k auf 38k Tokens\n\n${lang.slice(0, 10_000)}`)
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`Verdichtet um 14:32, von 412k auf 38k Tokens\n\n${lang.slice(0, 10_000)}`)
 })
 
 test('ohne Compact: der Befehl sagt es, das Fenster auch, und es geht nichts auf', async ($, on) => {
@@ -2215,21 +2250,21 @@ test('ohne Compact: der Befehl sagt es, das Fenster auch, und es geht nichts auf
     boden(on, STAND)
     const geoeffnet = fensterZaehler(on)
     await start($ as never)
-    expect(OHNE_ZUSAMMENFASSUNG).toBe('In diesem Chat lief noch kein Compact, es gibt keine Zusammenfassung.')
+    expect(OHNE_ZUSAMMENFASSUNG).toBe('In diesem Chat wurde noch nicht verdichtet, es gibt also keine Zusammenfassung.')
     expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
     expect(await vomHandy($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
     expect(geoeffnet).toEqual([])
     for (const surface of FLAECHEN) {
         const ui = await $.ui.mount({ ...FENSTER_Z, surface })
-        expect((await ui.find({ type: 'Text', text: /Compact/ }))?.text).toBe(FENSTER_OHNE_ZUSAMMENFASSUNG)
+        expect((await ui.find({ type: 'Text', text: /verdichtet/ }))?.text).toBe(FENSTER_OHNE_ZUSAMMENFASSUNG)
         await ui.unmount()
     }
 })
 
 test('Kopfzeile der Zusammenfassung in Berliner Zeit, an einem anderen Tag mit Datum', () => {
     const z = { text: 'x', am: Date.UTC(2026, 11, 1, 23, 30), tokensVorher: 412_000, tokensNachher: 38_000 }
-    expect(zusammenfassungKopf(z, Date.UTC(2026, 11, 2, 8, 0))).toBe('Compact um 00:30, 412k auf 38k Tokens')
-    expect(zusammenfassungKopf({ text: 'x', am: COMPACT_AM }, Date.UTC(2026, 6, 16, 9, 0))).toBe('Compact am 15.07. um 14:32')
+    expect(zusammenfassungKopf(z, Date.UTC(2026, 11, 2, 8, 0))).toBe('Verdichtet um 00:30, von 412k auf 38k Tokens')
+    expect(zusammenfassungKopf({ text: 'x', am: COMPACT_AM }, Date.UTC(2026, 6, 16, 9, 0))).toBe('Verdichtet am 15.07. um 14:32')
 })
 
 test('ist im Leitstand Verdecken an, verdecken Fenster und Textantwort der Zusammenfassung Geheimes', { plugins: [LEITSTAND] }, async ($, on) => {
@@ -2244,7 +2279,7 @@ test('ist im Leitstand Verdecken an, verdecken Fenster und Textantwort der Zusam
     on('ui.open', () => ({ value: { isPlaced: platziert } }) as never)
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
-    const kopf = 'Compact um 14:32, 412k auf 38k Tokens'
+    const kopf = 'Verdichtet um 14:32, von 412k auf 38k Tokens'
     // Ohne Wert vom Leitstand: nichts verdeckt.
     expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`${kopf}\n\n${offen}`)
 
@@ -2271,7 +2306,7 @@ test('nach /clear gibt es keine Zusammenfassung mehr', async ($, on) => {
     on('classic.SessionStart', () => ({}) as never)
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
-    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Compact steht im Fenster Zusammenfassung.')
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Verdichten steht im Fenster "Zusammenfassung vom Verdichten".')
     await $.classic.SessionStart({ source: 'clear' } as never)
     expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
 })

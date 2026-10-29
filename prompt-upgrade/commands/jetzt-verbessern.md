@@ -1,5 +1,5 @@
 ---
-description: "Überspringt die übrigen Rückfragen und verbessert jetzt"
+description: "Überspringt die offenen Rückfragen und schreibt den Prompt jetzt um"
 disable-model-invocation: true
 ---
 

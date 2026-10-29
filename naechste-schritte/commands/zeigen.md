@@ -1,5 +1,5 @@
 ---
-description: "Die aktuellen Vorschläge für den nächsten Schritt nummeriert als Text"
+description: "Die aktuellen Vorschläge als nummerierte Liste zeigen"
 disable-model-invocation: true
 ---
 

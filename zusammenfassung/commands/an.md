@@ -1,5 +1,5 @@
 ---
-description: "Die Zusammenfassung nach jeder Arbeitsrunde in diesem Chat einschalten"
+description: "Die Zusammenfassung nach jeder Runde in diesem Chat einschalten"
 disable-model-invocation: true
 ---
 

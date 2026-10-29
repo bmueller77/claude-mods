@@ -1,5 +1,5 @@
 ---
-description: "Schickt den verbesserten Prompt ab"
+description: "Sendet das Upgrade an Claude und schließt das Seitenfenster"
 disable-model-invocation: true
 ---
 

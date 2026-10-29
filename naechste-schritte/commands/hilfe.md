@@ -1,5 +1,5 @@
 ---
-description: "Alle Befehle von Nächste Schritte mit einer Zeile Erklärung"
+description: "Was Nächste Schritte tut, wie du damit arbeitest, alle Befehle"
 disable-model-invocation: true
 ---
 

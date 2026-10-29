@@ -1,5 +1,5 @@
 ---
-description: "Getippte Prompts erst ins Seitenfenster, nur in diesem Chat"
+description: "Hält jede Nachricht, die du am Rechner tippst, zum Verbessern an (nur dieser Chat)"
 disable-model-invocation: true
 ---
 

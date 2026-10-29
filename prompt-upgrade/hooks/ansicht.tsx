@@ -421,7 +421,7 @@ function eingabe(k: Kit, breite: number, a: Aktionen): RenderElement {
             {Input ? (
                 <Input key="eingabe" label="Prompt" placeholder="Was soll Claude tun?" submitLabel="verbessern" autoFocus onSubmit={v => a.starte(v)} />
             ) : (
-                <Text color={FARBE.bernstein}>{kuerze('Hier gibt es kein Eingabefeld; nimm /better <Prompt>.', breite)}</Text>
+                <Text color={FARBE.bernstein}>{kuerze('Hier gibt es kein Eingabefeld. Tipp deinen Prompt am Rechner ein, dort geht auch /better [Prompt].', breite)}</Text>
             )}
             {knopfReihen(k, [{ key: 'abbrechen', label: 'Abbrechen', art: 'leise', onPress: () => a.abbrechen() }], breite)}
         </Box>
@@ -585,14 +585,16 @@ function pruefen(k: Kit, x: PromptUpgradeAblauf, breite: number, a: Aktionen): R
                         onSubmit={v => a.ausfuehren(v)}
                     />
                 ) : (
-                    <Text color={FARBE.bernstein}>{kuerze('Bearbeiten geht hier nicht; Kopieren und im Eingabefeld ändern.', breite)}</Text>
+                    <Text color={FARBE.bernstein}>{kuerze('Bearbeiten geht hier nicht. Kopier das Upgrade und ändere es im Eingabefeld, oder bearbeite es am Rechner.', breite)}</Text>
                 )
             ) : null}
             {offen.length > 0 ? (
                 <Box flexDirection="column">
                     {zeilen(
                         k,
-                        `${offen.length === 1 ? 'Ein Platzhalter ist' : `${offen.length} Platzhalter sind`} noch offen: ${offen.join(', ')}. Mit Bearbeiten ausfüllen.`,
+                        offen.length === 1
+                            ? `Ein Platzhalter ist noch offen: ${offen.join(', ')}. Füll ihn mit Bearbeiten aus; Ausführen sendet ihn sonst so, wie er steht.`
+                            : `${offen.length} Platzhalter sind noch offen: ${offen.join(', ')}. Füll sie mit Bearbeiten aus; Ausführen sendet sie sonst so, wie sie stehen.`,
                         breite,
                         { color: FARBE.bernstein },
                     )}
@@ -700,7 +702,7 @@ function leer(k: Kit, breite: number, a: Aktionen): RenderElement {
     const { Box } = k
     return (
         <Box flexDirection="column" gap={1}>
-            <Box flexDirection="column">{zeilen(k, 'Kein Prompt offen. /better <Prompt> startet ein Upgrade.', breite, { color: FARBE.leise })}</Box>
+            <Box flexDirection="column">{zeilen(k, 'Kein Prompt offen. /better [Prompt] startet ein Upgrade.', breite, { color: FARBE.leise })}</Box>
             {knopfReihen(
                 k,
                 [

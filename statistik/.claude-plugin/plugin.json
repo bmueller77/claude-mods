@@ -1,7 +1,7 @@
 {
   "name": "statistik",
-  "version": "0.19.2",
-  "description": "Statistik in einer Zeile über dem Eingabefeld: Nutzungslimits (SL, FL bei Fable, WL), Prompt-Cache und Kontext als Ringe, Kontext-Details über /context (die Anzeige der App), warm oder kalt, dazu die Buttons Warmhalten, Compact und Aufräumen mit Sicherungspunkt. Ersetzt cache-meter und cache-tax.",
+  "version": "0.19.2.1",
+  "description": "Zeigt über dem Eingabefeld eine Leiste mit Chatlänge, Kontext, Cache-Uhr und deinen Nutzungslimits, dazu Buttons, die den Cache warm halten, den Chat verdichten oder ihn mit Sicherungspunkt aufräumen. Hilfe: /statistik:hilfe.",
   "author": {
     "name": "Björn Müller",
     "email": "bjoern@mueller.family"
@@ -11,7 +11,7 @@
     "cacheLaufzeit": {
       "type": "string",
       "title": "Cache-Laufzeit",
-      "description": "auto nimmt eine Stunde an (mit Fragezeichen), bis ein Cache-Treffer nach mehr als fünf Minuten Pause sie belegt oder die Sitzung sie selbst meldet. 5m oder 1h legt sie fest.",
+      "description": "Standard für neue Chats, im Chat nicht umstellbar: wie lange der Cache warm bleibt, solange Claude Code die Laufzeit nicht gemeldet und der Mod sie nicht gemessen hat (kommt nach mehr als 5 Minuten Pause noch etwas aus dem Cache, läuft er 1 Stunde). Danach zählt das Gemeldete oder Gemessene. auto: 1 Stunde angenommen, an der Uhr mit Fragezeichen. 5m: 5 Minuten. 1h: 1 Stunde. Eingebaut: auto.",
       "default": "auto",
       "options": [
         "auto",

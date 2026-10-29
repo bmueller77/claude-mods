@@ -1,5 +1,5 @@
 /**
- * Dateien, bis 2026-10-26 der Mod Filetree: ein Dateibaum wie in einer IDE als Fenster in der Seitenleiste, der zeigt,
+ * Dateien, bis 2026-10-26 der Mod Filetree: ein Dateibaum wie in einer IDE als Seitenfenster, der zeigt,
  * welche Dateien Claude gerade liest, schreibt oder committet. Deutsche Fassung von data-goblin/claude-code-filetree
  * (MIT, Kurt Buhler; LICENSE und ACKNOWLEDGEMENTS.md in diesem Ordner).
  *
@@ -1075,16 +1075,16 @@ async function layoutHinweis($: EngineInterface, e: CommandRunInput, befehl: str
 
 /** Was ein Terminal mit diesem Layout statt des Fensters sagt; undefined, wenn es das Fenster zeigen kann. Auch für 📂 im Band. */
 export function terminalHinweis(layout: { isFullscreen: boolean; columns: number }, befehl: string): string | undefined {
-  if (!layout.isFullscreen) return `Das Fenster Dateien steht in der Seitenleiste, und die braucht das Vollbild-Layout. Führ /tui fullscreen aus, dann /${befehl}.`
-  if (layout.columns < 110) return `Das Fenster Dateien steht in der Seitenleiste, und die braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /${befehl}.`
+  if (!layout.isFullscreen) return `Das Fenster Dateien steht neben dem Chat, und das braucht im Terminal das Vollbild-Layout. Führ /tui fullscreen aus, dann /${befehl}.`
+  if (layout.columns < 110) return `Das Fenster Dateien steht neben dem Chat, und das braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /${befehl}.`
   return undefined
 }
 
 // Ein Befehl je Knopf: /leitstand:dateien-…, kurz /dateien-…; /filetree bleibt daneben.
 
-export const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.'
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt: Im Leitstand ging beim Ausführen etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.'
 export const TEXT_NICHT_OFFEN = 'Das Fenster Dateien ist in diesem Chat noch nicht offen; /dateien öffnet es.'
-export const TEXT_HANDY = 'Das Fenster Dateien geht nur am Computer auf; auf dem Handy sind Fenster nicht zu sehen.'
+export const TEXT_HANDY = 'Das Fenster Dateien gibt es nur am Rechner; vom Handy sind Fenster nicht zu sehen.'
 const NUR_HIER = '(nur in diesem Chat)'
 
 /** Jeder Befehl von Dateien unter seinem vollen Namen und unter seiner Kurzform (dateien für leitstand:dateien). */
@@ -1114,7 +1114,14 @@ async function befehlZeigen($: EngineInterface, arg: string, e: CommandRunInput)
 /** Was jeder Befehl tut, wie sein Knopf; die Antwort ist ein Satz. */
 async function befehlAus($: EngineInterface, name: string, arg: string, e: CommandRunInput): Promise<string> {
   if (name === 'leitstand:dateien') return befehlZeigen($, arg, e)
-  if (!(await get($)).root) return TEXT_NICHT_OFFEN
+  const handy = e.origin?.kind === 'bridge'
+  if (!(await get($)).root) return handy ? TEXT_HANDY : TEXT_NICHT_OFFEN
+  const text = await schalteDateien($, name)
+  return handy && text !== BEFEHL_FEHLER ? `${text} Zu sehen ist das nur am Rechner.` : text
+}
+
+/** Die Wirkung der Befehle außer /leitstand:dateien, wie ihr Knopf; die Antwort ist ein Satz. */
+async function schalteDateien($: EngineInterface, name: string): Promise<string> {
   switch (name) {
     case 'leitstand:dateien-versteckte-an':
       await zeigeVersteckte($, true)
@@ -1241,7 +1248,7 @@ export function registerFiletree(on: On, options: PluginOptions): void {
   on('session.start', { cwd: /^/ }, async ($, e, next) => {
     // /filetree bleibt als Grundbefehl. /dateien und die anderen Kurzformen meldet der Leitstand an, die langen Namen
     // (/leitstand:dateien) sind Dateien in commands/.
-    await $.command.register({ name: 'filetree', description: 'Dateien in der Seitenleiste zeigen, wie /dateien (Leitstand)', argumentHint: '[Pfad]', immediate: true }).catch(() => undefined)
+    await $.command.register({ name: 'filetree', description: 'Dateien im Seitenfenster zeigen, wie /dateien (Leitstand)', argumentHint: '[Pfad]', immediate: true }).catch(() => undefined)
     try {
       const windows = await einrichten($)
       nebenbei(hochfahren($, windows))

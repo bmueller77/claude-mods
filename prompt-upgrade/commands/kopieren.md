@@ -1,5 +1,5 @@
 ---
-description: "Kopiert den verbesserten Prompt in die Zwischenablage"
+description: "Legt das Upgrade in die Zwischenablage, ohne es zu senden"
 disable-model-invocation: true
 ---
 

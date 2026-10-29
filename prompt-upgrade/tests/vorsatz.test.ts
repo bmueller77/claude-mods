@@ -1,4 +1,4 @@
-/** Der Vorsatz der Engine vor Befehlsantworten weicht dem Zusatz "(gemeldet vom Mod Prompt Upgrade)". */
+/** Der Vorsatz der Engine vor Befehlsantworten weicht dem Zusatz "(gemeldet vom Mod Prompt-Upgrade)". */
 import { expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { SessionAppendInput } from 'claude-code'
@@ -20,10 +20,10 @@ const zeile = async ($: Engine, text: string) => {
 }
 
 test('eigener Name weg, Zusatz am Ende; andere Namen bleiben; mehrzeilig in eigener Zeile; fremde Zeilen unveraendert', async $ => {
-    expect(await zeile($, 'prompt-upgrade: Text')).toBe(aus('Text (gemeldet vom Mod Prompt Upgrade)'))
-    expect(await zeile($, 'andere+prompt-upgrade: Text')).toBe(aus('andere: Text (gemeldet vom Mod Prompt Upgrade)'))
-    expect(await zeile($, 'prompt-upgrade+andere: Text')).toBe(aus('andere: Text (gemeldet vom Mod Prompt Upgrade)'))
-    expect(await zeile($, 'prompt-upgrade: Zeile eins\nZeile zwei')).toBe(aus('Zeile eins\nZeile zwei\n(gemeldet vom Mod Prompt Upgrade)'))
+    expect(await zeile($, 'prompt-upgrade: Text')).toBe(aus('Text (gemeldet vom Mod Prompt-Upgrade)'))
+    expect(await zeile($, 'andere+prompt-upgrade: Text')).toBe(aus('andere: Text (gemeldet vom Mod Prompt-Upgrade)'))
+    expect(await zeile($, 'prompt-upgrade+andere: Text')).toBe(aus('andere: Text (gemeldet vom Mod Prompt-Upgrade)'))
+    expect(await zeile($, 'prompt-upgrade: Zeile eins\nZeile zwei')).toBe(aus('Zeile eins\nZeile zwei\n(gemeldet vom Mod Prompt-Upgrade)'))
     expect(await zeile($, 'andere: Text')).toBe(aus('andere: Text'))
     expect(await zeile($, 'Text ohne Vorsatz')).toBe(aus('Text ohne Vorsatz'))
 })

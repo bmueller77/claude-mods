@@ -1,5 +1,5 @@
 ---
-description: "Den Kontext verdichten (/compact), sofort ohne Countdown"
+description: "Verdichtet den Chat (/compact), sofort ohne Countdown"
 disable-model-invocation: true
 ---
 

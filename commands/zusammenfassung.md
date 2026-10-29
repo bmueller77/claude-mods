@@ -1,5 +1,5 @@
 ---
-description: Die Zusammenfassung nach jeder Arbeitsrunde aus- oder einschalten; das Replay bleibt (Zusammenfassung)
+description: Die Zusammenfassung nach jeder Runde in diesem Chat aus- oder einschalten (Zusammenfassung)
 disable-model-invocation: true
 ---
 

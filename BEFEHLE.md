@@ -14,7 +14,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | Befehl | Was er tut |
 |---|---|
 | `/leitstand …` | Grundbefehl mit den älteren englischen Unterbefehlen, etwa on, off, pause, continue, plan, week und tour |
-| `/reflect [Schwerpunkt]` | Startet die Selbstkritik; mit zeigen, regeln, speichern &lt;Nr>, verwerfen &lt;Nr> oder hilfe dahinter wie die Befehle unten |
+| `/reflect [Schwerpunkt]` | Selbstkritik der bisherigen Arbeit, gelernte Regeln verwalten |
 | `/filetree [Pfad]` | Öffnet die Dateien wie /dateien, ohne Pfad im Arbeitsordner |
 | `/autopilot [an\|aus]` | Autopilot ein- oder ausschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist |
 
@@ -34,7 +34,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 |---|---|
 | `/leitstand:ansicht-einfach` | Ansicht Einfach: Schritte und Fortschritt |
 | `/leitstand:ansicht-detailliert` | Ansicht Detailliert: dazu Zeit und Tokens |
-| `/leitstand:ansicht-minimal` | Ansicht Minimal: eine Zeile |
+| `/leitstand:ansicht-minimal` | Ansicht Minimal: eine Zeile mit dem Stand |
 
 ### Arbeitsweise
 
@@ -59,8 +59,8 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | Befehl | Was er tut |
 |---|---|
 | `/leitstand:verlauf-zeigen [gestern\|JJJJ-MM-TT]` | Den Verlauf eines Tages zeigen |
-| `/leitstand:tagesbericht` | Teambericht für heute als Text |
-| `/leitstand:wochenbericht` | Teambericht für diese Woche als Text |
+| `/leitstand:tagesbericht` | Tagesbericht für heute als Text |
+| `/leitstand:wochenbericht` | Wochenbericht für diese Woche als Text |
 | `/leitstand:meine-woche` | Deine Woche über alle Projekte |
 
 ### Helfer
@@ -71,7 +71,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:kurzantworten-aus` | Kurzantworten ausschalten |
 | `/leitstand:vermenschlichen` | Letzte Antwort natürlicher umschreiben |
 | `/leitstand:ausfragen [Thema]` | Grill mich: Claude löchert dich mit Fragen |
-| `/leitstand:sauberer-code` | Code prüfen mit clean-code |
+| `/leitstand:sauberer-code` | Code prüfen lassen mit dem Skill clean-code |
 | `/leitstand:fernsteuerung-an` | Remote Control einschalten |
 | `/leitstand:fernsteuerung-aus` | Remote Control ausschalten |
 
@@ -90,7 +90,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 
 | Befehl | Was er tut |
 |---|---|
-| `/leitstand:regeln` | Wartende Regeln mit Nummern zeigen, am Rechner auch im Fenster Regeln |
+| `/leitstand:regeln` | Wartende Regeln mit Nummern zeigen |
 | `/leitstand:regel-global <Nr>` | Eine wartende Regel für alle Projekte speichern |
 | `/leitstand:regel-projekt <Nr>` | Eine wartende Regel für dieses Projekt speichern |
 | `/leitstand:regel-chat <Nr>` | Eine wartende Regel nur für diesen Chat übernehmen |
@@ -103,7 +103,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 
 | Befehl | Was er tut |
 |---|---|
-| `/leitstand:dateien [Pfad]` | Dateien in der Seitenleiste zeigen |
+| `/leitstand:dateien [Pfad]` | Dateien im Seitenfenster zeigen |
 | `/leitstand:dateien-versteckte-an` | Versteckte Dateien zeigen (◉) |
 | `/leitstand:dateien-versteckte-aus` | Versteckte Dateien ausblenden (○) |
 | `/leitstand:dateien-groessen-an` | Dateien: Größe statt Datum zeigen (Σ) |
@@ -116,9 +116,9 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | Befehl | Was er tut |
 |---|---|
 | `/leitstand:autopilot-an` | Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist |
-| `/leitstand:autopilot-aus` | Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld |
+| `/leitstand:autopilot-aus` | Autopilot ausschalten; danach steht sein Bericht in der Leiste |
 | `/leitstand:autopilot-fragen-zeigen` | Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text |
-| `/leitstand:autopilot-bericht-weg` | Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen |
+| `/leitstand:autopilot-bericht-weg` | Den Bericht des beendeten Autopiloten aus der Leiste wegräumen |
 
 ### Schutz
 
@@ -136,7 +136,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 
 | Befehl | Was er tut |
 |---|---|
-| `/leitstand:einstellungen-zeigen` | Die Leitstand-Einstellungen öffnen |
+| `/leitstand:einstellungen-zeigen` | Das Einstellungsfenster öffnen |
 | `/leitstand:ton-aus` | Töne ausschalten |
 | `/leitstand:ton-signalton` | Töne: Signalton |
 | `/leitstand:ton-stimme` | Töne: Signalton und Stimme |
@@ -155,22 +155,22 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 
 ## Statistik
 
-Eine Zeile über der Eingabe mit Nutzungslimits, Tokens, Kontext und Cache-Uhr. Hält den Prompt-Cache auf Wunsch warm und räumt den Chat mit Sicherungspunkt auf.
+Eine Leiste über der Eingabe mit Chatlänge, Kontext, Cache-Uhr und Nutzungslimits. Hält den Prompt-Cache auf Wunsch warm und räumt den Chat mit Sicherungspunkt auf.
 
 | Befehl | Was er tut |
 |---|---|
-| `/statistik` | Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick |
-| `/warmhalten [6h \| 90m \| immer \| aus \| status]` | Prompt-Cache warm halten. Ohne Angabe 6 h, eine Dauer wie 90m, immer, aus oder status |
-| `/statistik:hilfe` | Alle Befehle der Statistik mit einer Zeile Erklärung |
-| `/statistik:zeigen` | Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick, wie /statistik |
-| `/statistik:kontext-zeigen` | Den Kontext im Detail zeigen: /context, die Anzeige der App |
-| `/statistik:warmhalten-an [Dauer, z. B. 3h oder 90m]` | Prompt-Cache warm halten, ohne Angabe 6 h, sonst so lange wie angegeben |
-| `/statistik:warmhalten-immer` | Prompt-Cache ohne Ende warm halten, bis dieser Chat endet |
-| `/statistik:warmhalten-aus` | Warmhalten des Prompt-Caches sofort ausschalten |
-| `/statistik:chat-aufraeumen` | Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown |
-| `/statistik:letzter-stand-zeigen` | Den Sicherungspunkt zeigen, den Claude beim letzten Aufräumen gespeichert hat |
-| `/statistik:zusammenfassung-zeigen` | Die Zusammenfassung vom letzten Compact in einem Fenster zeigen |
-| `/statistik:verdichten` | Den Kontext verdichten (/compact), sofort ohne Countdown |
+| `/statistik` | Zeigt Cache, Kontext, Kosten, Limits und Warmhalten dieses Chats als Text |
+| `/warmhalten [6h \| 90m \| immer \| aus \| status]` | Hält den Cache warm: ohne Angabe 6 Stunden, eine Dauer wie 90m, immer, aus oder status |
+| `/statistik:hilfe` | Zeigt, wie die Statistik arbeitet, was die Leiste bedeutet, wie du sie einstellst, und alle Befehle |
+| `/statistik:zeigen` | Zeigt Cache, Kontext, Kosten, Limits und Warmhalten dieses Chats als Text, wie /statistik |
+| `/statistik:kontext-zeigen` | Zeigt den Kontext im Detail mit /context, vom Handy als eine Zeile |
+| `/statistik:warmhalten-an [Dauer, z. B. 3h oder 90m]` | Hält den Cache warm, ohne Angabe 6 Stunden, sonst so lange wie angegeben |
+| `/statistik:warmhalten-immer` | Hält den Cache warm, bis dieser Chat endet |
+| `/statistik:warmhalten-aus` | Schaltet das Warmhalten des Caches sofort aus |
+| `/statistik:chat-aufraeumen` | Räumt den Chat auf: erst ein Sicherungspunkt, dann verdichten, sofort ohne Countdown |
+| `/statistik:letzter-stand-zeigen` | Zeigt den Sicherungspunkt vom letzten Aufräumen dieses Chats |
+| `/statistik:zusammenfassung-zeigen` | Zeigt die Zusammenfassung vom letzten Verdichten dieses Chats |
+| `/statistik:verdichten` | Verdichtet den Chat (/compact), sofort ohne Countdown |
 
 ## Nächste Schritte
 
@@ -178,11 +178,11 @@ Nach jeder Antwort zwei oder drei Vorschläge für die nächste Eingabe. Im leer
 
 | Befehl | Was er tut |
 |---|---|
-| `/naechste-schritte:hilfe` | Alle Befehle von Nächste Schritte mit einer Zeile Erklärung |
-| `/naechste-schritte:zeigen` | Die aktuellen Vorschläge für den nächsten Schritt nummeriert als Text |
-| `/naechste-schritte:1` | Den 1. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken |
-| `/naechste-schritte:2` | Den 2. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken |
-| `/naechste-schritte:3` | Den 3. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken |
+| `/naechste-schritte:hilfe` | Was Nächste Schritte tut, wie du damit arbeitest, alle Befehle |
+| `/naechste-schritte:zeigen` | Die aktuellen Vorschläge als nummerierte Liste zeigen |
+| `/naechste-schritte:1` | Den 1. Vorschlag für den nächsten Schritt sofort als deine Nachricht abschicken |
+| `/naechste-schritte:2` | Den 2. Vorschlag für den nächsten Schritt sofort als deine Nachricht abschicken |
+| `/naechste-schritte:3` | Den 3. Vorschlag für den nächsten Schritt sofort als deine Nachricht abschicken |
 
 ## Zusammenfassung
 
@@ -190,14 +190,14 @@ Nach jeder Arbeitsrunde steht über der Eingabe, was getan wurde und was man lei
 
 | Befehl | Was er tut |
 |---|---|
-| `/zusammenfassung` | Die Zusammenfassung nach jeder Arbeitsrunde aus- oder einschalten; das Replay bleibt |
-| `/replay` | Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen |
-| `/zusammenfassung:hilfe` | Alle Befehle der Zusammenfassung mit einer Zeile Erklärung |
-| `/zusammenfassung:an` | Die Zusammenfassung nach jeder Arbeitsrunde in diesem Chat einschalten |
+| `/zusammenfassung` | Die Zusammenfassung nach jeder Runde in diesem Chat aus- oder einschalten |
+| `/replay` | Jede Dateiänderung der letzten Runde Schritt für Schritt zeigen |
+| `/zusammenfassung:hilfe` | Was die Zusammenfassung tut, wie du sie einstellst, alle Befehle |
+| `/zusammenfassung:an` | Die Zusammenfassung nach jeder Runde in diesem Chat einschalten |
 | `/zusammenfassung:aus` | Die Zusammenfassung in diesem Chat ausschalten; das Replay bleibt |
-| `/zusammenfassung:aufklappen` | Die Zusammenfassung aufklappen: ungekürzt, mit Erklärung zum Hinweis und Dateiliste |
+| `/zusammenfassung:aufklappen` | Die Zusammenfassung aufklappen: ganze Zeilen, Erklärung zum Hinweis, geänderte Dateien |
 | `/zusammenfassung:zuklappen` | Die aufgeklappte Zusammenfassung wieder zuklappen |
-| `/zusammenfassung:replay` | Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen |
+| `/zusammenfassung:replay` | Jede Dateiänderung der letzten Runde Schritt für Schritt zeigen |
 
 ## Visible Compact
 
@@ -206,8 +206,8 @@ Zeigt den Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf W
 | Befehl | Was er tut |
 |---|---|
 | `/show-last-compact` | Öffnet „Verdichtungen des Chats“ wieder: was verdichtet wurde, neben dem, was danach übrig blieb |
-| `/visible-compact:hilfe` | Listet alle Befehle von Visible Compact |
-| `/visible-compact:zeigen` | Öffnet das Fenster „Verdichtungen des Chats“ (wie /show-last-compact) |
+| `/visible-compact:hilfe` | Zeigt, wie Visible Compact arbeitet, wie du es einstellst, und alle Befehle |
+| `/visible-compact:zeigen` | Öffnet das Fenster "Verdichtungen des Chats" mit der neuesten Verdichtung, vom Handy als Text |
 | `/visible-compact:uebersetzen-an` | Zeigt englische Abschnitte im Fenster auf Deutsch, nur in diesem Chat |
 | `/visible-compact:uebersetzen-aus` | Zeigt die Abschnitte im Fenster wieder im Original, nur in diesem Chat |
 
@@ -217,17 +217,17 @@ Macht aus einem groben Prompt mit bis zu drei Rückfragen einen besseren. Gesend
 
 | Befehl | Was er tut |
 |---|---|
-| `/better <Prompt>` | Verbessert einen Prompt mit Rückfragen; /better an, aus und verlauf wirken wie die Befehle unten |
-| `/prompt-upgrade:hilfe` | Listet alle Befehle von Prompt-Upgrade |
-| `/prompt-upgrade:starten <Prompt>` | Verbessert einen Prompt im Seitenfenster, bevor er rausgeht (wie /better &lt;Prompt>) |
-| `/prompt-upgrade:automatik-an` | Getippte Prompts erst ins Seitenfenster, nur in diesem Chat |
-| `/prompt-upgrade:automatik-aus` | Getippte Prompts gehen direkt raus, nur in diesem Chat |
-| `/prompt-upgrade:verlauf` | Zeigt die letzten Upgrades als Text, am Rechner auch im Fenster |
-| `/prompt-upgrade:jetzt-verbessern` | Überspringt die übrigen Rückfragen und verbessert jetzt |
-| `/prompt-upgrade:ausfuehren` | Schickt den verbesserten Prompt ab |
-| `/prompt-upgrade:original-senden` | Schickt nach einem Fehler den Original-Prompt unverändert ab |
-| `/prompt-upgrade:kopieren` | Kopiert den verbesserten Prompt in die Zwischenablage |
-| `/prompt-upgrade:abbrechen` | Bricht ab, schließt das Fenster und legt den Prompt zurück ins Eingabefeld |
+| `/better <Prompt>` | Prompt-Upgrade: verbessert deinen Prompt mit Rückfragen, bevor du ihn sendest; an, aus, verlauf, hilfe |
+| `/prompt-upgrade:hilfe` | Erklärt Prompt-Upgrade: wie du damit arbeitest, es einstellst und welche Befehle es gibt |
+| `/prompt-upgrade:starten <Prompt>` | Öffnet deinen Prompt im Seitenfenster zum Verbessern; gesendet wird erst mit Ausführen |
+| `/prompt-upgrade:automatik-an` | Hält jede Nachricht, die du am Rechner tippst, zum Verbessern an (nur dieser Chat) |
+| `/prompt-upgrade:automatik-aus` | Was du tippst, wird wieder direkt gesendet (nur dieser Chat) |
+| `/prompt-upgrade:verlauf` | Zeigt deine letzten 20 Upgrades aus allen Chats, am Rechner auch im Seitenfenster |
+| `/prompt-upgrade:jetzt-verbessern` | Überspringt die offenen Rückfragen und schreibt den Prompt jetzt um |
+| `/prompt-upgrade:ausfuehren` | Sendet das Upgrade an Claude und schließt das Seitenfenster |
+| `/prompt-upgrade:original-senden` | Sendet nach einem Fehler deinen Prompt unverändert an Claude |
+| `/prompt-upgrade:kopieren` | Legt das Upgrade in die Zwischenablage, ohne es zu senden |
+| `/prompt-upgrade:abbrechen` | Bricht das Upgrade ab und legt deinen Prompt zurück ins Eingabefeld |
 
 ## Modellwahl
 
@@ -235,17 +235,21 @@ Schlägt einmal je Aufgabe Modell und Aufwand vor. Am Rechner gilt der Vorschlag
 
 | Befehl | Was er tut |
 |---|---|
-| `/modellwahl [Aufgabe \| ja \| nein]` | Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft |
-| `/modellwahl:hilfe` | Kurz erklären, was die Modellwahl tut und welche Befehle es gibt |
-| `/modellwahl:uebernehmen` | Den offenen Vorschlag der Modellwahl sofort übernehmen |
-| `/modellwahl:ablehnen` | Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben |
-| `/modellwahl:zeigen` | Aktuelle Modellwahl mit Grund, ob sie zurückgezogen ist, und den Stand der Kalibrierung zeigen |
-| `/modellwahl:auto-an` | Automatische Modellwahl bei der ersten Nachricht eines neuen Chats einschalten, nur für diesen Chat |
-| `/modellwahl:auto-aus` | Automatische Modellwahl bei der ersten Nachricht eines neuen Chats ausschalten, nur für diesen Chat |
+| `/modellwahl [Aufgabe \| ja \| nein]` | Modellwahl: Schlägt Modell und Aufwand für diesen Chat passend zur Aufgabe vor; ja übernimmt, nein verwirft, hilfe erklärt |
+| `/modellwahl:hilfe` | Erklärt Modellwahl: wie du damit arbeitest, es einstellst und welche Befehle es gibt |
+| `/modellwahl:uebernehmen` | Nimmt den offenen Vorschlag der Modellwahl an, wie /modellwahl ja |
+| `/modellwahl:ablehnen` | Verwirft den offenen Vorschlag der Modellwahl; Modell und Aufwand bleiben |
+| `/modellwahl:zeigen` | Zeigt, welches Modell und welcher Aufwand in diesem Chat gelten und warum |
+| `/modellwahl:auto-an` | Vorschlag beim Neubeginn dieses Chats an: erste Nachricht, auch nach /clear (nur dieser Chat) |
+| `/modellwahl:auto-aus` | Vorschlag beim Neubeginn dieses Chats aus: erste Nachricht, auch nach /clear (nur dieser Chat) |
 
 ## kurzfassen
 
-Kurzfassen als Skill, die deutsche Fassung von i-have-adhd: zuerst die nächste Handlung, dann nummerierte Schritte. Er bringt nur einen Skill mit, keine Befehle. Ein- und ausgeschaltet wird er im Leitstand mit `/kurzantworten-an` und `/kurzantworten-aus` oder dem Button 📖/📝, oder direkt mit `/kurzfassen:kurzfassen` und "Kurzfassen aus".
+Kurzfassen als Skill, die deutsche Fassung von i-have-adhd: zuerst die nächste Handlung, dann nummerierte Schritte. Außer dem Skill bringt er einen Befehl mit. Ein- und ausgeschaltet wird er im Leitstand mit `/kurzantworten-an` und `/kurzantworten-aus` oder dem Button 📖/📝, oder direkt mit `/kurzfassen:kurzfassen` und "Kurzfassen aus".
+
+| Befehl | Was er tut |
+|---|---|
+| `/kurzfassen:hilfe` | Was Kurzfassen tut, wie du es ein- und ausschaltest |
 
 ## i-have-adhd
 

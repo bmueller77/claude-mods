@@ -65,7 +65,27 @@ const taktAtom = atom({ plugin: 'modellwahl', key: 'takt' } as const, 0)
 export const ZEILE = 'modellwahl'
 
 /** Der Standardsatz, wenn ein Befehl scheitert. */
-export const BEFEHL_FEHLER = 'Modellwahl: Das hat nicht geklappt. Modell und Aufwand bleiben, wie sie sind.'
+export const BEFEHL_FEHLER =
+    'Modellwahl: Das hat nicht geklappt: Beim Ausführen ist ein interner Fehler aufgetreten. Modell und Aufwand bleiben, wie sie sind; versuch es noch einmal.'
+
+/** Wie weit ein Befehl wirkt, der nur einmal etwas tut. */
+const EINMAL = 'einmal, sofort; ändert keine Einstellung.'
+/** Wie weit eine Wahl wirkt. */
+const NUR_CHAT = 'nur in diesem Chat.'
+/** Wie weit die Schalter der Automatik wirken. */
+const NUR_CHAT_STANDARD = 'nur in diesem Chat. Standard für neue Chats: Option "Automatisch bei neuem Chat", siehe /modellwahl:hilfe unter Einstellen.'
+
+/** Die Hilfe zu einem Befehl: Name und Titel, dann Was, Button, Gilt, Argumente und, bei einem Argument, ein Beispiel. */
+function hilfeAus(b: { kopf: string; was: string; button: string; gilt: string; argumente: string; beispiel?: string }): string {
+    return [
+        b.kopf,
+        `Was: ${b.was}`,
+        `Button: ${b.button}`,
+        `Gilt: ${b.gilt}`,
+        `Argumente: ${b.argumente}`,
+        ...(b.beispiel ? [`Beispiel: ${b.beispiel}`] : []),
+    ].join('\n')
+}
 
 /**
  * Die Befehle mit Beschreibung, Hinweis und Hilfe. Angemeldet wird nur /modellwahl;
@@ -76,49 +96,95 @@ export const BEFEHL_FEHLER = 'Modellwahl: Das hat nicht geklappt. Modell und Auf
 export const BEFEHLE = [
     {
         name: 'modellwahl',
-        description: 'Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft',
+        description: 'Schlägt Modell und Aufwand für diesen Chat passend zur Aufgabe vor; ja übernimmt, nein verwirft, hilfe erklärt',
         argumentHint: '[Aufgabe | ja | nein]',
-        hilfe:
-            '/modellwahl schlägt Modell und Aufwand für diesen Chat vor. Mit einer Aufgabe dahinter wird diese eingeschätzt, ohne die letzten Nachrichten. ' +
-            'Am Rechner gilt der Vorschlag nach 15 Sekunden von selbst, über der Eingabe stehen Übernehmen und Nein. ' +
-            'Vom Handy gilt er erst, wenn du ja, ok oder /modellwahl ja schickst (10 Minuten lang). /modellwahl nein verwirft ihn. ' +
-            'Im leeren Chat ohne Aufgabe schlägt er bei deiner nächsten Nachricht vor.',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl [Aufgabe | ja | nein] · Vorschlag holen',
+            was:
+                'Lässt das Modell der Einschätzung (eingebaut Haiku) mit einem kleinen Aufruf einschätzen, welches Modell und welcher Aufwand zur Aufgabe passen, und schlägt beides für diesen Chat vor. ' +
+                'Mit einer Aufgabe dahinter wird diese eingeschätzt, die letzten Nachrichten des Chats lesen mit; ohne Aufgabe zählen nur die letzten Nachrichten. Im leeren Chat schlägt Modellwahl bei deiner nächsten Nachricht vor. ' +
+                'Am Rechner gilt der Vorschlag 15 Sekunden nach dieser Antwort von selbst, wenn du nicht Nein drückst, auch wenn das neue Modell den Chat teuer neu liest; vom Handy erst, wenn du ja, ok oder /modellwahl ja schickst (10 Minuten lang). ja nimmt einen offenen Vorschlag an, nein verwirft ihn; ein angenommener Vorschlag gilt ab der nächsten Anfrage an Claude. Ohne Argument kostet das einen kleinen Aufruf von Haiku wie mit Aufgabe.',
+            button: 'Übernehmen und Nein in der Leiste über dem Eingabefeld, solange ein Vorschlag offen ist (im Terminal [Übernehmen] und [Nein]).',
+            gilt: NUR_CHAT,
+            argumente: '[Aufgabe] (freiwillig) · die Aufgabe, die eingeschätzt werden soll. Oder ja (auch ok, okay) oder nein.',
+            beispiel: '/modellwahl Bau das Login auf OAuth um',
+        }),
     },
     {
         name: 'modellwahl:uebernehmen',
-        description: 'Den offenen Vorschlag der Modellwahl sofort übernehmen',
+        description: 'Nimmt den offenen Vorschlag der Modellwahl an, wie /modellwahl ja',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:uebernehmen übernimmt den offenen Vorschlag sofort, wie der Button Übernehmen über der Eingabe oder /modellwahl ja.',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl:uebernehmen · Vorschlag übernehmen',
+            was:
+                'Nimmt den offenen Vorschlag an, wie /modellwahl ja; er gilt ab der nächsten Anfrage an Claude, auch mitten in einer laufenden Antwort. Wechselt dabei das Modell, liest das neue Modell den Chat einmal neu, das kostet Tokens. Ist kein Vorschlag offen, sagt der Befehl das.',
+            button: 'Übernehmen in der Leiste über dem Eingabefeld (im Terminal [Übernehmen]).',
+            gilt: NUR_CHAT,
+            argumente: 'keine.',
+        }),
     },
     {
         name: 'modellwahl:ablehnen',
-        description: 'Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben',
+        description: 'Verwirft den offenen Vorschlag der Modellwahl; Modell und Aufwand bleiben',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:ablehnen verwirft den offenen Vorschlag, wie der Button Nein über der Eingabe oder /modellwahl nein. Modell und Aufwand bleiben, wie sie sind.',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl:ablehnen · Vorschlag verwerfen',
+            was: 'Verwirft den offenen Vorschlag, wie /modellwahl nein. Modell und Aufwand bleiben, wie sie sind. Ist kein Vorschlag offen, sagt der Befehl das.',
+            button: 'Nein in der Leiste über dem Eingabefeld (im Terminal [Nein]).',
+            gilt: EINMAL,
+            argumente: 'keine.',
+        }),
     },
     {
         name: 'modellwahl:zeigen',
-        description: 'Aktuelle Modellwahl mit Grund, ob sie zurückgezogen ist, und den Stand der Kalibrierung zeigen',
+        description: 'Zeigt, welches Modell und welcher Aufwand in diesem Chat gelten und warum',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:zeigen nennt die Wahl dieses Chats, ihren Grund, ob sie zurückgezogen ist, die Automatik und den Stand der Kalibrierung.',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl:zeigen · Stand zeigen',
+            was:
+                'Zeigt, was in diesem Chat gilt: Modell und Aufwand mit Grund, ob Modellwahl sich zurückgezogen hat (weil du selbst umgestellt hast), einen offenen Vorschlag, ob die Automatik an ist, und die Kalibrierung, also wie viele Tokens etwa 1 % deines Sitzungslimits (5 Stunden) sind.',
+            button: 'keiner.',
+            gilt: EINMAL,
+            argumente: 'keine.',
+        }),
     },
     {
         name: 'modellwahl:hilfe',
-        description: 'Kurz erklären, was die Modellwahl tut und welche Befehle es gibt',
+        description: 'Erklärt Modellwahl: wie du damit arbeitest, es einstellst und welche Befehle es gibt',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:hilfe erklärt die Modellwahl und ihre Befehle.',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl:hilfe · Hilfe',
+            was: 'Zeigt, was Modellwahl tut, wie du damit arbeitest und es einstellst, was es kostet, was vom Handy geht und alle Befehle.',
+            button: 'keiner.',
+            gilt: EINMAL,
+            argumente: 'keine.',
+        }),
     },
     {
         name: 'modellwahl:auto-an',
-        description: 'Automatische Modellwahl bei der ersten Nachricht eines neuen Chats einschalten, nur für diesen Chat',
+        description: 'Vorschlag beim Neubeginn dieses Chats an: erste Nachricht, auch nach /clear (nur dieser Chat)',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:auto-an schaltet die automatische Wahl bei der ersten Nachricht eines neuen Chats ein, nur für diesen Chat (auch nach /clear).',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl:auto-an · Automatik an',
+            was:
+                'Schaltet für diesen Chat ein, dass Modellwahl beim Neubeginn von selbst vorschlägt: bei der ersten Nachricht, solange der Chat noch leer ist, und bei der ersten Nachricht nach jedem /clear in diesem Fenster. Mitten im Chat schlägt Modellwahl nur auf /modellwahl vor. Ein neuer Chat, der nicht mit /clear beginnt, folgt dem Standard.',
+            button: 'keiner.',
+            gilt: NUR_CHAT_STANDARD,
+            argumente: 'keine.',
+        }),
     },
     {
         name: 'modellwahl:auto-aus',
-        description: 'Automatische Modellwahl bei der ersten Nachricht eines neuen Chats ausschalten, nur für diesen Chat',
+        description: 'Vorschlag beim Neubeginn dieses Chats aus: erste Nachricht, auch nach /clear (nur dieser Chat)',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:auto-aus schaltet die automatische Wahl bei der ersten Nachricht eines neuen Chats aus, nur für diesen Chat (auch nach /clear).',
+        hilfe: hilfeAus({
+            kopf: '/modellwahl:auto-aus · Automatik aus',
+            was:
+                'Schaltet für diesen Chat aus, dass Modellwahl beim Neubeginn von selbst vorschlägt, auch nach /clear in diesem Fenster. /modellwahl schlägt weiter vor, wenn du es aufrufst. Ein neuer Chat, der nicht mit /clear beginnt, folgt dem Standard.',
+            button: 'keiner.',
+            gilt: NUR_CHAT_STANDARD,
+            argumente: 'keine.',
+        }),
     },
 ] as const
 
@@ -143,12 +209,37 @@ export function neuerName(name: string): string {
 
 /** Was /modellwahl:hilfe antwortet. */
 export const HILFE = [
-    'Modellwahl: Schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch bei der ersten Nachricht eines neuen Chats.',
-    'Am Rechner gilt der Vorschlag nach 15 Sekunden von selbst (Übernehmen und Nein über der Eingabe); vom Handy erst auf ja oder ok.',
-    '/modellwahl [Aufgabe]: jetzt vorschlagen. /modellwahl ja oder /modellwahl:uebernehmen übernimmt, /modellwahl nein oder /modellwahl:ablehnen verwirft.',
-    '/modellwahl:zeigen: aktuelle Wahl, offener Vorschlag und Kalibrierung.',
-    '/modellwahl:auto-an, /modellwahl:auto-aus: Automatik nur für diesen Chat.',
-    'Stellst du Modell oder Aufwand selbst um, zieht sich der Mod in diesem Chat zurück.',
+    'Modellwahl · Hilfe',
+    '',
+    'Was der Mod tut',
+    'Modellwahl ist ein Mod, also eine Erweiterung für Claude Code. Er schlägt dir einmal je Aufgabe ein Modell und einen Aufwand für diesen Chat vor. Haiku, Sonnet, Opus und Fable sind Modelle von Claude, von klein und günstig bis groß. Der Aufwand sagt, wie gründlich Claude nachdenkt, von Niedrig über Mittel, Hoch und Extra hoch bis Maximal.',
+    'Am Rechner gilt ein Vorschlag 15 Sekunden, nachdem er erscheint, von selbst, wenn du nicht Nein drückst; das gilt auch für einen Wechsel des Modells, der den Chat teuer neu liest. Eine Nachricht, die nur aus ja, ok oder okay besteht, nimmt einen offenen Vorschlag an, auch wenn du damit eigentlich eine Frage von Claude beantwortest; die Nachricht geht trotzdem an Claude.',
+    '',
+    'So arbeitest du damit',
+    '1. Schreib in einem neuen Chat einfach deine erste Nachricht. Sie geht sofort mit dem Modell los, das gerade eingestellt ist. Modellwahl schätzt sie dabei ein, und Claude beginnt die Antwort mit dem Vorschlag, etwa "Modellwahl schlägt Opus · Hoch vor".',
+    '2. In der Leiste über dem Eingabefeld steht dann der Vorschlag mit einem Countdown. Im Terminal und in der Desktop-App zeigt auch die Statuszeile von Claude Code den Vorschlag und danach die geltende Wahl. Übernehmen nimmt den Vorschlag an, Nein verwirft ihn; tust du nichts, nimmt Modellwahl ihn nach den 15 Sekunden an. Ein angenommener Vorschlag gilt ab der nächsten Anfrage an Claude, auch mitten in einer laufenden Antwort. Helfer, die Claude für Teilaufgaben startet, behalten ihr eigenes Modell.',
+    '3. Kommt mitten im Chat eine neue Aufgabe, tipp /modellwahl und die Aufgabe dahinter, etwa /modellwahl Bau das Login auf OAuth um. /modellwahl ohne Argument schätzt die letzten Nachrichten des Chats ein; im leeren Chat wartet es auf deine nächste Nachricht. Jede Einschätzung kostet einen kleinen Aufruf von Haiku.',
+    '4. /modellwahl:zeigen sagt, was gerade gilt und warum.',
+    '5. Stellst du Modell oder Aufwand selbst um, zieht sich Modellwahl in diesem Chat zurück: Es stellt nichts mehr um, bis du /modellwahl wieder aufrufst und einen Vorschlag annimmst oder einen neuen Chat beginnst.',
+    '',
+    'Einstellen',
+    'Nur in diesem Chat: /modellwahl:auto-an und /modellwahl:auto-aus legen fest, ob Modellwahl beim Neubeginn von selbst vorschlägt. Ein /clear beginnt einen neuen Chat im selben Fenster; dort bleibt diese Einstellung. Ein neuer Chat, der nicht mit /clear beginnt, folgt dem Standard.',
+    'Standard für neue Chats:',
+    '- Automatisch bei neuem Chat · an oder aus (im Terminal true oder false); eingebaut: an.',
+    '- Modell der Einschätzung · haiku, sonnet, opus oder fable; eingebaut: haiku. Im Chat nicht umstellbar. Die Einschätzung darf höchstens 5 Sekunden dauern, ein großes Modell schafft das oft nicht.',
+    'Sag Claude zum Beispiel: Stell bei Modellwahl den Standard für neue Chats: Automatisch bei neuem Chat auf aus. Claude macht das mit `claude plugin configure modellwahl@bm-mods`. Im Terminal geht es auch selbst: `claude plugin configure modellwahl@bm-mods` zeigt die Optionen. Setzen geht mit `--values-stdin`, etwa `echo \'{"autoBeiNeuemChat": false}\' | claude plugin configure modellwahl@bm-mods --values-stdin`. Das gilt für Chats, die danach beginnen. Ältere Installationen heißen `modellwahl@bjoern-mods`; `claude plugin list` zeigt den Namen. "not set" heißt dort: Es gilt der eingebaute Standard.',
+    'Ganz abschalten: `claude plugin disable modellwahl@bm-mods` (wieder an mit `enable`), oder sag Claude, er soll den Mod abschalten. Das wirkt nach einem Neustart von Claude Code.',
+    '',
+    'Kosten',
+    'Jede Einschätzung ist ein kleiner Aufruf von Haiku (oder dem eingestellten Modell). Das kostet Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit), aber nur wenige. Teurer ist ein Wechsel des Modells: Das neue Modell liest den bisherigen Chat einmal ganz neu. Der Vorschlag nennt deshalb, wie viele Tokens das sind und wie vielen Runden das etwa entspricht; eine Runde ist eine Antwort von Claude auf deine Nachricht, mit allem, was er dabei tut. Nach ein paar Runden hat Modellwahl gemessen, wie viel Prozent deines Sitzungslimits (5 Stunden) Tokens kosten (die Kalibrierung), und nennt dann den Anteil. Ändert sich nur der Aufwand, wird nichts neu gelesen.',
+    '',
+    'Vom Handy (Remote Control)',
+    'Dort gibt es keine Leiste und keine Buttons, und ein Vorschlag gilt nie von selbst. Schick ja, ok oder /modellwahl ja, um ihn anzunehmen, oder /modellwahl nein, um ihn zu verwerfen. Nach 10 Minuten verfällt ein Vorschlag vom Handy; ein ja geht dann nur noch an Claude.',
+    '',
+    'Befehle',
+    'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+    ...BEFEHLE.map(b => `/${b.name}${b.argumentHint === '[hilfe]' ? '' : ` ${b.argumentHint}`} · ${b.description}`),
+    'Mehr zu jedem Befehl: hilfe dahinter, etwa /modellwahl:zeigen hilfe.',
 ].join('\n')
 
 /** Was der Mod zwischen zwei Ereignissen behaelt. */
@@ -416,24 +507,29 @@ async function schaetze($: EngineInterface, aufgabe: string, verlauf: readonly S
 
 /** Ein Satz, warum es keine Einschaetzung gab. */
 function ohneEinschaetzung(grund: 'zeit' | 'fehler' | 'unlesbar'): string {
-    const warum = grund === 'zeit' ? 'keine Antwort in 5 s' : grund === 'unlesbar' ? 'Antwort unlesbar' : 'Anfrage gescheitert'
-    return `Modellwahl: keine Einschätzung (${warum}), Modell und Aufwand bleiben.`
+    const warum =
+        grund === 'zeit'
+            ? 'Die Einschätzung kam nicht in 5 Sekunden'
+            : grund === 'unlesbar'
+              ? 'Die Antwort der Einschätzung war nicht lesbar'
+              : 'Die Anfrage zur Einschätzung ist gescheitert'
+    return `Modellwahl: Das hat nicht geklappt: ${warum}. Modell und Aufwand bleiben; /modellwahl versucht es noch einmal.`
 }
 
 /** Der Hinweis an Claude nach dem automatischen Vorschlag. */
 export function hinweisVorschlag(w: Einschaetzung, vomHandy: boolean): string {
     return vomHandy
         ? `Der Mod Modellwahl schlägt für diesen Chat ${wahlText(w)} vor; das gilt erst, wenn die Person mit ja oder ok zustimmt. ` +
-              `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl schlägt ${wahlText(w)} vor, übernehmen mit ja oder ok.“ Danach antworte wie gewohnt.`
+              `Beginne deine Antwort mit genau einem kurzen Satz: "Modellwahl schlägt ${wahlText(w)} vor; übernehmen mit ja oder ok." Danach antworte wie gewohnt.`
         : `Der Mod Modellwahl schlägt für diesen Chat ${wahlText(w)} vor; ohne Einspruch gilt das nach 15 Sekunden. ` +
-              `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl schlägt ${wahlText(w)} vor.“ Danach antworte wie gewohnt.`
+              `Beginne deine Antwort mit genau einem kurzen Satz: "Modellwahl schlägt ${wahlText(w)} vor; gilt in 15 Sekunden, wenn du nicht Nein drückst." Danach antworte wie gewohnt.`
 }
 
 /** Der Hinweis an Claude, wenn ein ja oder ok den Vorschlag angenommen hat. */
 export function hinweisUebernommen(w: Einschaetzung): string {
     return (
         `Mit dieser Nachricht hat die Person den Vorschlag des Mods Modellwahl angenommen: ab jetzt ${wahlText(w)}. ` +
-        `Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl: ${wahlText(w)} übernommen.“ ` +
+        `Beginne deine Antwort mit genau einem kurzen Satz: "Modellwahl: ${wahlText(w)} übernommen." ` +
         'Galt das ja oder ok auch einer Frage von dir, antworte danach darauf wie gewohnt.'
     )
 }
@@ -441,7 +537,7 @@ export function hinweisUebernommen(w: Einschaetzung): string {
 /** Der Hinweis an Claude, wenn die Einschaetzung ausblieb. */
 export const HINWEIS_OHNE =
     'Der Mod Modellwahl konnte die Aufgabe nicht einschätzen; Modell und Aufwand bleiben. ' +
-    'Beginne deine Antwort mit genau einem kurzen Satz: „Modellwahl: keine Einschätzung, alles bleibt.“ Danach antworte wie gewohnt.'
+    'Beginne deine Antwort mit genau einem kurzen Satz: "Modellwahl: keine Einschätzung, Modell und Aufwand bleiben." Danach antworte wie gewohnt.'
 
 /** Der Verlauf dieses Chats; leer, wenn er sich nicht lesen laesst. */
 async function verlauf($: EngineInterface): Promise<SessionMessage[]> {
@@ -464,9 +560,12 @@ async function aktuell($: EngineInterface): Promise<{ modell: string | null; auf
     return { modell, aufwand: z.letzterAufwand }
 }
 
+/** Die Wahl mit Grund, als Satzteil: "Opus · Hoch (Umbau über mehrere Dateien)". */
+const mitGrund = (w: Einschaetzung) => `${wahlText(w)}${w.grund ? ` (${w.grund})` : ''}`
+
 /** Der Text des Vorschlags: was er waere, was das Neueinlesen kostet, wann und wie er gilt. */
 async function vorschlagText($: EngineInterface, w: Einschaetzung, modellAendert: boolean, vomHandy: boolean): Promise<string> {
-    const teile = [`Modellwahl-Vorschlag: ${wahlText(w)}${w.grund ? ` – ${w.grund}` : ''}.`]
+    const teile = [`Modellwahl-Vorschlag: ${mitGrund(w)}.`]
     if (modellAendert) {
         let tokens: number | null = null
         let limit: { percentUsed: number } | null = null
@@ -478,26 +577,24 @@ async function vorschlagText($: EngineInterface, w: Einschaetzung, modellAendert
             // Dann ohne Zahlen.
         }
         const est = schaetzeWechsel(await ladeKalibrierung($), tokens ?? 0, MODELLE[w.modell].id)
-        const stand = limit ? ` (jetzt ${String(Math.round(limit.percentUsed * 10) / 10).replace('.', ',')} % verbraucht)` : ''
+        const verbraucht = limit ? String(Math.round(limit.percentUsed * 10) / 10).replace('.', ',') : null
         const menge = tokens != null && tokens > 0 ? `${tokenText(tokens)} Tokens Kontext` : 'den Kontext'
         teile.push(
             est.prozent != null && tokens != null
-                ? `Der Wechsel liest ${menge} neu, etwa ${prozentText(est.prozent)} deines 5-Stunden-Limits${stand}.`
-                : `Der Wechsel liest ${menge} neu, etwa so viel wie ${est.runden} normale Runden${stand}.`,
+                ? `Der Wechsel liest ${menge} neu, etwa ${prozentText(est.prozent)} deines Sitzungslimits (5 Stunden)${verbraucht ? `; verbraucht sind jetzt ${verbraucht} %` : ''}.`
+                : `Der Wechsel liest ${menge} neu, etwa so viel wie ${est.runden} normale Runden${verbraucht ? `; verbraucht sind jetzt ${verbraucht} % deines Sitzungslimits (5 Stunden)` : ''}.`,
         )
     } else {
-        teile.push('Das Modell bleibt, der Kontext wird nicht neu gelesen.')
+        teile.push('Das Modell bleibt, deshalb wird nichts neu gelesen.')
     }
     teile.push(
         vomHandy
-            ? 'Übernehmen mit ja, ok oder /modellwahl ja (10 Minuten lang).'
-            : 'Gilt in 15 s, wenn du nichts tust; verwerfen mit Nein über der Eingabe oder /modellwahl nein.',
+            ? 'Übernehmen mit ja, ok oder /modellwahl ja (10 Minuten lang), verwerfen mit /modellwahl nein.'
+            : 'Gilt in 15 s, wenn du nichts tust; Nein in der Leiste über dem Eingabefeld oder /modellwahl nein verwirft ihn.',
     )
     return teile.join(' ')
 }
 
-/** Die Wahl mit Grund, als Satzteil. */
-const mitGrund = (w: Einschaetzung) => `${wahlText(w)}${w.grund ? ` – ${w.grund}` : ''}`
 
 /** /modellwahl [Aufgabe | ja | nein], auch hinter /modellwahl:uebernehmen und /modellwahl:ablehnen. */
 async function befehlWahl($: EngineInterface, args: string, vomHandy: boolean): Promise<string> {
@@ -508,14 +605,14 @@ async function befehlWahl($: EngineInterface, args: string, vomHandy: boolean): 
         const w = await uebernehme($)
         if (!w) {
             await setzeVorschlag($, null)
-            return 'Modellwahl: Kein offener Vorschlag. /modellwahl schlägt neu vor.'
+            return 'Modellwahl: Gerade ist kein Vorschlag offen. /modellwahl holt einen neuen.'
         }
-        return `Modellwahl: ${mitGrund(w)}.${familieVon(vorher) !== w.modell ? ' Kontext wird einmal neu gelesen.' : ''}`
+        return `Modellwahl: ${mitGrund(w)} gilt jetzt.${familieVon(vorher) !== w.modell ? ' Das neue Modell liest den Chat einmal neu.' : ''}`
     }
     if (/^nein$/i.test(a)) {
         return (await lehneAb($))
             ? 'Modellwahl: Vorschlag verworfen. Modell und Aufwand bleiben, wie sie sind.'
-            : 'Modellwahl: Kein offener Vorschlag.'
+            : 'Modellwahl: Gerade ist kein Vorschlag offen.'
     }
     const v = await verlauf($)
     const hatRunden = v.some(m => m.role === 'assistant')
@@ -534,7 +631,7 @@ async function befehlWahl($: EngineInterface, args: string, vomHandy: boolean): 
     const aufwandAendert = jetztig.aufwand !== r.wahl.aufwand
     if (!modellAendert && !aufwandAendert) {
         await setzeVorschlag($, null)
-        return `Modellwahl: bleibt bei ${wahlText(r.wahl)}.`
+        return `Modellwahl: ${wahlText(r.wahl)} passt schon, es bleibt dabei.`
     }
     await schlageVor($, r.wahl, vomHandy)
     return vorschlagText($, r.wahl, modellAendert, vomHandy)
@@ -547,8 +644,12 @@ async function befehlZeigen($: EngineInterface): Promise<string> {
     const zeilen: string[] = []
     const w = z.wahl
     if (w) {
-        zeilen.push(`Modellwahl: ${wahlText(w)}${w.grund ? ` – ${w.grund}` : ''}, vor ${dauerText(jetzt - w.at)}.`)
-        zeilen.push(w.zurueckgezogen ? 'Zurückgezogen: Du hast Modell oder Aufwand selbst umgestellt.' : 'Zurückgezogen: nein.')
+        zeilen.push(`Modellwahl: ${mitGrund(w)}, gewählt vor ${dauerText(jetzt - w.at)}.`)
+        zeilen.push(
+            w.zurueckgezogen
+                ? 'Zurückgezogen: ja. Du hast Modell oder Aufwand selbst umgestellt, Modellwahl stellt in diesem Chat nichts mehr um.'
+                : 'Zurückgezogen: nein, Modellwahl stellt Modell und Aufwand ein.',
+        )
     } else {
         zeilen.push('Modellwahl: In diesem Chat ist nichts gewählt.')
     }
@@ -562,14 +663,14 @@ async function befehlZeigen($: EngineInterface): Promise<string> {
     }
     zeilen.push(
         z.auto === null
-            ? `Automatisch in neuen Chats: ${z.standardAuto ? 'an' : 'aus'} (Standard).`
-            : `Automatisch in neuen Chats: ${z.auto ? 'an' : 'aus'} (nur dieser Chat).`,
+            ? `Automatik beim Neubeginn: ${z.standardAuto ? 'an' : 'aus'} (Standard für neue Chats).`
+            : `Automatik beim Neubeginn: ${z.auto ? 'an' : 'aus'} (nur dieser Chat).`,
     )
     const k = await ladeKalibrierung($)
     zeilen.push(
         k.quote !== null && k.quote > 0
-            ? `Kalibrierung: ${k.proben} ${k.proben === 1 ? 'Messung' : 'Messungen'}, 1 % des 5-Stunden-Limits ≈ ${tokenText(1 / k.quote)} Opus-Tokens.`
-            : 'Kalibrierung: noch keine Messung.',
+            ? `Kalibrierung: ${k.proben} ${k.proben === 1 ? 'Messung' : 'Messungen'}, 1 % des Sitzungslimits (5 Stunden) ≈ ${tokenText(1 / k.quote)} Opus-Tokens.`
+            : 'Kalibrierung: noch keine Messung; bis dahin nennt ein Vorschlag die Kosten in Runden.',
     )
     return zeilen.join('\n')
 }
@@ -581,7 +682,16 @@ async function befehlAuto($: EngineInterface, an: boolean): Promise<string> {
     if (z.sid) {
         await $.store.set(SPEICHER_AUTO + z.sid, { at: await $.clock.now(), isOn: an } satisfies AutoSchalter)
     }
-    return `Modellwahl: Automatik in neuen Chats ${an ? 'an' : 'aus'}, nur für diesen Chat.`
+    // Ob die naechste Nachricht noch die erste dieses Chats ist und damit selbst einen Vorschlag bekaeme.
+    const ersteSteht = z.neu && !z.wahl
+    const wirkung = an
+        ? ersteSteht
+            ? 'Deine nächste Nachricht bekommt einen Vorschlag für Modell und Aufwand, ebenso die erste nach jedem /clear in diesem Fenster.'
+            : 'Die erste Nachricht nach jedem /clear in diesem Fenster bekommt einen Vorschlag für Modell und Aufwand.'
+        : ersteSteht
+          ? 'Deine nächste Nachricht bekommt keinen Vorschlag, die erste nach /clear in diesem Fenster auch nicht.'
+          : 'Die erste Nachricht nach /clear in diesem Fenster bekommt keinen Vorschlag.'
+    return `Modellwahl: Automatik für diesen Chat ${an ? 'an' : 'aus'}. ${wirkung} Ein neuer Chat, der nicht mit /clear beginnt, folgt weiter dem Standard, siehe /modellwahl:hilfe unter Einstellen.`
 }
 
 async function wirke($: EngineInterface, name: Befehl, args: string, vomHandy: boolean): Promise<string> {
@@ -635,7 +745,7 @@ export const register: Register = (on, options) => {
         await $.command
             .register({
                 name: GRUNDBEFEHL.name,
-                description: `${GRUNDBEFEHL.description} (Modellwahl)`,
+                description: `Modellwahl: ${GRUNDBEFEHL.description}`,
                 argumentHint: GRUNDBEFEHL.argumentHint,
                 immediate: true,
             })

@@ -1,5 +1,5 @@
 ---
-description: "Zeigt die letzten Upgrades als Text, am Rechner auch im Fenster"
+description: "Zeigt deine letzten 20 Upgrades aus allen Chats, am Rechner auch im Seitenfenster"
 disable-model-invocation: true
 ---
 

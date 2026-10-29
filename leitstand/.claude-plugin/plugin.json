@@ -1,7 +1,7 @@
 {
   "name": "leitstand",
-  "version": "0.63.2.0",
-  "description": "Der Leitstand über der Eingabe zeigt eine Checkliste mit Plan, Fortschritt, Helfern, Verlauf, Teambericht, Pause und Weiter. Zwei Arbeitsweisen, Auto-Modus und Gruppenarbeit. In der Button-Zeile Schalter für Kurzantworten, Remote Control und Verdecken. Eingebaut sind Selbstkritik und Regeln 🪞 (früher Reflect), Dateien 📂 (früher Filetree) und der Autopilot 🅰️; läuft er, startet ein wartender Plan nach 30 s von selbst. Hervorgegangen aus GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
+  "version": "0.63.3.0",
+  "description": "Zeigt in der Leiste über dem Eingabefeld, woran Claude arbeitet: den Plan als Checkliste, den Fortschritt und wann Claude dich braucht. Dazu Buttons für Pause und Weiter, Auto-Modus oder Gruppenarbeit, Autopilot, Kurzantworten, Selbstkritik, Dateien und den Schutz von Passwörtern; aus deinen Korrekturen schlägt er Regeln vor. Hilfe: /leitstand:hilfe. Grundlage: GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"
   },
@@ -11,122 +11,122 @@
     "ansicht": {
       "type": "string",
       "title": "Ansicht",
-      "description": "Wie viel der Leitstand zeigt: einfach (Schritte und Fortschritt), detailliert (dazu Zeit und Tokens), minimal (eine Zeile) oder aus. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "Wie viel die Leiste über dem Eingabefeld zeigt: einfach (Schritte und Fortschritt), detailliert (dazu Zeit und Tokens), minimal (eine Zeile mit dem Stand, darunter die Buttons) oder aus (kein Leitstand). Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:ansicht-einfach, -detailliert, -minimal oder /leitstand:aus um.",
       "default": "minimal",
       "options": ["einfach", "detailliert", "minimal", "aus"]
     },
     "arbeitsweise": {
       "type": "string",
       "title": "Arbeitsweise",
-      "description": "auto: Claude entscheidet selbst über Helfer. gruppenarbeit: Claude leitet, Arbeiter in sechs Stufen setzen um, jeder Plan wartet auf deine Freigabe. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "auto (Auto-Modus): Claude entscheidet selbst über Helfer für Teilaufgaben. gruppenarbeit: Claude leitet und prüft, Arbeiter (Helfer mit fester Stufe, von Haiku bis Fable) setzen um; kostet mehr Tokens. In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:arbeitsmodus-auto oder -gruppenarbeit um.",
       "default": "auto",
       "options": ["auto", "gruppenarbeit"]
     },
     "toene": {
       "type": "string",
       "title": "Töne",
-      "description": "Ein Signalton, auf Wunsch mit Stimme, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "aus, signalton (ein kurzer Ton) oder stimme (Signalton und ein paar gesprochene Worte), wenn Claude dich braucht, festhängt oder einen Auftrag von mehr als einer Minute beendet. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:ton-aus, -signalton oder -stimme um.",
       "default": "aus",
       "options": ["aus", "signalton", "stimme"]
     },
     "benachrichtigungen": {
       "type": "boolean",
       "title": "Desktop-Benachrichtigungen",
-      "description": "Eine Benachrichtigung auf deinem Computer, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: eine Benachrichtigung auf deinem Computer, wenn Claude dich braucht, festhängt oder einen Auftrag von mehr als einer Minute beendet, auch wenn du in einer anderen App bist. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:benachrichtigungen-an oder -aus um.",
       "default": false
     },
     "andereChats": {
       "type": "boolean",
       "title": "Andere Chats",
-      "description": "Die Leiste nennt andere Chats auf diesem Computer, die dich brauchen oder arbeiten. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: Die Leiste nennt andere Chats auf diesem Computer, die dich brauchen oder gerade arbeiten. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:andere-chats-an oder -aus um.",
       "default": false
     },
     "ruhemodus": {
       "type": "boolean",
       "title": "Ruhemodus",
-      "description": "Nichts auf dem Bildschirm bewegt sich, und der Status steht fett. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: Nichts in der Leiste bewegt sich, keine Balken und kein Kreisel, und der Stand steht fett. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:ruhemodus-an oder -aus um.",
       "default": false
     },
     "passwortschutz": {
       "type": "boolean",
       "title": "Passwortschutz",
-      "description": "Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten, bis du sie noch mal sendest. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: Eine Nachricht, die du am Rechner schreibst und die nach Passwort, Schlüssel, Karten- oder Kontonummer aussieht, hält der Leitstand zwei Minuten zurück; Trotzdem senden oder Verwerfen in der Leiste entscheidet; nach zwei Minuten ohne Entscheidung ist sie verworfen. Fälschlich angehalten? Trotzdem senden schickt sie ab. Vom Handy geht sie ohne das Passwort weiter. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:passwortschutz-an oder -aus um.",
       "default": true
     },
     "verdecken": {
       "type": "boolean",
       "title": "Verdecken",
-      "description": "Passwörter, Schlüssel und persönliche Daten erscheinen auf dem Bildschirm als Punkte. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte; Claude liest alles unverändert. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:verdecken-an oder -aus um.",
       "default": true
     },
     "planFreigeben": {
       "type": "boolean",
       "title": "Plan zuerst freigeben",
-      "description": "Claude zeigt seinen Plan und wartet auf Start oder eine Änderung; in der Gruppenarbeit gilt das immer. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: Claude zeigt erst seinen Plan und wartet auf Start (oder los) oder eine Änderung. In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:plan-freigeben-an oder -aus um.",
       "default": false
     },
     "githubAbschluss": {
       "type": "boolean",
       "title": "Auf GitHub abschließen",
-      "description": "Ein fertiger Auftrag in einem GitHub-Projekt bietet den Button Push an: Commit, Pull Request und Merge nach deiner Freigabe. Standard für neue Chats; ein Wechsel im Chat gilt nur dort.",
+      "description": "An: Nach einem fertigen Auftrag in einem Projekt auf GitHub erscheint der Button Push: Änderungen festhalten (Commit), auf GitHub zur Prüfung vorlegen (Pull Request) und nach deiner Freigabe in den Hauptzweig übernehmen (Merge). Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:github-abschluss-an oder -aus um.",
       "default": false
     },
     "regelpruefung": {
       "type": "boolean",
       "title": "Regeln: Korrekturen prüfen",
-      "description": "Prüft kurze Nachrichten darauf, ob eine wiederverwendbare Regel drinsteckt: ein kleiner Haiku-Aufruf je kurzer Nachricht. Standard für neue Chats, /regelpruefung-an und -aus gelten nur im Chat.",
+      "description": "An: Jede kurze Nachricht von dir (bis 500 Zeichen) geht zusätzlich an ein kleines Modell, das darin eine Regel für später sucht: ein kleiner Aufruf je kurzer Nachricht. Gefundene Regeln warten im Fenster Regeln auf deine Entscheidung. Standard für neue Chats; in einem Chat stellst du es mit /leitstand:regelpruefung-an oder -aus um.",
       "default": true
     },
     "regelpruefungModell": {
       "type": "string",
       "title": "Regeln: Modell für die Prüfung",
-      "description": "Welches Modell kurze Nachrichten auf Regeln prüft. haiku ist günstig und reicht dafür. Die Selbstkritik nutzt immer das Modell des Chats.",
+      "description": "Welches Modell kurze Nachrichten auf Regeln prüft, etwa haiku (klein und günstig, reicht dafür), sonnet oder opus. Die Selbstkritik nutzt immer das Modell des Chats. Gilt für neue Chats; in einem Chat lässt es sich nicht umstellen.",
       "default": "haiku"
     },
     "selbstkritikAuto": {
       "type": "boolean",
       "title": "Selbstkritik nach Dateiänderungen",
-      "description": "Startet nach jeder Runde, in der Dateien geändert wurden, eine Selbstkritik im Hintergrund. Kostet einen Modellaufruf über den ganzen Chat je Runde. Standard für neue Chats, /selbstkritik-auto-an und -aus gelten nur im Chat.",
+      "description": "An: Nach jeder Runde, in der Claude Dateien geändert hat, läuft eine Selbstkritik im Hintergrund; jede kostet einen Modellaufruf, der den ganzen Chat liest. Standard für neue Chats; in einem Chat stellst du es mit /leitstand:selbstkritik-auto-an oder -aus um.",
       "default": false
     },
     "dateienAktivitaet": {
       "type": "string",
       "title": "Dateien: Claude-Aktivität",
-      "description": "Welche Dateiaktivität von Claude im Baum aufleuchtet: reads and writes = Lesen und Schreiben, writes = nur Schreiben, reads = nur Lesen, none = nichts. Gelesenes (Read-Werkzeug oder Bash-Leser wie rg, grep, find, cat) leuchtet Lila, Geschriebenes Orange, Git-Aktionen Grün.",
+      "description": "Was im Fenster Dateien aufleuchtet, wenn Claude etwas tut: reads and writes = Lesen und Schreiben, writes = nur Schreiben, reads = nur Lesen, none = nichts. Gelesenes leuchtet lila, Geschriebenes orange, Git-Aktionen grün. Gilt für neue Chats.",
       "default": "reads and writes",
       "options": ["reads and writes", "writes", "reads", "none"]
     },
     "dateienSymbole": {
       "type": "string",
       "title": "Dateien: Symbole",
-      "description": "Symbolsatz: auto nimmt Nerd-Font-Symbole, wenn hier eine Nerd Font installiert ist (nicht in der Desktop-App); nerd erzwingt Nerd-Font-Symbole, plain nimmt nur Unicode.",
+      "description": "Welche Symbole der Baum im Fenster Dateien zeigt: auto nimmt Symbole einer Nerd Font (einer Schrift mit Symbolen für Dateiarten), wenn hier eine installiert ist, nicht in der Desktop-App; nerd nimmt sie immer; plain nur einfache Zeichen. Gilt für neue Chats.",
       "default": "auto",
       "options": ["auto", "nerd", "plain"]
     },
     "dateienFolgen": {
       "type": "string",
       "title": "Dateien: Claude folgen",
-      "description": "on (an): Der Baum scrollt zu dem, was Claude liest, schreibt oder committet. off (aus): Die Ansicht bleibt, wo du sie hingestellt hast, nur dein eigenes Scrollen bewegt sie; die Markierungen erscheinen trotzdem.",
+      "description": "on (an): Der Baum im Fenster Dateien scrollt zu dem, was Claude liest, schreibt oder committet. off (aus): Er bleibt, wo du ihn hingestellt hast; die Markierungen erscheinen trotzdem. Gilt für neue Chats.",
       "default": "on",
       "options": ["on", "off"]
     },
     "dateienSpalte": {
       "type": "string",
       "title": "Dateien: rechte Spalte",
-      "description": "Was die rechte Spalte anfangs zeigt: date = Datum der letzten Änderung, size = Größe (Dateien in Bytes, Ordner als Plattenbelegung, im Hintergrund berechnet). Der Button Σ oben schaltet um.",
+      "description": "Was die rechte Spalte im Fenster Dateien anfangs zeigt: date = Datum der letzten Änderung, size = Größe (Ordner im Hintergrund zusammengezählt). Standard für neue Chats; in einem Chat schalten Σ oben im Fenster oder /leitstand:dateien-groessen-an und -aus um.",
       "default": "date",
       "options": ["date", "size"]
     },
     "dateienOeffnen": {
       "type": "string",
       "title": "Dateien: öffnen mit",
-      "description": "Was ein Doppelklick oder Enter mit einer Datei macht. Leer: die Standard-App. preview oder Vorschau: zeigt die Datei im Fenster (Pfeil links geht zurück). Alles andere ist ein Befehl, der stattdessen läuft: {path} ist die Datei, {dir} ihr Ordner; ohne {path} kommt der Pfad ans Ende. Wörter werden an Leerzeichen getrennt, Anführungszeichen halten ein Wort zusammen, es läuft keine Shell. Der Befehl soll den Betrachter starten und zurückkehren; unter Linux läuft er losgelöst.",
+      "description": "Was ein Doppelklick oder Enter auf eine Datei im Fenster Dateien macht. Leer: die Standard-App. preview oder Vorschau: zeigt die Datei im Fenster (Pfeil links geht zurück). Alles andere ist ein Befehl, der stattdessen läuft: {path} ist die Datei, {dir} ihr Ordner; ohne {path} kommt der Pfad ans Ende. Leerzeichen trennen die Wörter, Anführungszeichen halten eines zusammen, eine Shell läuft nicht. Der Befehl soll den Betrachter starten und gleich zurückkehren. Gilt für neue Chats.",
       "default": ""
     },
     "autopilotMaxRunden": {
       "type": "number",
       "title": "Autopilot: Höchstzahl angeschobener Runden",
-      "description": "So oft schiebt der Autopilot Claude nach einer Runde ohne Abschluss höchstens an, dann endet er. Jede Runde kostet Tokens wie eine eigene Nachricht. Eine neue Nachricht von dir setzt den Zähler zurück. Solange Agenten oder Workflows im Hintergrund laufen, schiebt er nicht an.",
+      "description": "So oft schiebt der Autopilot Claude höchstens in Folge an: Bleibt Claude nach einer Runde unfertig stehen, schickt der Autopilot eine neue Nachricht, weiterzumachen. Danach endet er. Jede angeschobene Runde kostet Tokens wie eine eigene Nachricht; eine Nachricht von dir zählt von vorn. Solange Helfer im Hintergrund laufen, schiebt er nicht an. Gilt für neue Chats.",
       "default": 10
     }
   }

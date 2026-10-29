@@ -1,5 +1,5 @@
 ---
-description: "Code prüfen mit clean-code (Leitstand)"
+description: "Code prüfen lassen mit dem Skill clean-code (Leitstand)"
 disable-model-invocation: true
 ---
 

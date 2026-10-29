@@ -3,7 +3,7 @@ import type { CommandRunInput, EngineInterface, Register } from 'claude-code'
 
 import type { Chunk, CompactMeta, Side, ViewMode } from '../types'
 import { chunkMessages } from './chunk'
-import { alteNamen, heisstJetzt, hilfeText, istHilfe, uebersicht, vomHandy } from './knopfbefehle'
+import { alteNamen, befehlsliste, heisstJetzt, hilfeText, istHilfe, vomHandy } from './knopfbefehle'
 import type { Knopfbefehl } from './knopfbefehle'
 import { TRANSLATE_SYSTEM, maskCode, needsTranslation, readTranslation, unmask } from './translate'
 
@@ -284,7 +284,7 @@ export const clock = (at: number) => {
   }
 }
 
-const who = (meta: CompactMeta) => (meta.agentId === undefined ? 'Hauptchat' : (meta.agentLabel ?? `Helfer ${meta.agentId}`))
+const who = (meta: CompactMeta) => (meta.agentId === undefined ? 'dein Chat' : (meta.agentLabel ?? `Helfer ${meta.agentId}`))
 
 /** What set the compaction off, in German. */
 export const triggerLabel = (trigger: CompactMeta['trigger']) =>
@@ -330,47 +330,107 @@ export function ohneVorsatz(text: string): string {
   return (m[1] ?? '') + (rest.length ? `${rest.join('+')}: ` : '') + rumpf + trenner + zusatz + ende
 }
 
-export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /visible-compact:hilfe zeigt die Befehle.'
+export const BEFEHL_FEHLER =
+  'Das hat nicht geklappt: Im Mod ist ein Fehler aufgetreten. Versuch es gleich noch einmal; /visible-compact:hilfe zeigt die Befehle.'
+
+const GILT_EINMAL = 'einmal, sofort; ändert keine Einstellung.'
+const GILT_CHAT = 'nur in diesem Chat. Standard für neue Chats: Option "Übersetzen", siehe /visible-compact:hilfe unter Einstellen.'
 
 /** Je Knopf ein Befehl; /show-last-compact bleibt als Kurzform. Die Wirkung steht in `befehlAus`. */
 export const BEFEHLE: readonly Knopfbefehl[] = [
   {
     name: 'visible-compact:hilfe',
-    description: 'Listet alle Befehle von Visible Compact',
-    tut: 'Listet alle Befehle von Visible Compact mit je einer Zeile.',
-    knopf: 'keiner, nur Übersicht',
-    geltung: 'überall; ändert nichts',
-    argumente: 'keine',
-    beispiel: '/visible-compact:hilfe',
+    description: 'Zeigt, wie Visible Compact arbeitet, wie du es einstellst, und alle Befehle',
+    titel: 'Hilfe',
+    tut: 'Zeigt, was Visible Compact tut, wie du damit arbeitest, wie du es einstellst, was es kostet und alle Befehle.',
+    knopf: 'keiner.',
+    geltung: GILT_EINMAL,
+    argumente: 'keine.',
   },
   {
     name: 'visible-compact:zeigen',
-    description: 'Öffnet das Fenster „Verdichtungen des Chats“ (wie /show-last-compact)',
-    tut: 'Öffnet das Fenster „Verdichtungen des Chats“ mit der neuesten Verdichtung, wie /show-last-compact. Vom Handy aus kommt sie als kurzer Text, denn das Fenster geht nur am Rechner.',
-    knopf: 'keiner; wie /show-last-compact',
-    geltung: 'dieser Chat (seine Verdichtungen)',
-    argumente: 'keine',
-    beispiel: '/visible-compact:zeigen',
+    description: 'Öffnet das Fenster "Verdichtungen des Chats" mit der neuesten Verdichtung, vom Handy als Text',
+    titel: 'Fenster öffnen',
+    tut: 'Öffnet das Seitenfenster "Verdichtungen des Chats" mit der neuesten Verdichtung: links Nachher, rechts Vorher. Vom Handy (Remote Control) öffnet er kein Fenster und schickt die neueste Verdichtung als kurzen Text.',
+    knopf: 'keiner. /show-last-compact tut dasselbe.',
+    geltung: GILT_EINMAL,
+    argumente: 'keine.',
   },
   {
     name: 'visible-compact:uebersetzen-an',
     description: 'Zeigt englische Abschnitte im Fenster auf Deutsch, nur in diesem Chat',
-    tut: 'Schaltet die Übersetzung ein: Englische Abschnitte im Fenster „Verdichtungen des Chats“ erscheinen auf Deutsch.',
-    knopf: '„Übersetzen“ im Fenster',
-    geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus den Einstellungen',
-    argumente: 'keine',
-    beispiel: '/visible-compact:uebersetzen-an',
+    titel: 'Übersetzung an',
+    tut: 'Schaltet die Übersetzung ein: Englische Abschnitte im Fenster "Verdichtungen des Chats" erscheinen auf Deutsch. Jeder Abschnitt, der noch nicht übersetzt ist, kostet einen Aufruf des Modells für die Übersetzung (eingebaut: Haiku).',
+    knopf: '"Übersetzen" im Fenster.',
+    geltung: GILT_CHAT,
+    argumente: 'keine.',
   },
   {
     name: 'visible-compact:uebersetzen-aus',
     description: 'Zeigt die Abschnitte im Fenster wieder im Original, nur in diesem Chat',
-    tut: 'Schaltet die Übersetzung aus: Das Fenster „Verdichtungen des Chats“ zeigt die Abschnitte wieder in ihren eigenen Worten.',
-    knopf: '„Original zeigen“ im Fenster',
-    geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus den Einstellungen',
-    argumente: 'keine',
-    beispiel: '/visible-compact:uebersetzen-aus',
+    titel: 'Übersetzung aus',
+    tut: 'Schaltet die Übersetzung aus: Das Fenster "Verdichtungen des Chats" zeigt die Abschnitte wieder so, wie sie im Chat standen.',
+    knopf: '"Original zeigen" im Fenster.',
+    geltung: GILT_CHAT,
+    argumente: 'keine.',
   },
 ]
+
+/** Die Kurzform /show-last-compact: angemeldet, nicht in `BEFEHLE`, mit eigener Hilfe. */
+export const KURZFORM: Knopfbefehl = {
+  name: COMMAND,
+  description: 'Öffnet das Fenster "Verdichtungen des Chats" wieder (Kurzform von /visible-compact:zeigen)',
+  titel: 'Fenster wieder öffnen',
+  tut: 'Öffnet das Seitenfenster "Verdichtungen des Chats" mit der neuesten Verdichtung: links Nachher, rechts Vorher. Vom Handy (Remote Control) öffnet er kein Fenster und schickt die neueste Verdichtung als kurzen Text, wie /visible-compact:zeigen. Gibt es in diesem Chat noch keine, sagt er das.',
+  knopf: 'keiner.',
+  geltung: GILT_EINMAL,
+  argumente: 'keine. /show-last-compact allein öffnet das Fenster.',
+}
+
+/** Was /visible-compact:hilfe vor der Befehlsliste zeigt: was der Mod tut, wie man mit ihm arbeitet und ihn einstellt. */
+const HILFE = [
+  'Was der Mod tut',
+  'Visible Compact ist ein Mod, also eine Erweiterung für Claude Code. Beim Verdichten (/compact) fasst Claude den Chat zusammen und arbeitet mit der Zusammenfassung weiter; den Chat von vorher liest er danach nicht mehr. Visible Compact speichert beides, den Chat von vorher und die Zusammenfassung, und zeigt dir im Seitenfenster "Verdichtungen des Chats", was vorher dastand und was danach übrig ist, auf Wunsch auf Deutsch.',
+  '',
+  'So arbeitest du damit',
+  '- Tipp /compact. Danach öffnet sich das Fenster von selbst: links Nachher (die Zusammenfassung), rechts Vorher (der Chat bis dahin). Ist das Fenster schmal, steht Vorher unter Nachher.',
+  '- Später öffnest du es wieder mit /show-last-compact (ohne Argument öffnet es das Fenster) oder /visible-compact:zeigen.',
+  '- Oben wählst du die Verdichtung. Jede Zeile nennt die Uhrzeit, wessen Chat verdichtet wurde (dein Chat oder ein Helfer; Helfer startet Claude für Teilaufgaben) und wer sie ausgelöst hat: von Hand, automatisch (der Chat wurde zu lang) oder durch einen Mod.',
+  '- Von selbst öffnet sich das Fenster nur nach einer Verdichtung deines Chats mit dem Auslöser "von Hand", etwa wenn du /compact tippst. Verdichtungen mit "automatisch" oder "durch einen Mod" (so verdichtet 🔻 der Statistik im Terminal, wenn Claude gerade nichts tut) und die der Helfer stehen nur in der Auswahl.',
+  '- ◧ Nachher, ◫ Beide und ◨ Vorher wählen, was du siehst. "Übersetzen" zeigt englische Abschnitte auf Deutsch, "Original zeigen" schaltet zurück.',
+  '- Ein Abschnitt ist ein Stück einer Nachricht, höchstens 4.000 Zeichen lang. Eine lange Nachricht steht in mehreren Teilen: "Teil 2/3" ist der zweite von drei. Je Seite stehen zehn Abschnitte, ‹ Zurück und Weiter › blättern.',
+  '',
+  'Wo der Chat liegt',
+  'Bei jeder Verdichtung speichert der Mod den ganzen Text von vorher und nachher als Dateien, mit allem, was im Chat stand, auch Passwörtern. Verdecken des Leitstands gilt für dieses Fenster nicht; es zeigt den Text, wie er im Chat stand. Mit temp liegen die Dateien im Temp-Ordner des Systems unter visible-compact (unter Windows %TEMP%\\visible-compact) und bleiben, bis das System diesen Ordner aufräumt; wann das ist, hängt vom System ab. Mit home liegen sie unter ~/.claude/visible-compact und bleiben, bis du sie löschst. Der Mod selbst löscht keine davon. Löschen kannst du sie, indem du diesen Ordner löschst; danach zeigt das Fenster in neuen und fortgesetzten Chats keine früheren Verdichtungen mehr.',
+  '',
+  'Einstellen',
+  'Nur in diesem Chat: die Übersetzung, mit "Übersetzen" und "Original zeigen" im Fenster oder mit /visible-compact:uebersetzen-an und /visible-compact:uebersetzen-aus.',
+  'Standard für neue Chats:',
+  '- Übersetzen: an oder aus (im Terminal true oder false). Eingebaut: aus.',
+  '- Wo Verdichtungen gespeichert werden, im Chat nicht umstellbar: temp (der Temp-Ordner des Systems) oder home (der Ordner ~/.claude/visible-compact). Eingebaut: temp.',
+  '- Modell für die Übersetzung, im Chat nicht umstellbar: haiku, sonnet oder opus. Eingebaut: haiku.',
+  'Haiku, Sonnet und Opus sind Modelle von Claude, von klein und günstig bis groß.',
+  'Sag Claude zum Beispiel: Stell bei Visible Compact den Standard für neue Chats: Übersetzen auf an. Claude macht das mit `claude plugin configure visible-compact@bm-mods`. Im Terminal geht es auch selbst: `claude plugin configure visible-compact@bm-mods` zeigt die Optionen. Setzen geht mit `--values-stdin`, etwa `echo \'{"uebersetzen": true}\' | claude plugin configure visible-compact@bm-mods --values-stdin`. Das gilt für Chats, die danach beginnen. "not set" heißt dort: Es gilt der eingebaute Standard.',
+  'Ältere Installationen heißen `visible-compact@bjoern-mods`; `claude plugin list` zeigt den Namen.',
+  'Dass sich das Fenster nach einem /compact von Hand öffnet, lässt sich nicht abstellen.',
+  'Ganz abschalten: `claude plugin disable visible-compact@bm-mods` (wieder an mit `enable`), oder sag Claude, er soll den Mod abschalten. Das wirkt nach einem Neustart von Claude Code.',
+  '',
+  'Kosten',
+  'Nur die Übersetzung kostet Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit). Solange sie an ist, kostet jeder englische Abschnitt auf der gezeigten Seite einen Aufruf des Modells für die Übersetzung. Fertige Übersetzungen speichert der Mod, sie kosten kein zweites Mal. Alles andere kostet nichts.',
+  '',
+  'Vom Handy (Remote Control)',
+  '/visible-compact:zeigen und /show-last-compact schicken dir die neueste Verdichtung als kurzen Text: wann, wessen Chat, Tokens vorher und nachher, Zahl der Nachrichten. Ein Fenster öffnen sie dort nicht; den Text von vorher und nachher siehst du im Fenster am Rechner. Tippst du /compact vom Handy, öffnet sich das Fenster am Rechner, wenn der Chat dort offen ist.',
+  '',
+  'Befehle',
+  'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+]
+
+/** Die ganze Hilfe von /visible-compact:hilfe, die Befehle am Ende. */
+export const hilfeGanz = () =>
+  [...HILFE, ...befehlsliste([...BEFEHLE, KURZFORM]), 'Mehr zu jedem Befehl: hilfe dahinter, etwa /visible-compact:zeigen hilfe.'].join('\n')
+
+/** "von 163k auf 16k Tokens". */
+const tokensVonAuf = (m: CompactMeta) => `von ${tokens(m.tokensBefore)} auf ${tokens(m.tokensAfter)} Tokens`
 
 /** /visible-compact:zeigen: erst der Text, das Fenster öffnet sich dahinter; vom Handy die neueste Verdichtung als Text. */
 async function befehlZeigen($: EngineInterface, e: CommandRunInput): Promise<string> {
@@ -378,7 +438,7 @@ async function befehlZeigen($: EngineInterface, e: CommandRunInput): Promise<str
   if (all.length === 0) return 'In diesem Chat wurde noch nichts verdichtet. Führ zuerst /compact aus.'
   if (vomHandy(e)) {
     const m = all[all.length - 1]!
-    return `Das Fenster geht nur am Rechner. Die neueste Verdichtung: ${optionLabel(m)}, Tokens verringert auf ${tokens(m.tokensAfter)} von ${tokens(m.tokensBefore)}, ${count(m.messages.before, 'Nachricht', 'Nachrichten')} vorher, ${m.messages.after} danach.`
+    return `Vom Handy öffnet sich kein Fenster. Die neueste Verdichtung: ${optionLabel(m)}, ${tokensVonAuf(m)}, ${count(m.messages.before, 'Nachricht', 'Nachrichten')} vorher, ${m.messages.after} danach.`
   }
   await show($, null)
   void $.ui.open({ id: PANE, title: TITLE }).catch(() => undefined)
@@ -390,7 +450,7 @@ async function befehlZeigen($: EngineInterface, e: CommandRunInput): Promise<str
 async function befehlAus($: EngineInterface, name: string, e: CommandRunInput): Promise<string> {
   switch (name) {
     case 'visible-compact:hilfe':
-      return uebersicht('Visible Compact – die Befehle:', BEFEHLE)
+      return hilfeGanz()
     case 'visible-compact:zeigen':
       return befehlZeigen($, e)
     case 'visible-compact:uebersetzen-an':
@@ -415,10 +475,7 @@ export const register: Register = (on, options) => {
   translateByDefault = options.uebersetzen === true
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({
-      name: COMMAND,
-      description: 'Öffnet "Verdichtungen des Chats" wieder: was verdichtet wurde, neben dem, was danach übrig blieb',
-    })
+    await $.command.register({ name: COMMAND, description: KURZFORM.description })
     // Die Befehle je Knopf (/visible-compact:zeigen) sind Dateien in commands/ und brauchen keine Anmeldung.
     // Compactions live on disk under the session id, so a restart or --resume picks them up again.
     const saved = await readIndex($)
@@ -470,7 +527,7 @@ export const register: Register = (on, options) => {
       const saved = await saveCompaction($, meta, { before, after })
       await update($, index, () => saved)
     } catch (error) {
-      $.ui.toast(`Die Verdichtung ließ sich nicht speichern (${String(error)})`)
+      $.ui.toast(`Das hat nicht geklappt: Die Verdichtung ließ sich nicht speichern, das Fenster kann sie nicht zeigen. Meldung: ${String(error)}`)
 
       return result
     }
@@ -484,7 +541,11 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  on('command.run', { command: COMMAND }, async $ => {
+  on('command.run', { command: COMMAND }, async ($, e) => {
+    // hilfe oder ? zeigt nur die Hilfe und öffnet nichts.
+    if (istHilfe(e.args ?? '')) return { text: hilfeText(KURZFORM) }
+    // Vom Handy dieselbe Textantwort wie /visible-compact:zeigen, kein Fenster.
+    if (vomHandy(e)) return { text: await befehlZeigen($, e) }
     if ((await read($, index)).length === 0)
       return { text: 'In diesem Chat wurde noch nichts verdichtet. Führ zuerst /compact aus.' }
     await show($, null)
@@ -604,13 +665,13 @@ export const register: Register = (on, options) => {
       <Box justifyContent="space-between">
         {/* Only the words are dim, so the bold numbers don't inherit it. */}
         <Text>
-          <Text dimColor>Tokens verringert auf </Text>
-          <Text bold color={COLORS.after}>
-            {tokens(meta.tokensAfter)}
-          </Text>
-          <Text dimColor> von </Text>
+          <Text dimColor>Tokens: von </Text>
           <Text bold color={COLORS.before}>
             {tokens(meta.tokensBefore)}
+          </Text>
+          <Text dimColor> auf </Text>
+          <Text bold color={COLORS.after}>
+            {tokens(meta.tokensAfter)}
           </Text>
         </Text>
         <Text dimColor>Dauer: {(meta.durationMs / 1000).toFixed(1).replace('.', ',')} Sek.</Text>

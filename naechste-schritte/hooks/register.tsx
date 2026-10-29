@@ -70,6 +70,8 @@ export function ohneVorsatz(text: string, name: string, gemeldet: string | null)
 /** Ein Befehl des Mods mit allem, was seine Hilfe sagt. */
 export type Befehl = {
     name: string
+    /** Der Titel hinter dem Namen in der ersten Zeile der Hilfe. */
+    titel: string
     /** Die eine Zeile in der Befehlsliste. */
     description: string
     argumentHint?: string
@@ -77,22 +79,28 @@ export type Befehl = {
     was: string
     /** Welchem Knopf er entspricht. */
     knopf: string
-    /** Wo er gilt. */
+    /** Wie weit er wirkt. */
     gilt: string
     argumente: string
-    beispiel: string
+    /** Nur bei einem Befehl mit Argument. */
+    beispiel?: string
 }
+
+/** Die Fassung fuer "Gilt" aus dem Leitfaden; alle Befehle dieses Mods wirken einmal. */
+const GILT_EINMAL = 'einmal, sofort; ändert keine Einstellung.'
 
 /** Ein Befehl je Vorschlag: /naechste-schritte:1 bis :3. */
 function vorschlagBefehl(n: number): Befehl {
     return {
         name: `naechste-schritte:${n}`,
-        description: `Den ${n}. Vorschlag für den nächsten Schritt gleich als Nachricht abschicken`,
-        was: `Schickt den ${n}. Vorschlag unter „Als Nächstes“ gleich als deine Nachricht ab. Gibt es ihn nicht, sagt der Befehl das und schickt nichts.`,
-        knopf: `${n}️⃣ in der App, im Terminal die Ziffer ${n} im leeren Eingabefeld; die holen den Vorschlag erst als Entwurf, der Befehl schickt ihn sofort ab`,
-        gilt: 'für die Vorschläge nach der letzten Antwort in diesem Chat',
-        argumente: 'keine',
-        beispiel: `/naechste-schritte:${n}`,
+        titel: `Vorschlag ${n} abschicken`,
+        description: `Den ${n}. Vorschlag für den nächsten Schritt sofort als deine Nachricht abschicken`,
+        was: `Schickt den ${n}. Vorschlag sofort als deine Nachricht an Claude ab. Gibt es ihn nicht, sagt der Befehl, wie viele Vorschläge es gibt, und schickt nichts.`,
+        knopf:
+            `${n}️⃣ in der Leiste über dem Eingabefeld (Desktop-App) holt den Vorschlag erst ins Eingabefeld; steht er dort unverändert, schickt ein zweiter Klick ihn ab. ` +
+            `Im Terminal holt die Ziffer ${n} im leeren Eingabefeld ihn als Entwurf.`,
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     }
 }
 
@@ -104,21 +112,23 @@ function vorschlagBefehl(n: number): Befehl {
 export const BEFEHLE: readonly Befehl[] = [
     {
         name: 'naechste-schritte:hilfe',
-        description: 'Alle Befehle von Nächste Schritte mit einer Zeile Erklärung',
-        was: 'Listet alle Befehle von Nächste Schritte mit einer Zeile Erklärung.',
-        knopf: 'keiner',
-        gilt: 'zeigt nur Text, ändert nichts',
-        argumente: 'keine; hilfe oder ? erklärt diesen Befehl',
-        beispiel: '/naechste-schritte:hilfe',
+        titel: 'Hilfe',
+        description: 'Was Nächste Schritte tut, wie du damit arbeitest, alle Befehle',
+        was: 'Zeigt, was Nächste Schritte tut, wie du mit den Vorschlägen arbeitest, und listet alle Befehle.',
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'naechste-schritte:zeigen',
-        description: 'Die aktuellen Vorschläge für den nächsten Schritt nummeriert als Text',
-        was: 'Zeigt die Vorschläge nach der letzten Antwort nummeriert als Text, etwa wenn das Band über dem Eingabefeld nicht zu sehen ist.',
-        knopf: 'keiner; dieselben Vorschläge stehen unter „Als Nächstes“ über dem Eingabefeld',
-        gilt: 'für die Vorschläge nach der letzten Antwort in diesem Chat; ändert nichts',
-        argumente: 'keine',
-        beispiel: '/naechste-schritte:zeigen',
+        titel: 'Vorschläge zeigen',
+        description: 'Die aktuellen Vorschläge als nummerierte Liste zeigen',
+        was:
+            'Zeigt die Vorschläge nach der letzten Antwort als nummerierte Liste, etwa vom Handy, wo es keine Leiste gibt. ' +
+            'In der Leiste über dem Eingabefeld stehen dieselben Vorschläge: in der Desktop-App hinter den Buttons 1️⃣ bis 3️⃣, im Terminal hinter "Als Nächstes:".',
+        knopf: 'keiner.',
+        gilt: GILT_EINMAL,
+        argumente: 'keine.',
     },
     vorschlagBefehl(1),
     vorschlagBefehl(2),
@@ -142,21 +152,88 @@ export function istHilfe(args: string): boolean {
     return a === 'hilfe' || a === '?'
 }
 
-/** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
+/** Die Hilfe eines Befehls: Name und Titel, was er tut, welcher Knopf, wie weit er wirkt, Argumente. */
 export function hilfeText(b: Befehl): string {
-    return [`/${b.name}: ${b.was}`, `Button: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+    return [
+        `/${b.name} · ${b.titel}`,
+        `Was: ${b.was}`,
+        `Button: ${b.knopf}`,
+        `Gilt: ${b.gilt}`,
+        `Argumente: ${b.argumente}`,
+        ...(b.beispiel ? [`Beispiel: ${b.beispiel}`] : []),
+    ].join('\n')
 }
 
 /** Was ein Befehl sagt, wenn er scheitert. */
 export function fehlerText(name: string): string {
-    return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+    return `Das hat nicht geklappt: /${name} ist an einem Fehler im Mod gescheitert. Versuch es gleich noch einmal.`
 }
 
-/** Alle Befehle des Mods, je eine Zeile. */
-export function uebersicht(): string {
+/** So heisst der Mod in Claude Code, wenn sich der Katalog nicht lesen laesst. */
+const MOD_ID_STANDARD = 'naechste-schritte@bm-mods'
+
+/**
+ * Die volle ID eines Mods (`<name>@<katalog>`) aus `enabledPlugins` der Settings: die eingeschaltete,
+ * sonst die erste. Null, wenn keine dabei ist (etwa bei `--plugin-dir`).
+ */
+export function modIdAus(eingeschaltet: unknown, name: string): string | null {
+    if (typeof eingeschaltet !== 'object' || eingeschaltet === null) {
+        return null
+    }
+    const werte = eingeschaltet as Record<string, unknown>
+    const ids = Object.keys(werte).filter(k => k.startsWith(`${name}@`) && k !== `${name}@inline`)
+    return ids.find(k => werte[k] === true) ?? ids[0] ?? null
+}
+
+/** Die volle ID dieses Mods, wie `claude plugin disable` sie braucht; null, wenn sie sich nicht lesen laesst. */
+async function ladeModId($: EngineInterface): Promise<string | null> {
+    try {
+        return modIdAus(await $.settings.read({ key: 'enabledPlugins' }), 'naechste-schritte')
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Alles, was /naechste-schritte:hilfe sagt. `id` ist die volle ID des Mods; ohne sie steht dort
+ * naechste-schritte@bm-mods mit dem Hinweis auf den alten Katalognamen.
+ */
+export function uebersicht(id: string | null = null): string {
+    const mod = id ?? MOD_ID_STANDARD
     return [
-        'Befehle von Nächste Schritte (jeder versteht hilfe oder ? als Argument):',
-        ...BEFEHLE.map(b => `/${b.name}: ${b.description}`),
+        'Nächste Schritte · Hilfe',
+        '',
+        'Was der Mod tut',
+        'Nächste Schritte ist ein Mod, also eine Erweiterung für Claude Code. Nach jeder Antwort von Claude schlägt er zwei oder drei Dinge vor, ' +
+            'die du als Nächstes schreiben könntest, etwa "Führ die neuen Tests aus". Sie stehen ganz unten in der Leiste über dem Eingabefeld.',
+        '',
+        'So arbeitest du damit',
+        '- In der Desktop-App: Ein Klick auf 1️⃣, 2️⃣ oder 3️⃣ holt den Vorschlag ins leere Eingabefeld; steht dort schon Text, hängt er den Vorschlag dahinter. ' +
+            'Steht genau dieser Vorschlag unverändert im Feld, schickt ein zweiter Klick ihn ab. Hast du ihn geändert, schick ihn wie jede Nachricht mit Enter ab.',
+        '- Im Terminal: Tipp 1, 2 oder 3 ins leere Eingabefeld, dann steht der Vorschlag dort als Entwurf; Enter schickt ihn ab. ' +
+            'Willst du wirklich nur eine Ziffer schicken, füge sie aus der Zwischenablage ein, statt sie zu tippen.',
+        '- Überall: /naechste-schritte:1 bis :3 schicken den Vorschlag sofort als deine Nachricht ab, /naechste-schritte:zeigen listet die Vorschläge als Text.',
+        '- Die Vorschläge verschwinden, sobald du etwas abschickst, und kommen nach der nächsten Antwort neu. ' +
+            'Solange Claude Code selbst eine Frage mit Auswahl in der Leiste zeigt, sind sie ausgeblendet, und Ziffern gehen an diese Frage.',
+        '',
+        'Einstellen',
+        'Einstellen lässt sich nichts, und einen Aus-Schalter im Chat gibt es nicht.',
+        `Ganz abschalten: \`claude plugin disable ${mod}\` (wieder an mit \`enable\`), oder sag Claude, er soll den Mod abschalten. Das wirkt nach einem Neustart von Claude Code.`,
+        ...(id === null ? ['Ältere Installationen heißen `naechste-schritte@bjoern-mods`; `claude plugin list` zeigt den Namen.'] : []),
+        '',
+        'Kosten',
+        'Nach einer Antwort von Claude ein kleiner Aufruf von Haiku: Er liest die letzten sechs Nachrichten und schreibt die Vorschläge. ' +
+            'Haiku ist das kleinste und günstigste Modell von Claude. Der Aufruf kostet Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit). ' +
+            'Kein Aufruf läuft nach Antworten unter 20 Zeichen, nach einer abgebrochenen Runde und solange Helfer (Claude startet sie für Teilaufgaben) noch laufen. ' +
+            'Der Aufruf läuft auch, wenn du nur vom Handy schreibst.',
+        '',
+        'Vom Handy (Remote Control)',
+        'Dort gibt es keine Leiste und keine Buttons. Schick /naechste-schritte:zeigen, um die Vorschläge zu sehen, und /naechste-schritte:1, :2 oder :3, um einen abzuschicken.',
+        '',
+        'Befehle',
+        'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+        ...BEFEHLE.map(b => `/${b.name} · ${b.description}`),
+        'Mehr zu jedem Befehl: hilfe dahinter, etwa /naechste-schritte:zeigen hilfe.',
     ].join('\n')
 }
 
@@ -164,7 +241,7 @@ export function uebersicht(): string {
 async function zeigeVorschlaege($: EngineInterface): Promise<string> {
     const v = await read($, vorschlaege)
     if (!v || v.eintraege.length === 0) {
-        return 'Gerade gibt es keine Vorschläge für den nächsten Schritt.'
+        return 'Gerade gibt es keine Vorschläge für den nächsten Schritt. Sie kommen nach der nächsten Antwort von Claude.'
     }
     return ['Als Nächstes:', ...v.eintraege.map((t, i) => `${i + 1}. ${t}`)].join('\n')
 }
@@ -173,7 +250,7 @@ async function zeigeVorschlaege($: EngineInterface): Promise<string> {
 async function schickeVorschlag($: EngineInterface, n: number): Promise<string> {
     const v = await read($, vorschlaege)
     if (!v || v.eintraege.length === 0) {
-        return 'Gerade gibt es keine Vorschläge, abgeschickt ist nichts.'
+        return 'Gerade gibt es keine Vorschläge, abgeschickt ist nichts. Sie kommen nach der nächsten Antwort von Claude.'
     }
     const wahl = v.eintraege[n - 1]
     if (!wahl) {
@@ -188,7 +265,7 @@ async function schickeVorschlag($: EngineInterface, n: number): Promise<string> 
 async function wirke($: EngineInterface, name: string): Promise<string> {
     switch (name) {
         case 'naechste-schritte:hilfe':
-            return uebersicht()
+            return uebersicht(await ladeModId($))
         case 'naechste-schritte:zeigen':
             return zeigeVorschlaege($)
         case 'naechste-schritte:1':
@@ -438,6 +515,7 @@ async function schlageVor($: EngineInterface, turnId: string, antwort: string, j
             'You predict what a person will type next to their coding assistant, after reading a transcript of their session. ' +
             `Give 2 or 3 short, concrete follow-up prompts in German, each an instruction in the imperative addressed with "du", under ${MAX_ZEICHEN} characters, ` +
             'specific to what just happened (name the file, test or feature). Plain words, no dashes as punctuation, no numbering, no quotes. ' +
+            'Write real German umlauts (ä, ö, ü, ß), never ae, oe, ue or ss in their place. ' +
             'One per line and nothing else. If nothing sensible follows, reply with the single word NONE.\n' +
             'Example reply:\nFühr die Login-Tests noch mal aus\nBau dieselbe Prüfung in signup.ts ein\nÖffne einen Entwurf für den PR',
         prompt: [

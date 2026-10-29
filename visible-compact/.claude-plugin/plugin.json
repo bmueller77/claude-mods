@@ -1,8 +1,8 @@
 {
   "name": "visible-compact",
   "displayName": "Visible Compact",
-  "version": "0.6.2",
-  "description": "Zeigt den Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf Wunsch ins Deutsche übersetzt; /show-last-compact öffnet es wieder. Deutsche Fassung von visible-compact (MIT, Sravan).",
+  "version": "0.6.2.1",
+  "description": "Zeigt nach jedem Verdichten (/compact) im Seitenfenster den Chat von vorher neben dem, was danach übrig ist, auf Wunsch auf Deutsch übersetzt. Hilfe: /visible-compact:hilfe. Grundlage: visible-compact von Sravan (MIT).",
   "author": {
     "name": "Sravan",
     "url": "https://github.com/nvsravank"
@@ -23,19 +23,19 @@
     "uebersetzen": {
       "type": "boolean",
       "title": "Übersetzen",
-      "description": "Zeigt englische Abschnitte im Fenster auf Deutsch. Standard für neue Chats; der Button Übersetzen schaltet nur im Chat um.",
+      "description": "Standard für neue Chats, an oder aus (im Terminal true oder false): an zeigt englische Abschnitte im Fenster Verdichtungen des Chats auf Deutsch, aus zeigt sie im Original. Eingebaut: aus. Nur in einem Chat schaltest du mit den Buttons Übersetzen und Original zeigen im Fenster um. Jede Übersetzung kostet einen Aufruf des Modells für die Übersetzung.",
       "default": false
     },
     "storage": {
       "type": "string",
       "title": "Wo Verdichtungen gespeichert werden",
-      "description": "temp oder home. temp (Standard): der Temp-Ordner des Systems, den das System aufräumt (weg nach einem Neustart oder ein paar Tagen ohne Nutzung). home: ~/.claude/visible-compact, bleibt, bis du es löschst. Jeder andere Wert gilt als temp.",
+      "description": "Standard für neue Chats, im Chat nicht umstellbar: wo der Mod den ganzen Chat von vor und nach jedem Verdichten als Dateien ablegt, mit allem, was darin stand. temp: im Temp-Ordner des Systems unter visible-compact, bis das System ihn aufräumt (wann, hängt vom System ab). home: unter ~/.claude/visible-compact, bis du es löschst. Eingebaut: temp. Jeder andere Wert gilt als temp. Der Mod selbst löscht nichts davon; löschen kannst du den Ordner selbst.",
       "default": "temp"
     },
     "modell": {
       "type": "string",
       "title": "Modell für die Übersetzung",
-      "description": "Welches Modell englische Abschnitte ins Deutsche übersetzt, wenn du im Fenster auf Übersetzen drückst. haiku ist günstig und reicht dafür.",
+      "description": "Standard für neue Chats, im Chat nicht umstellbar: welches Modell von Claude englische Abschnitte ins Deutsche übersetzt, haiku, sonnet oder opus. Haiku ist klein und günstig und reicht dafür. Eingebaut: haiku; leer gilt als haiku. Jeder übersetzte Abschnitt kostet einen Aufruf dieses Modells, fertige Übersetzungen werden gespeichert.",
       "default": "haiku"
     }
   }

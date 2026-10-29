@@ -4,18 +4,24 @@ Ein Skill für kurze, handlungsnahe Antworten. Das tut er, solange er an ist:
 
 - Jede Antwort beginnt mit der nächsten Handlung.
 - Mehrere Schritte stehen nummeriert untereinander.
-- In jeder Runde steht der aktuelle Stand.
+- Claude sagt in jeder Antwort, wo ihr gerade steht.
 - Keine Abschweifungen.
-- Zeitangaben sind konkret.
+- Zeiten stehen in Minuten oder Stunden, nicht als "etwas Arbeit".
 - Was fertig ist, steht konkret da.
+
+Es gilt für jede Antwort im Chat, bis du es ausschaltest. Einstellen lässt sich nichts, und einen Standard für neue Chats gibt es nicht: Jeder neue Chat beginnt ohne Kurzfassen. Ob es an ist, zeigt kein eigenes Zeichen: Frag Claude, oder schau auf den Button des Leitstands (📝 an, 📖 aus). Nach /clear oder einem Verdichten (/compact) schalte es bei Bedarf neu ein. `/kurzfassen:hilfe` erklärt alles im Chat, auch vom Handy.
 
 ## Einschalten
 
-`/kurzfassen:kurzfassen`, oder im Leitstand der Button 📖/📝 "Kurzantworten".
+Schick `/kurzfassen:kurzfassen`. Hast du auch den Leitstand (ein weiterer Mod mit einer Leiste über dem Eingabefeld), geht es dort mit dem Button 📖 "Kurzantworten".
 
 ## Ausschalten
 
-"Kurzfassen aus" oder "normal antworten". Die alten Wörter "stop adhd mode" und "normal mode" gelten weiter.
+Schreib "Kurzfassen aus" oder "normal antworten". Im Leitstand geht es auch mit dem Button 📝.
+
+## Kosten
+
+Beim Einschalten kommt die Anleitung für Claude (der Skill, knapp 3.000 Tokens) in den Chat. Sie bleibt dort und wird bei jeder Nachricht mitgelesen, meist aus dem Zwischenspeicher (Cache), also günstig.
 
 ## Herkunft
 

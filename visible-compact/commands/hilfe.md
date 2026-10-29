@@ -1,5 +1,5 @@
 ---
-description: "Listet alle Befehle von Visible Compact"
+description: "Zeigt, wie Visible Compact arbeitet, wie du es einstellst, und alle Befehle"
 disable-model-invocation: true
 ---
 

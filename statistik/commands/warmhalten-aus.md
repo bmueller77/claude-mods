@@ -1,5 +1,5 @@
 ---
-description: "Warmhalten des Prompt-Caches sofort ausschalten"
+description: "Schaltet das Warmhalten des Caches sofort aus"
 disable-model-invocation: true
 ---
 

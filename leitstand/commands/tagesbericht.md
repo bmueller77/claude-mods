@@ -1,5 +1,5 @@
 ---
-description: "Teambericht für heute als Text"
+description: "Tagesbericht für heute als Text"
 disable-model-invocation: true
 ---
 

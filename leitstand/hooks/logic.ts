@@ -2,14 +2,14 @@ import type { GlanceChatSettings, GlanceChecklist, GlanceHelper, GlanceHistoryVi
 import { SIZE_WEIGHT, teamReport, weekSummary } from './history'
 import { inBerlin } from './berlin'
 import { maskPrivate } from './privacy'
-import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE } from './autopilot/befehle'
+import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE, AUTOPILOT_GRUNDBEFEHL, AUTOPILOT_TUT } from './autopilot/befehle'
 import { FILETREE_ALTE, FILETREE_BEFEHLE } from './filetree/befehle'
 import { REFLECT_ALTE, REFLECT_BEFEHLE } from './reflect/befehle'
 
 export const PLUGIN = 'leitstand'
 
 export const tourNeeds = (mark: string) =>
-  `Wenn Claude dich braucht, zeigt die Checkliste Braucht dich ${mark} und sagt, was zu tun ist. Schalte in den Einstellungen Töne oder Desktop-Benachrichtigungen ein, dann hörst oder siehst du es auch in einer anderen App.`
+  `Wenn Claude dich braucht, zeigt die Checkliste Braucht dich ${mark} und sagt, was zu tun ist. Schalte im Einstellungsfenster Töne oder Desktop-Benachrichtigungen ein, dann hörst oder siehst du es auch in einer anderen App.`
 
 export const MAX_NAME = 40
 
@@ -1639,10 +1639,11 @@ export function otherChatsWords(others: readonly GlanceOtherChat[]): string[] {
 }
 
 /**
- * Wie weit ein Leitstand-Befehl wirkt: eine Einstellung nur in diesem Chat (der Standard für neue Chats steht im
- * Einstellungsmenü), ein Zustand nur dieses Chats ohne Eintrag im Menü, oder einmal, ohne etwas umzustellen.
+ * Wie weit ein Leitstand-Befehl wirkt (Leitfaden 4): eine Einstellung nur in diesem Chat, deren Standard für neue Chats
+ * eine Option ist (`option`); ein Zustand nur dieses Chats ohne Option; etwas Dauerhaftes, das in eine Datei oder einen
+ * Speicher schreibt (`ort`); oder einmal, sofort, ohne eine Einstellung zu ändern.
  */
-export type BefehlGilt = 'einstellung' | 'chat' | 'einmal'
+export type BefehlGilt = 'einstellung' | 'chat' | 'dauerhaft' | 'einmal'
 
 /** Ein eigener Slash-Befehl des Leitstands: was die Befehlsliste zeigt und was seine Hilfe sagt. */
 export type LeitstandBefehl = {
@@ -1651,16 +1652,27 @@ export type LeitstandBefehl = {
   description: string
   argumentHint?: string
   gruppe: string
-  /** Was der Befehl tut, in einem oder zwei Sätzen. */
+  /** Was der Befehl tut, in einem oder zwei Sätzen, mit jeder Nebenwirkung. */
   tut: string
-  /** Welchem Knopf oder Schalter er entspricht. */
+  /** Die ganze Zeile zu Button oder Einstellungsfenster: "Button: ...", "Im Einstellungsfenster: ..." oder "Button: keiner." */
   knopf: string
   gilt: BefehlGilt
+  /** Bei `einstellung`: der Titel der Option, die den Standard für neue Chats hält. */
+  option?: string
+  /** Bei `dauerhaft`: wohin der Befehl schreibt. */
+  ort?: string
+  /** Statt der Fassung aus `gilt` ein eigener Satz, wo die Fassung die Wirkung nicht trifft. */
+  giltText?: string
   /** Die Argumente außer hilfe; leer, wenn er keine nimmt. */
   argumente: string
+  /** Ein Beispiel; nur bei Befehlen mit Argument gezeigt. */
   beispiel: string
 }
 
+/** Was ein Befehl außer seinen Pflichtangaben haben kann. */
+export type BefehlMehr = { argumentHint?: string; argumente?: string; beispiel?: string; option?: string; ort?: string; giltText?: string }
+
+/** Ein Befehl aus seinen Angaben; ohne Argumente ist `argumente` leer, das Beispiel der Befehl selbst. */
 const befehl = (
   gruppe: string,
   name: string,
@@ -1668,7 +1680,7 @@ const befehl = (
   tut: string,
   knopf: string,
   gilt: BefehlGilt,
-  mehr: { argumentHint?: string; argumente?: string; beispiel?: string } = {},
+  mehr: BefehlMehr = {},
 ): LeitstandBefehl => ({
   name,
   description,
@@ -1677,93 +1689,173 @@ const befehl = (
   tut,
   knopf,
   gilt,
+  ...(mehr.option === undefined ? {} : { option: mehr.option }),
+  ...(mehr.ort === undefined ? {} : { ort: mehr.ort }),
+  ...(mehr.giltText === undefined ? {} : { giltText: mehr.giltText }),
   argumente: mehr.argumente ?? '',
   beispiel: mehr.beispiel ?? `/${name}`,
 })
 
-const JA = { argumentHint: '[ja]', argumente: 'ja führt aus. Ohne ja sagt der Befehl nur, was passieren würde.' }
+/** Wie die Hilfen "zweimal drücken" erklären. */
+export const ZWEIMAL = 'Zweimal drücken: Der erste Druck fragt nach, der zweite führt aus. Als Befehl: mit ja dahinter.'
+
+const JA = { argumentHint: '[ja]', argumente: 'ja (freiwillig): führt aus. Ohne ja sagt der Befehl nur, was passieren würde.' }
 const ja = (name: string) => ({ ...JA, beispiel: `/${name} ja` })
+
+/** Die Ansicht: Standard für neue Chats ist die Option Ansicht. */
+const ANSICHT = { option: 'Ansicht' }
+const TOENE = { option: 'Töne' }
+const VIEW_KNOPF = 'Button: das Menü oben rechts in der Leiste (im Terminal schaltet ein Druck zur nächsten Ansicht).'
+const MODUS_KNOPF =
+  'Button: 👨‍💼 oder 👨‍👨‍👧‍👦 unten links (im Terminal 👤 oder 👥); jeder Druck schaltet zwischen Auto-Modus und Gruppenarbeit um. Auch im Einstellungsfenster.'
+
+/** Der Passwortschutz, in der einen Fassung, die alle Texte teilen. */
+export const PASSWORTSCHUTZ_TEXT =
+  'Sieht eine Nachricht, die du am Rechner schreibst, nach Passwort, Schlüssel, Karten- oder Kontonummer aus, hält der Leitstand sie zwei Minuten zurück: Claude sieht sie nicht, und im Chat steht sie nicht. ' +
+  'In der Leiste steht dann 🔒 Zurückgehalten mit Trotzdem senden und Verwerfen (Befehle /leitstand:trotzdem-senden und /leitstand:nachricht-verwerfen); im Terminal schickt sie auch ein zweites Enter ab. ' +
+  'Nach zwei Minuten ohne Entscheidung ist sie verworfen. Hält er etwas fälschlich an, schickt Trotzdem senden es ab; ganz aus mit /leitstand:passwortschutz-aus. ' +
+  'Vom Handy, und wo keine Leiste zu sehen ist, geht die Nachricht ohne das Passwort weiter, und Claude sagt dir das. Berichte von Helfern gehen unverändert durch. Ist ein Passwort doch an Claude gegangen, ändere es.'
+
+/** Wann ein Plan auf Freigabe wartet, in der einen Fassung, die alle Texte teilen. */
+export const PLAN_FREIGABE =
+  'In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst.'
+
+/** Die sechs Stufen der Arbeiter, so dass die Zahl stimmt. */
+export const STUFEN = 'Haiku, Sonnet, Opus mit mittlerem, hohem oder extra hohem Aufwand und Fable'
+
+/** Was Verdecken verdeckt, in der einen Fassung, die alle Texte teilen. */
+export const VERDECKEN_TEXT =
+  'Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte, in Nachrichten wie in Befehls- und Werkzeugausgaben, solange der Leitstand an ist. Das betrifft nur den Bildschirm: Claude liest alles unverändert.'
+
+/** Der Autopilot, in der einen Fassung für Hilfe und Übersicht (steht bei seinen Befehlen). */
+export const AUTOPILOT_TEXT = AUTOPILOT_TUT
 
 /** Die Befehle des Leitstands selbst, in der Reihenfolge der Übersicht. /leitstand bleibt daneben als Kurzform. */
 const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
-  befehl('Allgemein', 'leitstand:hilfe', 'Alle Leitstand-Befehle im Überblick', 'Listet alle Leitstand-Befehle auf, nach Gruppen, je mit einer Zeile.', 'Keiner; die Buttons stehen im Leitstand über dem Eingabefeld.', 'einmal'),
-  befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand über dem Eingabefeld ein.', 'Einstellungen › Ansicht (Einfach, Detailliert oder Minimal)', 'einstellung'),
-  befehl('Allgemein', 'leitstand:aus', 'Leitstand ausschalten', 'Schaltet den Leitstand aus; alle Werkzeug-Details sind dann wieder zu sehen.', 'Einstellungen › Ansicht › Aus', 'einstellung'),
-  befehl('Allgemein', 'leitstand:tour', 'Die Begrüßung noch mal zeigen', 'Zeigt die Begrüßung über dem Eingabefeld noch einmal; mit Weiter gehst du sie durch.', 'Keiner; die Begrüßung erscheint beim ersten Start von selbst.', 'einmal'),
-  befehl('Allgemein', 'leitstand:buttons-zeigen', 'Die Buttons des Leitstands erklären', 'Öffnet ein Fenster, das jeden Button des Leitstands mit seinem Zeichen und seinem Befehl erklärt; auf dem Handy als Text.', '❓ links neben dem Zahnrad', 'einmal'),
+  befehl('Allgemein', 'leitstand:hilfe', 'Alle Leitstand-Befehle im Überblick', 'Erklärt den Leitstand: was er tut, die wichtigsten Handgriffe, wie du ihn einstellst, und listet alle Befehle.', 'Button: keiner. ❓ oben rechts in der Leiste erklärt die Buttons.', 'einmal'),
+  befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand ein: Die Leiste über dem Eingabefeld zeigt wieder Plan, Fortschritt und Buttons.', 'Im Einstellungsfenster: Ansicht › Einfach, Detailliert oder Minimal', 'einstellung', ANSICHT),
+  befehl('Allgemein', 'leitstand:aus', 'Leitstand ausschalten', 'Schaltet den Leitstand aus: keine Checkliste, keine Buttons, und Claude Code zeigt wieder alle Werkzeugzeilen. Verdecken wirkt dann nicht; der Passwortschutz bleibt, wie er eingestellt ist.', 'Im Einstellungsfenster: Ansicht › Aus', 'einstellung', ANSICHT),
+  befehl('Allgemein', 'leitstand:tour', 'Die Begrüßung noch mal zeigen', 'Zeigt die Begrüßung in der Leiste über dem Eingabefeld: drei kurze Karten, mit Weiter gehst du sie durch. Vom Handy geht das nicht; /leitstand:hilfe erklärt dasselbe als Text.', 'Button: keiner. Beim ersten Start erscheint die Begrüßung von selbst, in der Ansicht Minimal ein Hinweis darauf.', 'einmal'),
+  befehl('Allgemein', 'leitstand:buttons-zeigen', 'Die Buttons des Leitstands erklären', 'Öffnet das Fenster Leitstand-Buttons: jeder Button mit Zeichen, Wirkung und dem Befehl dazu. Vom Handy kommt dasselbe als Text.', 'Button: ❓ oben rechts in der Leiste', 'einmal'),
 
-  befehl('Ansicht', 'leitstand:ansicht-einfach', 'Ansicht Einfach: Schritte und Fortschritt', 'Der Leitstand zeigt die Schritte und den Fortschritt.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Einfach', 'einstellung'),
-  befehl('Ansicht', 'leitstand:ansicht-detailliert', 'Ansicht Detailliert: dazu Zeit und Tokens', 'Der Leitstand zeigt dazu Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Detailliert', 'einstellung'),
-  befehl('Ansicht', 'leitstand:ansicht-minimal', 'Ansicht Minimal: eine Zeile', 'Der Leitstand zeigt eine Zeile mit Stand, Fortschritt, Restzeit und Tokens.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Minimal', 'einstellung'),
+  befehl('Ansicht', 'leitstand:ansicht-einfach', 'Ansicht Einfach: Schritte und Fortschritt', 'Die Leiste zeigt den Plan als Checkliste: jeden Schritt, wie weit er ist und was gerade passiert, ohne Werkzeug-Details.', `${VIEW_KNOPF} Im Einstellungsfenster: Ansicht › Einfach`, 'einstellung', ANSICHT),
+  befehl('Ansicht', 'leitstand:ansicht-detailliert', 'Ansicht Detailliert: dazu Zeit und Tokens', 'Wie Einfach, dazu Zeit und Tokens je Schritt (Tokens sind die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit).', `${VIEW_KNOPF} Im Einstellungsfenster: Ansicht › Detailliert`, 'einstellung', ANSICHT),
+  befehl('Ansicht', 'leitstand:ansicht-minimal', 'Ansicht Minimal: eine Zeile mit dem Stand', 'Die Leiste zeigt eine Zeile mit dem Stand (was gerade passiert, wie viele Schritte fertig sind, Restzeit und Tokens), darunter die Buttons.', `${VIEW_KNOPF} Im Einstellungsfenster: Ansicht › Minimal`, 'einstellung', ANSICHT),
 
-  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-auto', 'Auto-Modus: Claude entscheidet selbst über Helfer', 'Claude entscheidet selbst, ob und welche Helfer es einsetzt.', 'Modus-Menü in der Button-Zeile oder Einstellungen › Arbeitsweise › Auto-Modus', 'einstellung'),
-  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-gruppenarbeit', 'Gruppenarbeit: Claude leitet, Arbeiter setzen um', 'Claude plant und prüft, Arbeiter in sechs Stufen setzen um. Jeder Plan wartet auf deine Freigabe.', 'Modus-Menü in der Button-Zeile oder Einstellungen › Arbeitsweise › Gruppenarbeit', 'einstellung'),
+  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-auto', 'Auto-Modus: Claude entscheidet selbst über Helfer', 'Claude entscheidet selbst, ob und welche Helfer er für Teilaufgaben startet. Gut für kleine und mittlere Aufgaben. Hat nichts mit dem Auto-Modus der Berechtigungen von Claude Code zu tun.', MODUS_KNOPF, 'einstellung', { option: 'Arbeitsweise' }),
+  befehl(
+    'Arbeitsweise',
+    'leitstand:arbeitsmodus-gruppenarbeit',
+    'Gruppenarbeit: Claude leitet, Arbeiter setzen um',
+    `Claude plant und prüft, Arbeiter setzen um: Helfer mit fester Stufe, sechs davon (${STUFEN}; Modelle von Claude, von klein und günstig bis groß). ${PLAN_FREIGABE} Starten: Start, /leitstand:plan-starten oder los schreiben. Kostet mehr Tokens und lohnt sich bei großen Aufgaben.`,
+    MODUS_KNOPF,
+    'einstellung',
+    { option: 'Arbeitsweise' },
+  ),
 
-  befehl('Auftrag', 'leitstand:plan-starten', 'Den wartenden Plan starten', 'Startet den Plan, der auf deine Freigabe wartet. Wartet keiner, sagt der Befehl das.', 'Start', 'einmal'),
-  befehl('Auftrag', 'leitstand:pause', 'Claude anhalten', 'Hält Claude mitten im Auftrag an; mit /leitstand:weiter geht es dort weiter.', 'Pause', 'einmal'),
-  befehl('Auftrag', 'leitstand:weiter', 'Claude weitermachen lassen', 'Claude macht dort weiter, wo es aufgehört hat.', 'Weiter', 'einmal'),
-  befehl('Auftrag', 'leitstand:plan-zeigen', 'Den ganzen Plan zeigen', 'Zeigt den Plan mit allen Schritten; auf dem Handy als Text.', 'Plan', 'einmal'),
-  befehl('Auftrag', 'leitstand:neuer-chat', 'Neuer Chat mit Übergabenotiz (mit ja)', 'Claude schreibt eine Übergabenotiz, leert diesen Chat und schickt die Notiz als erste Nachricht in den neuen.', 'Neuer Chat (zweimal drücken)', 'einmal', ja('leitstand:neuer-chat')),
-  befehl('Auftrag', 'leitstand:abschliessen', 'Auf GitHub abschließen: Commit, Pull Request, Merge (mit ja)', 'Claude räumt die Änderungen auf, committet, öffnet einen Pull Request und mergt nach deiner Freigabe.', 'Push (zweimal drücken)', 'einmal', ja('leitstand:abschliessen')),
+  befehl('Auftrag', 'leitstand:plan-starten', 'Den wartenden Plan starten', 'Startet den Plan, der auf deine Freigabe wartet, in der Gruppenarbeit oder bei Plan zuerst freigeben; statt des Befehls geht auch: los schreiben. Wartet keiner, sagt der Befehl das.', 'Button: Start unten rechts; erscheint, sobald ein Plan wartet.', 'einmal'),
+  befehl('Auftrag', 'leitstand:pause', 'Claude anhalten', 'Hält Claude mitten im Auftrag an, wie Esc; die Leiste zeigt dann Pausiert, und /leitstand:weiter macht dort weiter. Läuft gerade nichts, sagt der Befehl das.', 'Button: Pause unten rechts; erscheint, solange Claude arbeitet.', 'einmal'),
+  befehl('Auftrag', 'leitstand:weiter', 'Claude weitermachen lassen', 'Schickt Claude für dich die Nachricht, weiterzumachen: nach einer Pause, einem Abbruch oder wenn Claude festhängt. Ist nichts angehalten, sagt der Befehl das.', 'Button: Weiter unten rechts; erscheint, wenn Claude angehalten ist oder festhängt.', 'einmal'),
+  befehl('Auftrag', 'leitstand:plan-zeigen', 'Den ganzen Plan zeigen', 'Öffnet das Fenster Plan mit allen Schritten, ihren Zeiten und was jeder erledigt hat. Vom Handy kommt der Plan als Text.', 'Button: Plan unten in der Leiste; erscheint, sobald es einen Plan gibt.', 'einmal'),
+  befehl(
+    'Auftrag',
+    'leitstand:neuer-chat',
+    'Neuer Chat mit Übergabenotiz (mit ja)',
+    'Claude schreibt eine Übergabenotiz über diesen Chat, leert ihn dann mit /clear und schickt die Notiz als erste Nachricht in den neuen Chat. /clear allein leert nur. Das Schreiben der Notiz ist ein Modellaufruf, der den ganzen Chat liest.',
+    `Button: Neuer Chat unten rechts; am Rechner, sobald ein Auftrag fertig oder angehalten ist. ${ZWEIMAL}`,
+    'einmal',
+    { ...ja('leitstand:neuer-chat'), giltText: 'einmal, sofort; leert diesen Chat und ändert keine Einstellung.' },
+  ),
+  befehl(
+    'Auftrag',
+    'leitstand:abschliessen',
+    'Auf GitHub abschließen: Commit, Pull Request, Merge (mit ja)',
+    'Claude räumt die Änderungen auf und macht Commit, Pull Request und Merge: Änderungen festhalten, auf GitHub zur Prüfung vorlegen und nach deiner Freigabe in den Hauptzweig übernehmen. Geht nur in einem Projekt auf GitHub.',
+    `Button: Push unten rechts; erscheint nach einem fertigen Auftrag, wenn Auf GitHub abschließen an ist. ${ZWEIMAL}`,
+    'dauerhaft',
+    { ...ja('leitstand:abschliessen'), ort: 'dein Projekt auf GitHub (Commit, Pull Request, Merge)' },
+  ),
 
-  befehl('Verlauf und Berichte', 'leitstand:verlauf-zeigen', 'Den Verlauf eines Tages zeigen', 'Zeigt die Aufträge eines Tages in diesem Projekt; auf dem Handy als Text.', 'Verlauf', 'einmal', {
+  befehl('Verlauf und Berichte', 'leitstand:verlauf-zeigen', 'Den Verlauf eines Tages zeigen', 'Öffnet das Fenster Verlauf: deine Aufträge eines Tages in diesem Projekt, mit Tagesbericht, Wochenbericht und Deine Woche. Vom Handy kommt die Liste als Text.', 'Button: Verlauf unten in der Leiste', 'einmal', {
     argumentHint: '[gestern|JJJJ-MM-TT]',
-    argumente: 'Ohne Argument heute; gestern oder ein Datum als JJJJ-MM-TT.',
+    argumente: 'Tag (freiwillig): ohne Argument heute, sonst gestern oder ein Datum als JJJJ-MM-TT.',
     beispiel: '/leitstand:verlauf-zeigen gestern',
   }),
-  befehl('Verlauf und Berichte', 'leitstand:tagesbericht', 'Teambericht für heute als Text', 'Schreibt den Teambericht für heute in die Antwort und kopiert ihn.', 'Verlauf › Tagesbericht', 'einmal'),
-  befehl('Verlauf und Berichte', 'leitstand:wochenbericht', 'Teambericht für diese Woche als Text', 'Schreibt den Teambericht für diese Woche in die Antwort und kopiert ihn.', 'Verlauf › Wochenbericht', 'einmal'),
-  befehl('Verlauf und Berichte', 'leitstand:meine-woche', 'Deine Woche über alle Projekte', 'Fasst deine letzten sieben Tage über alle Projekte zusammen und kopiert das.', 'Verlauf › Deine Woche', 'einmal'),
+  befehl('Verlauf und Berichte', 'leitstand:tagesbericht', 'Tagesbericht für heute als Text', 'Schreibt den Tagesbericht in die Antwort: was du und Claude mit seinen Helfern heute in diesem Projekt erledigt habt. Er kommt auch in die Zwischenablage.', 'Button: Tagesbericht im Fenster Verlauf', 'einmal'),
+  befehl('Verlauf und Berichte', 'leitstand:wochenbericht', 'Wochenbericht für diese Woche als Text', 'Schreibt den Wochenbericht in die Antwort: was du und Claude mit seinen Helfern diese Woche in diesem Projekt erledigt habt. Er kommt auch in die Zwischenablage.', 'Button: Wochenbericht im Fenster Verlauf', 'einmal'),
+  befehl('Verlauf und Berichte', 'leitstand:meine-woche', 'Deine Woche über alle Projekte', 'Fasst deine letzten sieben Tage über alle Projekte zusammen, in der Antwort und in der Zwischenablage.', 'Button: Deine Woche im Fenster Verlauf', 'einmal'),
 
-  befehl('Helfer', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Claude antwortet mit dem nächsten Schritt zuerst, in nummerierten Schritten und ohne Umwege.', '📖 (steht dann auf 📝)', 'chat'),
-  befehl('Helfer', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt.', '📝 (steht dann auf 📖)', 'chat'),
-  befehl('Helfer', 'leitstand:vermenschlichen', 'Letzte Antwort natürlicher umschreiben', 'Claude überarbeitet seine letzte Antwort, damit sie nicht nach KI klingt.', '🧍', 'einmal'),
-  befehl('Helfer', 'leitstand:ausfragen', 'Grill mich: Claude löchert dich mit Fragen', 'Startet den Skill grill-me: Claude fragt dich so lange aus, bis ein Plan oder eine Idee steht.', '♨️ Grill mich', 'einmal', {
+  befehl('Werkzeuge', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Kurze Antworten: Claude nennt zuerst den nächsten Schritt und antwortet in nummerierten Schritten, ohne Umwege. Dafür startet der Leitstand den Skill kurzfassen (ein mitgelieferter Ablauf für Claude). Aus geht es mit /leitstand:kurzantworten-aus oder den Worten Kurzfassen aus.', 'Button: 📖 unten links; danach zeigt er 📝.', 'chat'),
+  befehl('Werkzeuge', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt; dafür schickt der Leitstand für dich die Nachricht Kurzfassen aus.', 'Button: 📝 unten links; danach zeigt er 📖.', 'chat'),
+  befehl('Werkzeuge', 'leitstand:vermenschlichen', 'Letzte Antwort natürlicher umschreiben', 'Startet den Skill vermenschlichen (bei englischen Antworten humanizer): Claude schreibt seine letzte Antwort neu, damit sie nicht nach KI klingt. Das ist eine Runde wie nach einer eigenen Nachricht.', 'Button: 🧍 unten links', 'einmal'),
+  befehl('Werkzeuge', 'leitstand:ausfragen', 'Grill mich: Claude löchert dich mit Fragen', 'Startet den Skill grill-me (ein mitgelieferter Ablauf für Claude): Claude fragt dich so lange aus, bis ein Plan oder eine Idee steht.', 'Button: ♨️ Grill mich unten links (im Terminal 🔥)', 'einmal', {
     argumentHint: '[Thema]',
-    argumente: 'Ein Thema (frei). Ohne Thema geht es um den aktuellen Plan; gibt es keinen, fragt der Befehl nach einem Thema.',
+    argumente: 'Thema (freiwillig). Ohne Thema geht es um den aktuellen Plan; gibt es keinen, fragt der Befehl nach einem Thema.',
     beispiel: '/leitstand:ausfragen Umzug der Datenbank',
   }),
-  befehl('Helfer', 'leitstand:sauberer-code', 'Code prüfen mit clean-code', 'Startet den Skill clean-code: Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', '🧹', 'einmal'),
-  befehl('Helfer', 'leitstand:fernsteuerung-an', 'Remote Control einschalten', 'Schaltet Remote Control ein, damit du den Chat vom Handy aus steuern kannst.', '🛜', 'chat'),
-  befehl('Helfer', 'leitstand:fernsteuerung-aus', 'Remote Control ausschalten', 'Schaltet Remote Control aus.', '🛜', 'chat'),
+  befehl('Werkzeuge', 'leitstand:sauberer-code', 'Code prüfen lassen mit dem Skill clean-code', 'Startet den Skill clean-code (ein mitgelieferter Ablauf für Claude): Claude prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', 'Button: 🧹 unten links', 'einmal'),
+  befehl('Werkzeuge', 'leitstand:fernsteuerung-an', 'Remote Control einschalten', 'Schaltet Remote Control ein: Du steuerst diesen Chat dann auch vom Handy aus. Geht nur, wo der Chat es kann.', 'Button: 🛜 unten links (im Terminal 📡); leuchtet, solange es verbunden ist, und fehlt, wo der Chat es nicht kann.', 'chat'),
+  befehl('Werkzeuge', 'leitstand:fernsteuerung-aus', 'Remote Control ausschalten', 'Schaltet Remote Control aus und trennt damit die Verbindung zum Handy: Von dort erreichst du diesen Chat dann nicht mehr, einschalten geht nur am Rechner.', 'Button: 🛜 unten links (im Terminal 📡), solange es leuchtet', 'chat'),
 
-  befehl('Schutz', 'leitstand:verdecken-an', 'Verdecken einschalten', 'Passwörter, Schlüssel und persönliche Daten erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.', '🔒 oder Einstellungen › Verdecken', 'einstellung'),
-  befehl('Schutz', 'leitstand:verdecken-aus', 'Verdecken ausschalten', 'Alles erscheint wieder so, wie es im Chat steht.', '🔒 oder Einstellungen › Verdecken', 'einstellung'),
-  befehl('Schutz', 'leitstand:passwortschutz-an', 'Passwortschutz einschalten', 'Eine Nachricht, die du am Computer schreibst und die nach Passwort oder Schlüssel aussieht, wird zwei Minuten zurückgehalten. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, Verwerfen oder /nachricht-verwerfen verwirft sie. Berichte von Helfern gehen durch; vom Handy geht die Nachricht ohne das Passwort weiter.', 'Einstellungen › Passwortschutz', 'einstellung'),
-  befehl('Schutz', 'leitstand:passwortschutz-aus', 'Passwortschutz ausschalten', 'Jede Nachricht wird so gesendet, wie du sie schreibst.', 'Einstellungen › Passwortschutz', 'einstellung'),
-  befehl('Schutz', 'leitstand:trotzdem-senden', 'Zurückgehaltene Nachricht trotzdem senden', 'Schickt die Nachricht, die der Passwortschutz zurückhält, so an Claude, wie du sie geschrieben hast. Wartet keine, sagt der Befehl das.', 'Trotzdem senden in der Zeile 🔒 Zurückgehalten', 'einmal'),
-  befehl('Schutz', 'leitstand:nachricht-verwerfen', 'Zurückgehaltene Nachricht verwerfen', 'Verwirft die Nachricht, die der Passwortschutz zurückhält, ohne sie zu senden. Wartet keine, sagt der Befehl das.', 'Verwerfen in der Zeile 🔒 Zurückgehalten', 'einmal'),
-  befehl('Schutz', 'leitstand:geheimnisse-sichern', 'Passwörter aus dem Chat in die .env verschieben (mit ja)', 'Verschiebt Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner und verdichtet den Chat; danach kennt Claude nur noch Platzhalter.', '🛡️ (zweimal drücken)', 'einmal', ja('leitstand:geheimnisse-sichern')),
+  befehl('Schutz', 'leitstand:verdecken-an', 'Verdecken einschalten', VERDECKEN_TEXT, 'Button: 🔓 unten links; danach zeigt er 🔒. Im Einstellungsfenster: Verdecken › An', 'einstellung', { option: 'Verdecken' }),
+  befehl('Schutz', 'leitstand:verdecken-aus', 'Verdecken ausschalten', 'Alles erscheint wieder so, wie es im Chat steht. Schalte Verdecken ein, bevor du deinen Bildschirm teilst.', 'Button: 🔒 unten links; danach zeigt er 🔓. Im Einstellungsfenster: Verdecken › Aus', 'einstellung', { option: 'Verdecken' }),
+  befehl('Schutz', 'leitstand:passwortschutz-an', 'Passwortschutz einschalten', PASSWORTSCHUTZ_TEXT, 'Im Einstellungsfenster: Passwortschutz › An', 'einstellung', { option: 'Passwortschutz' }),
+  befehl('Schutz', 'leitstand:passwortschutz-aus', 'Passwortschutz ausschalten', 'Jede Nachricht geht so an Claude, wie du sie schreibst, auch mit einem Passwort darin.', 'Im Einstellungsfenster: Passwortschutz › Aus', 'einstellung', { option: 'Passwortschutz' }),
+  befehl('Schutz', 'leitstand:trotzdem-senden', 'Zurückgehaltene Nachricht trotzdem senden', 'Schickt die Nachricht, die der Passwortschutz gerade zurückhält, so an Claude, wie du sie geschrieben hast, mit dem Passwort. Wartet keine, sagt der Befehl das.', 'Button: Trotzdem senden in der Zeile 🔒 Zurückgehalten', 'einmal'),
+  befehl('Schutz', 'leitstand:nachricht-verwerfen', 'Zurückgehaltene Nachricht verwerfen', 'Verwirft die Nachricht, die der Passwortschutz gerade zurückhält, ohne sie zu senden. Wartet keine, sagt der Befehl das.', 'Button: Verwerfen in der Zeile 🔒 Zurückgehalten', 'einmal'),
+  befehl(
+    'Schutz',
+    'leitstand:geheimnisse-sichern',
+    'Passwörter aus dem Chat in die .env verschieben (mit ja)',
+    'Verschiebt Passwörter und Schlüssel aus diesem Chat in die Datei .env (eine Datei im Projektordner, aus der Programme geheime Werte lesen) und verdichtet den Chat danach wie /compact: Claude fasst ihn zusammen und arbeitet mit der Zusammenfassung weiter. Danach kennt Claude nur noch Platzhalter.',
+    `Button: 🛡️ unten links (im Terminal 🔐). ${ZWEIMAL}`,
+    'dauerhaft',
+    { ...ja('leitstand:geheimnisse-sichern'), ort: 'die Datei .env im Projektordner' },
+  ),
 
-  befehl('Einstellungen', 'leitstand:einstellungen-zeigen', 'Die Leitstand-Einstellungen öffnen', 'Öffnet die Einstellungen des Leitstands in der Seitenleiste.', '⚙ Einstellungen', 'einmal'),
-  befehl('Einstellungen', 'leitstand:ton-aus', 'Töne ausschalten', 'Kein Ton, wenn Claude dich braucht, festhängt oder fertig ist.', 'Einstellungen › Töne › Aus', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:ton-signalton', 'Töne: Signalton', 'Ein Signalton, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.', 'Einstellungen › Töne › Signalton', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:ton-stimme', 'Töne: Signalton und Stimme', 'Ein Signalton und ein paar gesprochene Worte, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.', 'Einstellungen › Töne › Signalton und Stimme', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:ton-anhoeren', 'Den eingestellten Ton anhören', 'Spielt den eingestellten Ton einmal ab.', 'Einstellungen › Töne › Anhören', 'einmal'),
-  befehl('Einstellungen', 'leitstand:benachrichtigungen-an', 'Desktop-Benachrichtigungen einschalten', 'Dein Computer sagt dir Bescheid, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.', 'Einstellungen › Desktop-Benachrichtigungen', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:benachrichtigungen-aus', 'Desktop-Benachrichtigungen ausschalten', 'Keine Benachrichtigungen auf deinem Computer.', 'Einstellungen › Desktop-Benachrichtigungen', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:andere-chats-an', 'Andere Chats in der Leiste nennen', 'Die Leiste nennt andere Chats auf diesem Computer, die dich brauchen.', 'Einstellungen › Andere Chats', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:andere-chats-aus', 'Andere Chats nicht mehr nennen', 'Die Leiste erwähnt keine anderen Chats, etwa bevor du deinen Bildschirm teilst.', 'Einstellungen › Andere Chats', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:ruhemodus-an', 'Ruhemodus einschalten', 'Nichts auf dem Bildschirm bewegt sich, und der Status steht fett.', 'Einstellungen › Ruhemodus', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:ruhemodus-aus', 'Ruhemodus ausschalten', 'Balken und Kreisel bewegen sich wieder, während Claude arbeitet.', 'Einstellungen › Ruhemodus', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:plan-freigeben-an', 'Plan zuerst freigeben: an', 'Claude zeigt erst seinen Plan und wartet auf Start oder eine Änderung. In der Gruppenarbeit gilt das immer.', 'Einstellungen › Plan zuerst freigeben', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:plan-freigeben-aus', 'Plan zuerst freigeben: aus', 'Claude legt direkt los, sobald der Plan steht. In der Gruppenarbeit geht das nicht.', 'Einstellungen › Plan zuerst freigeben', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:github-abschluss-an', 'Auf GitHub abschließen: an', 'Ein fertiger Auftrag in einem GitHub-Projekt bietet den Button Push an.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:github-abschluss-aus', 'Auf GitHub abschließen: aus', 'Fertige Aufträge bleiben auf ihrem Branch.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:zuruecksetzen', 'Einstellungen auf den Standard zurücksetzen', 'Setzt alle Leitstand-Einstellungen dieses Chats auf den Standard aus dem Einstellungsmenü zurück.', 'Einstellungen › Auf Standard zurücksetzen', 'chat'),
+  befehl('Einstellungen', 'leitstand:einstellungen-zeigen', 'Das Einstellungsfenster öffnen', 'Öffnet das Einstellungsfenster des Leitstands. Vom Handy kommen die Werte dieses Chats als Text, je mit dem Befehl zum Umschalten.', 'Button: ⚙️ oben rechts in der Leiste (im Terminal 🔧)', 'einmal'),
+  befehl('Einstellungen', 'leitstand:ton-aus', 'Töne ausschalten', 'Kein Ton mehr, wenn Claude dich braucht, festhängt oder fertig ist.', 'Im Einstellungsfenster: Töne › Aus', 'einstellung', TOENE),
+  befehl('Einstellungen', 'leitstand:ton-signalton', 'Töne: Signalton', 'Ein kurzer Signalton am Rechner, wenn Claude dich braucht, festhängt oder einen Auftrag beendet, der länger als eine Minute gedauert hat.', 'Im Einstellungsfenster: Töne › Signalton', 'einstellung', TOENE),
+  befehl('Einstellungen', 'leitstand:ton-stimme', 'Töne: Signalton und Stimme', 'Der Signalton und dazu ein paar gesprochene Worte wie Claude braucht dich, wenn Claude dich braucht, festhängt oder einen langen Auftrag beendet.', 'Im Einstellungsfenster: Töne › Signalton und Stimme', 'einstellung', TOENE),
+  befehl('Einstellungen', 'leitstand:ton-anhoeren', 'Den eingestellten Ton anhören', 'Spielt den eingestellten Ton einmal ab, zu hören am Rechner.', 'Button: Anhören im Einstellungsfenster, unter Töne', 'einmal'),
+  befehl('Einstellungen', 'leitstand:benachrichtigungen-an', 'Desktop-Benachrichtigungen einschalten', 'Dein Computer zeigt eine Benachrichtigung, wenn Claude dich braucht, festhängt oder einen Auftrag beendet, der länger als eine Minute gedauert hat, auch wenn du in einer anderen App bist.', 'Im Einstellungsfenster: Desktop-Benachrichtigungen › An', 'einstellung', { option: 'Desktop-Benachrichtigungen' }),
+  befehl('Einstellungen', 'leitstand:benachrichtigungen-aus', 'Desktop-Benachrichtigungen ausschalten', 'Keine Benachrichtigungen mehr auf deinem Computer.', 'Im Einstellungsfenster: Desktop-Benachrichtigungen › Aus', 'einstellung', { option: 'Desktop-Benachrichtigungen' }),
+  befehl('Einstellungen', 'leitstand:andere-chats-an', 'Andere Chats in der Leiste nennen', 'Die Leiste nennt andere Chats auf diesem Computer, die dich brauchen oder gerade arbeiten, aus jedem Projekt.', 'Im Einstellungsfenster: Andere Chats › An', 'einstellung', { option: 'Andere Chats' }),
+  befehl('Einstellungen', 'leitstand:andere-chats-aus', 'Andere Chats nicht mehr nennen', 'Die Leiste nennt keine anderen Chats mehr. Schalte das aus, bevor du deinen Bildschirm teilst.', 'Im Einstellungsfenster: Andere Chats › Aus', 'einstellung', { option: 'Andere Chats' }),
+  befehl('Einstellungen', 'leitstand:ruhemodus-an', 'Ruhemodus einschalten', 'Nichts in der Leiste bewegt sich mehr, keine Balken und kein Kreisel, und der Stand steht fett.', 'Im Einstellungsfenster: Ruhemodus › An', 'einstellung', { option: 'Ruhemodus' }),
+  befehl('Einstellungen', 'leitstand:ruhemodus-aus', 'Ruhemodus ausschalten', 'Balken und Kreisel bewegen sich wieder, während Claude arbeitet.', 'Im Einstellungsfenster: Ruhemodus › Aus', 'einstellung', { option: 'Ruhemodus' }),
+  befehl('Einstellungen', 'leitstand:plan-freigeben-an', 'Plan zuerst freigeben: an', `Claude legt erst seine Schritte fest und wartet, bis du startest (Start, /leitstand:plan-starten oder los schreiben) oder sagst, was sich ändern soll. Das ist nicht der Plan-Modus von Claude Code. ${PLAN_FREIGABE}`, 'Im Einstellungsfenster: Plan zuerst freigeben › An', 'einstellung', { option: 'Plan zuerst freigeben' }),
+  befehl('Einstellungen', 'leitstand:plan-freigeben-aus', 'Plan zuerst freigeben: aus', 'Claude legt los, sobald der Plan steht. In der Gruppenarbeit geht das nicht, dort wartet ein Plan auf deine Freigabe.', 'Im Einstellungsfenster: Plan zuerst freigeben › Aus', 'einstellung', { option: 'Plan zuerst freigeben' }),
+  befehl('Einstellungen', 'leitstand:github-abschluss-an', 'Auf GitHub abschließen: an', 'Nach einem fertigen Auftrag in einem Projekt auf GitHub erscheint der Button Push: Änderungen festhalten (Commit), auf GitHub zur Prüfung vorlegen (Pull Request) und nach deiner Freigabe in den Hauptzweig übernehmen (Merge), wie /leitstand:abschliessen.', 'Im Einstellungsfenster: Auf GitHub abschließen › An', 'einstellung', { option: 'Auf GitHub abschließen' }),
+  befehl('Einstellungen', 'leitstand:github-abschluss-aus', 'Auf GitHub abschließen: aus', 'Kein Button Push: Fertige Aufträge bleiben auf ihrem Zweig (Branch), bis du selbst etwas tust.', 'Im Einstellungsfenster: Auf GitHub abschließen › Aus', 'einstellung', { option: 'Auf GitHub abschließen' }),
+  befehl('Einstellungen', 'leitstand:zuruecksetzen', 'Einstellungen auf den Standard zurücksetzen', 'Setzt in diesem Chat alles aus dem Einstellungsfenster auf den Standard für neue Chats zurück (eingebaut oder, was du dafür eingestellt hast): Ansicht, Arbeitsweise, Töne, Desktop-Benachrichtigungen, Andere Chats, Ruhemodus, Plan zuerst freigeben, Auf GitHub abschließen, Passwortschutz und Verdecken. Korrekturen prüfen, Selbstkritik nach Dateiänderungen und Kurzantworten bleiben, wie sie sind.', 'Button: Auf Standard zurücksetzen im Einstellungsfenster', 'chat'),
 ]
 
 /** Die Befehle der Teile, die bis 2026-10-26 eigene Mods waren: Selbstkritik und Regeln, Dateien, Autopilot. */
 export const TEIL_BEFEHLE: readonly LeitstandBefehl[] = [...REFLECT_BEFEHLE, ...FILETREE_BEFEHLE, ...AUTOPILOT_BEFEHLE]
 
-/** Alle Befehle des Leitstands, in der Reihenfolge der Übersicht: die der Teile hinter den Helfern. */
+/** Alle Befehle des Leitstands, in der Reihenfolge der Übersicht: die der Teile hinter den Werkzeugen. */
 export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = (() => {
-  const nachHelfern = EIGENE_BEFEHLE.findLastIndex(one => one.gruppe === 'Helfer') + 1
-  return [...EIGENE_BEFEHLE.slice(0, nachHelfern), ...TEIL_BEFEHLE, ...EIGENE_BEFEHLE.slice(nachHelfern)]
+  const nachWerkzeugen = EIGENE_BEFEHLE.findLastIndex(one => one.gruppe === 'Werkzeuge') + 1
+  return [...EIGENE_BEFEHLE.slice(0, nachWerkzeugen), ...TEIL_BEFEHLE, ...EIGENE_BEFEHLE.slice(nachWerkzeugen)]
 })()
 
 /** Die Namen der Befehle, die der Leitstand selbst beantwortet; die der Teile beantworten die Teile. */
 export const LEITSTAND_BEFEHL_NAMEN: readonly string[] = EIGENE_BEFEHLE.map(one => one.name)
+
+/**
+ * Der Grundbefehl /leitstand: ohne Argument schaltet er den Leitstand ein oder aus. Die alten englischen Argumente
+ * (on, off, details und die anderen) versteht er weiter, die Hilfe nennt sie nicht mehr.
+ */
+export const LEITSTAND_GRUNDBEFEHL: LeitstandBefehl = befehl(
+  'Allgemein',
+  'leitstand',
+  'Leitstand ein- oder ausschalten',
+  'Schaltet den Leitstand ein, wenn er aus ist, sonst aus. Alle Befehle des Leitstands zeigt /leitstand:hilfe.',
+  'Im Einstellungsfenster: Ansicht',
+  'einstellung',
+  ANSICHT,
+)
 
 /**
  * Befehle ohne Kurzform: an, aus und hilfe sagen allein nicht, welcher Mod gemeint ist, und /vermenschlichen ist schon
@@ -1842,40 +1934,190 @@ export function neuerName(name: string): string {
 /** Ob das Argument eines Befehls nach seiner Hilfe fragt. */
 export const fragtNachHilfe = (args: string) => /^(hilfe|\?|help)$/i.test(args.trim())
 
-const GILT: Record<BefehlGilt, string> = {
-  einstellung: 'nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.',
-  chat: 'nur in diesem Chat.',
-  einmal: 'einmal, sofort; der Befehl stellt nichts um.',
+/** Wie man den Standard für neue Chats einstellt (Leitfaden 2.3), wörtlich für Hilfe und Einstellungsfenster. */
+export const STANDARD_WEG =
+  'Sag Claude zum Beispiel: Stell bei Leitstand den Standard für neue Chats: Ansicht auf einfach. Claude macht das mit `claude plugin configure leitstand@bm-mods`. ' +
+  'Im Terminal geht es auch selbst: `claude plugin configure leitstand@bm-mods` zeigt die Optionen. Setzen geht mit `--values-stdin`, etwa `echo \'{"ansicht": "einfach", "verdecken": false}\' | claude plugin configure leitstand@bm-mods --values-stdin`. Das gilt für Chats, die danach beginnen. Ältere Installationen heißen `leitstand@bjoern-mods`; `claude plugin list` zeigt den Namen. ' +
+  '"not set" heißt dort: Es gilt der eingebaute Standard.'
+
+/** Die Optionen des Leitstands: Titel, Werte auf Deutsch, eingebauter Standard; wie plugin.json sie nennt. */
+export const OPTIONEN: readonly string[] = [
+  'Ansicht: einfach, detailliert, minimal (eine Zeile mit dem Stand, darunter die Buttons) oder aus. Standard: minimal.',
+  'Arbeitsweise: auto (Auto-Modus) oder gruppenarbeit. Standard: auto.',
+  'Töne: aus, signalton oder stimme (Signalton und Stimme). Standard: aus.',
+  'Desktop-Benachrichtigungen, Andere Chats, Ruhemodus, Plan zuerst freigeben, Auf GitHub abschließen, Selbstkritik nach Dateiänderungen: an oder aus (im Terminal true oder false). Standard: aus.',
+  'Passwortschutz, Verdecken, Regeln: Korrekturen prüfen: an oder aus (im Terminal true oder false). Standard: an.',
+  'Regeln: Modell für die Prüfung: ein Modellname. Standard: haiku.',
+  'Dateien: Claude-Aktivität: reads and writes (Lesen und Schreiben), writes (nur Schreiben), reads (nur Lesen) oder none (nichts). Standard: reads and writes.',
+  'Dateien: Symbole: auto, nerd (Symbole einer Nerd Font) oder plain (nur einfache Zeichen). Standard: auto.',
+  'Dateien: Claude folgen: on (an) oder off (aus). Standard: on.',
+  'Dateien: rechte Spalte: date (Datum) oder size (Größe). Standard: date.',
+  'Dateien: öffnen mit: leer (die Standard-App), preview (Vorschau im Fenster) oder ein eigener Befehl. Standard: leer.',
+  'Autopilot: Höchstzahl angeschobener Runden: eine Zahl. Standard: 10.',
+]
+
+/** Wie weit ein Befehl wirkt, in der Fassung aus Leitfaden 4. */
+function giltSatz(one: LeitstandBefehl): string {
+  if (one.giltText !== undefined) return one.giltText
+  switch (one.gilt) {
+    case 'einstellung':
+      return `nur in diesem Chat. Standard für neue Chats: Option "${one.option ?? ''}", siehe /leitstand:hilfe unter Einstellen.`
+    case 'chat':
+      return 'nur in diesem Chat.'
+    case 'dauerhaft':
+      return `dauerhaft: schreibt in ${one.ort ?? ''}.`
+    default:
+      return 'einmal, sofort; ändert keine Einstellung.'
+  }
 }
 
-/** Die Hilfe eines Befehls: was er tut, sein Knopf, wie weit er wirkt, seine Argumente und ein Beispiel. */
+/** Die Hilfe eines Befehls (Leitfaden 4): was er tut, Button oder Einstellungsfenster, wie weit er wirkt, Argumente. */
 export function befehlsHilfe(one: LeitstandBefehl): string {
   const kurz = kurzform(one.name)
   return [
-    `/${one.name}: ${one.description}`,
+    `/${one.name} · ${one.description}`,
     `Was: ${one.tut}`,
-    `Button: ${one.knopf}`,
-    `Gilt: ${GILT[one.gilt]}`,
-    `Argumente: ${one.argumente === '' ? 'keine' : one.argumente} Mit hilfe (oder ?) zeigt er diese Hilfe.`,
-    `Beispiel: ${one.beispiel}`,
+    one.knopf,
+    `Gilt: ${giltSatz(one)}`,
+    `Argumente: ${one.argumente === '' ? 'keine.' : one.argumente}`,
+    ...(one.argumente === '' ? [] : [`Beispiel: ${one.beispiel}`]),
     ...(kurz === undefined ? [] : [`Kurzform: /${kurz}`]),
   ].join('\n')
 }
 
-/** Alle Befehle nach Gruppen, je eine Zeile. */
+/** Ein Satz unter dem Namen einer Gruppe in der Übersicht, wo die Befehle allein es nicht erklären. */
+const GRUPPEN_SATZ: Readonly<Record<string, string>> = {
+  Arbeitsweise:
+    `Helfer startet Claude für Teilaufgaben; in der Gruppenarbeit heißen sie Arbeiter und haben eine feste Stufe (${STUFEN}). Im Auto-Modus entscheidet Claude selbst über Helfer; in der Gruppenarbeit leitet und prüft Claude, die Arbeiter setzen um. ${PLAN_FREIGABE} Starten: Start, /leitstand:plan-starten oder los schreiben.`,
+  Werkzeuge: 'Werkzeuge starten einen Skill, einen mitgelieferten Ablauf für Claude.',
+  Selbstkritik: 'Claude prüft seine bisherige Arbeit im Hintergrund wie ein skeptischer Prüfer; das Ergebnis steht im Fenster Selbstkritik.',
+  Regeln:
+    'Aus einer kurzen Nachricht (bis 500 Zeichen), in der du Claude korrigierst, liest ein kleines Modell eine Regel für später heraus (Korrekturen prüfen). Eine gefundene Regel wartet auf deine Entscheidung: Am Rechner öffnet sich das Fenster Regeln, /leitstand:regeln öffnet es wieder und zeigt sie vom Handy mit Nummern. ' +
+    'Gespeichert steht sie in einer CLAUDE.md (eine Textdatei mit Anweisungen, die Claude bei jedem Start liest; die im Projektordner wird oft mit dem Projekt geteilt): in deiner globalen (~/.claude/CLAUDE.md, alle Projekte) oder der im Projektordner; oder sie gilt nur in diesem Chat. Ändern oder löschen: die Datei bearbeiten oder Claude darum bitten.',
+  Dateien: 'Das Fenster Dateien zeigt die Dateien des Projekts als Baum, nur am Rechner.',
+  Autopilot: AUTOPILOT_TEXT,
+  Schutz: `Passwortschutz: ${PASSWORTSCHUTZ_TEXT} Verdecken: ${VERDECKEN_TEXT}`,
+}
+
+/** Zeilen, die keine Befehle des Leitstands sind, aber in ihre Gruppe gehören: merke: und der Grundbefehl /autopilot. */
+const GRUPPEN_EXTRA: Readonly<Record<string, readonly string[]>> = {
+  Regeln: ['merke: <Regel> · am Anfang einer Nachricht: schlägt diese Regel vor, ohne Modellaufruf, auch wenn Korrekturen prüfen aus ist; sie wartet dann im Fenster Regeln auf deine Entscheidung'],
+  Autopilot: [`/${AUTOPILOT_GRUNDBEFEHL.name} ${AUTOPILOT_GRUNDBEFEHL.argumentHint ?? ''} · ${AUTOPILOT_GRUNDBEFEHL.description}`],
+}
+
+/** Die Hilfe des Leitstands (Leitfaden 2): was er tut, Zuerst wichtig, Einstellen, Kosten, Handy, dann alle Befehle. */
 export function befehlsUeberblick(): string {
-  const lines = ['Leitstand-Befehle (jeder erklärt sich mit dem Argument hilfe, etwa /leitstand:pause hilfe):']
+  const lines = [
+    'Leitstand · Hilfe',
+    '',
+    'Was der Mod tut',
+    'Der Leitstand ist ein Mod, also eine Erweiterung für Claude Code. Er zeigt in der Leiste über dem Eingabefeld, woran Claude gerade arbeitet: den Plan als Checkliste, wie weit jeder Schritt ist und wann Claude dich braucht. ' +
+      'Darunter stehen Buttons: für Pause und Weiter, für Werkzeuge wie Kurzantworten oder Selbstkritik und zum Schutz von Passwörtern.',
+    '',
+    'Zuerst wichtig',
+    '/leitstand:hilfe · diese Hilfe',
+    '/leitstand:buttons-zeigen · erklärt jeden Button (❓ oben rechts in der Leiste)',
+    '/leitstand:ansicht-einfach, /leitstand:ansicht-detailliert, /leitstand:ansicht-minimal · wie viel die Leiste zeigt (Menü oben rechts)',
+    '/leitstand:pause und /leitstand:weiter · Claude anhalten und weitermachen lassen (Buttons Pause und Weiter)',
+    '/leitstand:plan-starten · einen Plan starten, der auf deine Freigabe wartet (Button Start, oder schreib los)',
+    '/leitstand:einstellungen-zeigen · das Einstellungsfenster (⚙️ oben rechts, im Terminal 🔧)',
+    '/leitstand ohne Zusatz schaltet den Leitstand aus oder ein.',
+    '',
+    'Neben den Bordmitteln von Claude Code',
+    'Pause hält Claude an wie Esc, die Leiste merkt sich aber den Auftrag, und Weiter schickt die Nachricht, weiterzumachen. Neuer Chat leert den Chat mit /clear, schickt aber vorher eine Übergabenotiz in den neuen. ' +
+      'Der Auto-Modus des Leitstands (Claude wählt seine Helfer) hat nichts mit dem Auto-Modus der Berechtigungen von Claude Code zu tun. Plan zuerst freigeben ist nicht der Plan-Modus: Claude legt nur seine Schritte fest und wartet dann auf Start.',
+    '',
+    'Einstellen',
+    'Nur in diesem Chat: im Einstellungsfenster oder mit den Befehlen unten, etwa /leitstand:ton-signalton. /leitstand:zuruecksetzen stellt diesen Chat zurück auf den Standard für neue Chats.',
+    'Standard für neue Chats, je Option:',
+    ...OPTIONEN.map(one => `- ${one}`),
+    STANDARD_WEG,
+    '',
+    'Kosten',
+    'Die Leiste selbst braucht wenig: Ihre Anleitung für Claude steht in jeder Runde (eine Antwort von Claude auf deine Nachricht, mit allem, was er dabei tut) mit im Auftrag, und jeder neue Auftrag bekommt seinen Namen von einem kleinen Aufruf an Haiku. ' +
+      'Das zählt in Tokens, der Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit. Haiku, Sonnet, Opus und Fable sind Modelle von Claude, von klein und günstig (Haiku) bis groß (Fable). ' +
+      'Mehr kosten: Korrekturen prüfen (an: ein kleiner Haiku-Aufruf je kurzer Nachricht), jede Selbstkritik und jeder Neue Chat (je ein Aufruf, der den ganzen Chat liest), der Autopilot (jede angeschobene Runde wie eine eigene Nachricht) und die Gruppenarbeit (die Arbeiter lesen und schreiben selbst).',
+    '',
+    'Vom Handy (Remote Control)',
+    'Dort gibt es keine Leiste, keine Buttons und keine Fenster. Jeder Befehl geht und antwortet als Text, auch Plan, Verlauf, Buttons und Einstellungen. Hinweise wie Claude braucht dich stehen nur in der Leiste am Rechner; vom Handy erfährst du es aus Claudes Antwort oder mit /leitstand:plan-zeigen. ' +
+      'Der Passwortschutz nimmt ein Passwort aus deiner Nachricht, statt sie zurückzuhalten. Dateien und die Begrüßung gibt es nur am Rechner.',
+    '',
+    'Befehle',
+    'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+    'Fast jeder Befehl geht auch kurz ohne leitstand: davor, etwa /pause oder /verdecken-an; nur an, aus, hilfe und vermenschlichen nicht.',
+  ]
   let gruppe = ''
+  const schliesseGruppe = () => {
+    for (const extra of GRUPPEN_EXTRA[gruppe] ?? []) lines.push(extra)
+  }
   for (const one of LEITSTAND_BEFEHLE) {
     if (one.gruppe !== gruppe) {
+      schliesseGruppe()
       gruppe = one.gruppe
       lines.push('', gruppe)
+      const satz = GRUPPEN_SATZ[gruppe]
+      if (satz !== undefined) lines.push(satz)
     }
-    lines.push(`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''}: ${one.description}`)
+    lines.push(`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''} · ${one.description}`)
   }
-  lines.push(
-    '',
-    'Einstellungen gelten nur in diesem Chat. Fast jeder Befehl geht auch ohne leitstand: davor, etwa /pause oder /verdecken-an; nur an, aus, hilfe und vermenschlichen nicht. /leitstand bleibt als Kurzform.',
-  )
+  schliesseGruppe()
+  lines.push('', 'Mehr zu jedem Befehl: hilfe dahinter, etwa /leitstand:pause hilfe.')
   return lines.join('\n')
+}
+
+/** Die Einstellungen eines Chats, wie das Einstellungsfenster sie zeigt, für die Textfassung vom Handy. */
+export type EinstellungenJetzt = {
+  ansicht: 'simple' | 'detailed' | 'minimal' | 'off'
+  arbeitsweise: 'auto' | 'dynamisch'
+  toene: 'off' | 'chime' | 'voice'
+  benachrichtigungen: boolean
+  andereChats: boolean
+  ruhemodus: boolean
+  planFreigeben: boolean
+  githubAbschluss: boolean
+  passwortschutz: boolean
+  verdecken: boolean
+  /** Was nicht im Einstellungsfenster steht, aber in diesem Chat gilt. */
+  korrekturen: boolean
+  selbstkritikAuto: boolean
+  kurzantworten: boolean
+  autopilot: boolean
+  remote: 'on' | 'off' | 'missing'
+}
+
+/** Das Einstellungsfenster als Text, für das Handy: je Zeile der Wert dieses Chats und der Befehl zum Umschalten. */
+export function einstellungenAlsText(jetzt: EinstellungenJetzt): string {
+  const anAus = (isOn: boolean) => (isOn ? 'An' : 'Aus')
+  const schalter = (titel: string, isOn: boolean, befehlName: string) =>
+    `${titel}: ${anAus(isOn)} · umschalten: /leitstand:${befehlName}-${isOn ? 'aus' : 'an'}`
+  const ansichten = { simple: 'Einfach', detailed: 'Detailliert', minimal: 'Minimal', off: 'Aus' } as const
+  const ansichtBefehle = { simple: 'ansicht-einfach', detailed: 'ansicht-detailliert', minimal: 'ansicht-minimal', off: 'aus' } as const
+  const andere = (Object.keys(ansichten) as (keyof typeof ansichten)[]).filter(one => one !== jetzt.ansicht).map(one => `/leitstand:${ansichtBefehle[one]}`)
+  const toene = { off: 'Aus', chime: 'Signalton', voice: 'Signalton und Stimme' } as const
+  const toeneBefehle = { off: 'ton-aus', chime: 'ton-signalton', voice: 'ton-stimme' } as const
+  const andereToene = (Object.keys(toene) as (keyof typeof toene)[]).filter(one => one !== jetzt.toene).map(one => `/leitstand:${toeneBefehle[one]}`)
+  return [
+    'Die Einstellungen dieses Chats; jede gilt nur hier:',
+    `Ansicht: ${ansichten[jetzt.ansicht]} · umstellen: ${andere.join(', ')}`,
+    jetzt.arbeitsweise === 'dynamisch'
+      ? 'Arbeitsweise: Gruppenarbeit · umstellen: /leitstand:arbeitsmodus-auto'
+      : 'Arbeitsweise: Auto-Modus · umstellen: /leitstand:arbeitsmodus-gruppenarbeit',
+    `Töne: ${toene[jetzt.toene]} · umstellen: ${andereToene.join(', ')}`,
+    schalter('Desktop-Benachrichtigungen', jetzt.benachrichtigungen, 'benachrichtigungen'),
+    schalter('Andere Chats', jetzt.andereChats, 'andere-chats'),
+    schalter('Ruhemodus', jetzt.ruhemodus, 'ruhemodus'),
+    jetzt.arbeitsweise === 'dynamisch' ? 'Plan zuerst freigeben: An (in der Gruppenarbeit immer)' : schalter('Plan zuerst freigeben', jetzt.planFreigeben, 'plan-freigeben'),
+    schalter('Auf GitHub abschließen', jetzt.githubAbschluss, 'github-abschluss'),
+    schalter('Passwortschutz', jetzt.passwortschutz, 'passwortschutz'),
+    schalter('Verdecken', jetzt.verdecken, 'verdecken'),
+    'Nicht im Einstellungsfenster:',
+    schalter('Korrekturen prüfen', jetzt.korrekturen, 'regelpruefung'),
+    schalter('Selbstkritik nach Dateiänderungen', jetzt.selbstkritikAuto, 'selbstkritik-auto'),
+    schalter('Kurzantworten', jetzt.kurzantworten, 'kurzantworten'),
+    schalter('Autopilot', jetzt.autopilot, 'autopilot'),
+    ...(jetzt.remote === 'missing'
+      ? []
+      : [jetzt.remote === 'on' ? 'Remote Control: An · ausschalten trennt das Handy: /leitstand:fernsteuerung-aus' : 'Remote Control: Aus · umschalten: /leitstand:fernsteuerung-an']),
+    'Alles zurück auf den Standard für neue Chats: /leitstand:zuruecksetzen. Den Standard für neue Chats stellst du anders ein: /leitstand:hilfe unter Einstellen.',
+  ].join('\n')
 }

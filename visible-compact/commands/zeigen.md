@@ -1,5 +1,5 @@
 ---
-description: "Öffnet das Fenster „Verdichtungen des Chats“ (wie /show-last-compact)"
+description: 'Öffnet das Fenster "Verdichtungen des Chats" mit der neuesten Verdichtung, vom Handy als Text'
 disable-model-invocation: true
 ---
 

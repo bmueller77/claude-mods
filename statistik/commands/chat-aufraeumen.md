@@ -1,5 +1,5 @@
 ---
-description: "Den Chat aufräumen: Sicherungspunkt und Verdichten, sofort ohne Countdown"
+description: "Räumt den Chat auf: erst ein Sicherungspunkt, dann verdichten, sofort ohne Countdown"
 disable-model-invocation: true
 ---
 

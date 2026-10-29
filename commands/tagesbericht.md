@@ -1,5 +1,5 @@
 ---
-description: "Teambericht für heute als Text (Leitstand)"
+description: "Tagesbericht für heute als Text (Leitstand)"
 disable-model-invocation: true
 ---
 

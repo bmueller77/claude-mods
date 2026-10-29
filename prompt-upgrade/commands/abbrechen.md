@@ -1,5 +1,5 @@
 ---
-description: "Bricht ab, schließt das Fenster und legt den Prompt zurück ins Eingabefeld"
+description: "Bricht das Upgrade ab und legt deinen Prompt zurück ins Eingabefeld"
 disable-model-invocation: true
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: "Listet alle Befehle von Prompt-Upgrade"
+description: "Erklärt Prompt-Upgrade: wie du damit arbeitest, es einstellst und welche Befehle es gibt"
 disable-model-invocation: true
 ---
 

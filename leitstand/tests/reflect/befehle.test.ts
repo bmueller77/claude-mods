@@ -9,7 +9,7 @@ import { LEITSTAND_BEFEHLE, befehlsHilfe, kurzform } from '../../hooks/logic'
 import { REFLECT_ALTE, REFLECT_BEFEHLE } from '../../hooks/reflect/befehle'
 import { auftragAus } from '../../hooks/reflect/logik'
 import { BEFEHL_FEHLER } from '../../hooks/reflect/teil'
-import { PANE, REFLEXION, REGELN_PANE, abschnittText, befehl, run, say, start, welt, zeilen } from './welt'
+import { FLAECHEN, PANE, REFLEXION, REGELN_PANE, abschnittText, befehl, regelfenster, run, say, start, welt, zeilen } from './welt'
 import type { Welt } from './welt'
 
 const SELBSTKRITIK = [
@@ -42,13 +42,13 @@ async function mitRegel($: Engine, w: Welt) {
   expect(await zeilen($)).toEqual([`💡 „${REGEL}“`])
 }
 
-test('genau diese Befehle, in zwei Gruppen hinter den Helfern; der Leitstand meldet die Kurzformen an, der Teil /reflect', async ($, on) => {
+test('genau diese Befehle, in zwei Gruppen hinter den Werkzeugen; der Leitstand meldet die Kurzformen an, der Teil /reflect', async ($, on) => {
   const w = welt(on)
   await start($)
   expect(REFLECT_BEFEHLE.map(b => b.name)).toEqual(NAMEN)
   expect(REFLECT_BEFEHLE.map(b => b.gruppe)).toEqual([...SELBSTKRITIK.map(() => 'Selbstkritik'), ...REGELN.map(() => 'Regeln')])
   const erster = LEITSTAND_BEFEHLE.findIndex(b => b.name === 'leitstand:selbstkritik')
-  expect(LEITSTAND_BEFEHLE[erster - 1]?.gruppe).toBe('Helfer')
+  expect(LEITSTAND_BEFEHLE[erster - 1]?.gruppe).toBe('Werkzeuge')
   expect(LEITSTAND_BEFEHLE.slice(erster, erster + NAMEN.length).map(b => b.name)).toEqual(NAMEN)
   for (const b of REFLECT_BEFEHLE) {
     expect(b.description.length).toBeGreaterThan(10)
@@ -64,7 +64,7 @@ test('genau diese Befehle, in zwei Gruppen hinter den Helfern; der Leitstand mel
   }
   for (const name of MIT_NR) expect(REFLECT_BEFEHLE.find(b => b.name === name)?.argumentHint).toBe('<Nr>')
   expect(REFLECT_BEFEHLE.find(b => b.name === 'leitstand:selbstkritik')?.argumentHint).toBe('[Schwerpunkt]')
-  expect(REFLECT_BEFEHLE.find(b => b.name === 'leitstand:selbstkritik')?.knopf).toBe('🪞 im Leitstand')
+  expect(REFLECT_BEFEHLE.find(b => b.name === 'leitstand:selbstkritik')?.knopf).toBe('Button: 🪞 unten links')
   // Der Grundbefehl bleibt; die alten Namen mit Bindestrich und mit reflect: sind nicht angemeldet.
   expect(w.angemeldet.find(s => s.name === 'reflect')?.immediate).toBe(true)
   expect(w.angemeldet.filter(s => s.name.startsWith('reflect'))).toHaveLength(1)
@@ -99,7 +99,9 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, lang und kurz, ohne etwas 
       for (const arg of ['hilfe', '?', 'HILFE', ' Hilfe ']) {
         const text = await run($, name, arg)
         expect(text).toBe(befehlsHilfe(b))
-        for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:', 'Beispiel: /leitstand:', `Kurzform: /${kurzform(b.name)}`]) expect(text).toContain(teil)
+        for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:', `Kurzform: /${kurzform(b.name)}`]) expect(text).toContain(teil)
+        // Ein Beispiel nur bei einem Befehl mit Argument.
+        expect(text.includes('Beispiel: /leitstand:')).toBe(b.argumente !== '')
       }
     }
   }
@@ -109,12 +111,30 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, lang und kurz, ohne etwas 
   expect(await zeilen($)).toEqual([`💡 „${REGEL}“`])
 })
 
+test('das Fenster Regeln sagt oben, was passiert ist und wohin die drei Ziele schreiben', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  await mitRegel($, w)
+  for (const surface of FLAECHEN) {
+    const ui = await regelfenster($, surface)
+    const texte = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    await ui.unmount()
+    expect(texte[0]).toBe('Claude hat aus deiner Nachricht eine Regel herausgelesen. Wo soll sie gelten?')
+    expect(texte[1]).toContain('Alle Projekte schreibt sie in deine globale CLAUDE.md')
+  }
+})
+
 test('/leitstand:hilfe listet die Gruppen Selbstkritik und Regeln mit ihren Befehlen', async ($, on) => {
   welt(on)
   await start($)
   const zeilenDerHilfe = (await run($, 'leitstand:hilfe')).split('\n')
   for (const gruppe of ['Selbstkritik', 'Regeln']) expect(zeilenDerHilfe).toContain(gruppe)
-  for (const b of REFLECT_BEFEHLE) expect(zeilenDerHilfe).toContain(`/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''}: ${b.description}`)
+  for (const b of REFLECT_BEFEHLE) expect(zeilenDerHilfe).toContain(`/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`)
+  // merke: steht in der Gruppe Regeln, nach ihren Befehlen.
+  const merke = zeilenDerHilfe.findIndex(z => z.startsWith('merke: <Regel> · '))
+  expect(merke).toBeGreaterThan(zeilenDerHilfe.indexOf('Regeln'))
+  // Wo gespeicherte Regeln liegen und wie man sie ändert, sagt der Satz unter Regeln.
+  expect(zeilenDerHilfe[zeilenDerHilfe.indexOf('Regeln') + 1]).toContain('globalen (~/.claude/CLAUDE.md')
 })
 
 test('selbstkritik und selbstkritik-zeigen: Text sofort, Fenster dahinter; vom Handy nur Text', async ($, on) => {
@@ -131,7 +151,7 @@ test('selbstkritik und selbstkritik-zeigen: Text sofort, Fenster dahinter; vom H
   expect(w.opened).toHaveLength(3)
 
   // Vom Handy: kein Fenster, das Ergebnis als Text; die Kurzform genauso.
-  expect(await run($, 'selbstkritik', '', 'bridge')).toBe('Selbstkritik läuft … Das Fenster geht nur am Rechner; /leitstand:selbstkritik-zeigen gibt das Ergebnis hier als Text aus.')
+  expect(await run($, 'selbstkritik', '', 'bridge')).toBe('Selbstkritik läuft. Das Fenster geht nur am Rechner; /leitstand:selbstkritik-zeigen gibt das Ergebnis hier als Text aus, sobald sie fertig ist.')
   expect(await run($, 'leitstand:selbstkritik', '', 'bridge')).toBe('Es läuft schon eine Selbstkritik. /leitstand:selbstkritik-zeigen gibt sie aus, sobald sie fertig ist.')
   await w.clock.settle()
   expect(await run($, 'leitstand:selbstkritik-zeigen', '', 'bridge')).toContain(REFLEXION)
@@ -204,6 +224,15 @@ test('regel-bearbeiten: wie „Bearbeiten“ im Fenster Regeln', async ($, on) =
   expect(await run($, 'leitstand:regel-bearbeiten', '1')).toBe(`Die Regel steht als „merke: ${REGEL}“ im Eingabefeld. Umformulieren und abschicken; die alte ist verworfen.`)
   expect(w.filled.map(f => f.text)).toEqual([`merke: ${REGEL}`])
   expect(await zeilen($)).toEqual([])
+})
+
+test('regel-bearbeiten vom Handy sagt, wie die Regel neu geht, und ändert nichts', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  await mitRegel($, w)
+  expect(await run($, 'leitstand:regel-bearbeiten', '1', 'bridge')).toBe(`Schick die Regel umformuliert neu, als merke: ${REGEL} Die alte verwirfst du mit /leitstand:regel-verwerfen 1.`)
+  expect(w.filled).toEqual([])
+  expect(await zeilen($)).toEqual([`💡 „${REGEL}“`])
 })
 
 test('regel-bearbeiten mit Text im Eingabefeld ändert nichts', async ($, on) => {

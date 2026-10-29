@@ -6,8 +6,8 @@
  * beantwortet ihn trotzdem. Die alten Namen /<mod>-<funktion> sind nicht mehr angemeldet; ruft eine alte Datei in
  * ~/.claude/commands einen auf, sagt er nur, wie der Befehl jetzt heißt.
  *
- * Jeder Befehl versteht das Argument "hilfe" (auch "?") und sagt dann, was er tut, welchem Knopf er
- * entspricht, ob er nur im Chat gilt, welche Argumente er nimmt, und gibt ein Beispiel.
+ * Jeder Befehl versteht das Argument "hilfe" (auch "?") und sagt dann, was er tut, welchem Button er
+ * entspricht, wie weit er wirkt und welche Argumente er nimmt.
  * Beantworten und die Wirkung stehen im Hooks-Modul selbst: $ und on gehen nie über einen Import.
  */
 import type { CommandRunInput } from 'claude-code'
@@ -18,16 +18,18 @@ export type Knopfbefehl = {
   /** Die kurze Zeile in der Befehlsliste. */
   description: string
   argumentHint?: string
-  /** Was er tut, ein bis zwei Sätze. */
+  /** Der Titel hinter dem Namen in der ersten Zeile der Hilfe. */
+  titel: string
+  /** Was er tut, ein bis zwei Sätze, Verb vorn. */
   tut: string
-  /** Welchem Knopf oder Schalter er entspricht. */
+  /** Welchem Button er entspricht, oder "keiner." */
   knopf: string
-  /** Wo er gilt (nur in diesem Chat, für alle Chats, ...). */
+  /** Wie weit er wirkt (nur in diesem Chat, einmal sofort, ...). */
   geltung: string
   /** Die Argumente, als Satz. */
   argumente: string
-  /** Ein Beispiel, wie getippt. */
-  beispiel: string
+  /** Ein Beispiel, wie getippt; nur bei Befehlen mit Argument. */
+  beispiel?: string
 }
 
 /** Ob das Argument nach Hilfe fragt. */
@@ -46,23 +48,19 @@ export const alteNamen = (liste: readonly Knopfbefehl[]): ReadonlyMap<string, st
 /** Was ein alter Name antwortet: wie der Befehl jetzt heißt. Sonst tut er nichts. */
 export const heisstJetzt = (name: string) => `Der Befehl heißt jetzt /${name}.`
 
-/** Die Hilfe zu einem Befehl. */
+/** Die Hilfe zu einem Befehl: Name und Titel, dann Was, Button, Gilt, Argumente und, wenn es ein Argument gibt, ein Beispiel. */
 export function hilfeText(b: Knopfbefehl): string {
   return [
-    `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''}`,
-    b.tut,
+    `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.titel}`,
+    `Was: ${b.tut}`,
     `Button: ${b.knopf}`,
     `Gilt: ${b.geltung}`,
     `Argumente: ${b.argumente}`,
-    `Beispiel: ${b.beispiel}`,
+    ...(b.beispiel ? [`Beispiel: ${b.beispiel}`] : []),
   ].join('\n')
 }
 
-/** Alle Befehle eines Mods, je mit einer Zeile. */
-export function uebersicht(titel: string, liste: readonly Knopfbefehl[]): string {
-  return [
-    titel,
-    ...liste.map(b => `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} – ${b.description}`),
-    `Mehr zu jedem Befehl: das Argument hilfe, z. B. /${liste[1]?.name ?? liste[0]?.name ?? ''} hilfe`,
-  ].join('\n')
+/** Die Befehle eines Mods, je mit einer Zeile, als Liste für das Ende der Hilfe. */
+export function befehlsliste(liste: readonly Knopfbefehl[]): string[] {
+  return liste.map(b => `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`)
 }

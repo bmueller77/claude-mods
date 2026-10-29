@@ -69,8 +69,15 @@ import {
   apiErrorSentence,
   applyProgress,
   progressName,
+  STANDARD_WEG,
+  LEITSTAND_GRUNDBEFEHL,
+  PLAN_FREIGABE,
+  STUFEN,
+  PASSWORTSCHUTZ_TEXT,
+  VERDECKEN_TEXT,
   befehlsHilfe,
   befehlsUeberblick,
+  einstellungenAlsText,
   askedMergeSha,
   asksQuestion,
   carryTokens,
@@ -132,7 +139,7 @@ import {
   unsafePowerShellMerge,
 } from './logic'
 
-import type { ChatSettings, SavedChecklist } from './logic'
+import type { ChatSettings, EinstellungenJetzt, SavedChecklist } from './logic'
 import { kitOf } from './kit'
 import { DYNAMIC_ALSO, DYNAMIC_SECTION, TIERS, isTierAgent, tierAgent, tierDescription, workerPrompt } from './dynamisch'
 import type { WorkMode } from './dynamisch'
@@ -157,6 +164,12 @@ const ALWAYS_ALLOWED = new Set([
 // Up to 0.50 the settings sat under global keys (glanceEnabled, glanceDetail and so on), shared by every chat. Each chat
 // now keeps its own (SETTINGS_PREFIX); the old keys stay in the store, unread.
 const TOUR_KEY = 'glanceTour'
+// The welcome asked for with /leitstand:tour: shown in the view Minimal too, where the first start only names the command.
+let isTourAsked = false
+// The defaults of Korrekturen prüfen and Selbstkritik nach Dateiänderungen, for the settings as text from the phone.
+let reflectDefaults = { pruefung: true, selbstkritikAuto: false }
+/** In the view Minimal the first start shows one line instead of the welcome's cards. */
+const TOUR_HINT = 'Neu hier? /leitstand:tour zeigt in drei Schritten, was der Leitstand kann.'
 // When other chats' settings and checkpoints were last tidied away; it runs at most once a day.
 const SETTINGS_TIDY_KEY = 'settingsTidiedAt'
 const DAY_MS = 24 * 60 * 60_000
@@ -165,11 +178,11 @@ const APPROVE_ALWAYS = 'An (in der Gruppenarbeit immer)'
 /** The welcome, three short cards the first time: what the checklist is, what Needs you means, where the rest lives. */
 const TOUR_FIRST = 'Hier erscheint eine Checkliste, wenn du Claude um etwas mit mehreren Schritten bittest: jeder Schritt, wie weit er ist und wie lange es noch etwa dauert.'
 const TOUR_LAST =
-  'Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
+  'Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du das Einstellungsfenster. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR = [TOUR_FIRST, tourNeeds('in Gelb'), TOUR_LAST]
 /** Elsewhere than the terminal the words keep the text colour and the yellow is the question mark beside them. */
 const TOUR_LAST_VECTOR =
-  'Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
+  'Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Zahnrad findest du das Einstellungsfenster. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR_VECTOR = [TOUR_FIRST, tourNeeds('neben einem gelben Fragezeichen'), TOUR_LAST_VECTOR]
 /** The settings button beside the view elsewhere than the terminal: a gear, drawn as an emoji (U+FE0F), as wide as the other sign buttons. */
 const GEAR = '\u2699\uFE0F'
@@ -223,52 +236,85 @@ const TERMINAL_SIGN_OF: Readonly<Record<string, string>> = {
  * colour, as the terminal draws a primary button in it. A plain button draws the same in either variant. */
 const TERMINAL_LIT = 'suggestion'
 /** A button of the band as the pane Kn\u00F6pfe explains it: its sign (none for a button with words), its name, what it does,
- * and the command that sets the same. A switch has one line per state, each with the command for that state. */
+ * and the command that does what a press does. A switch has one line per state, each with the command its press sets off. */
 type ButtonHelp = { sign?: string; name: string; does: string; command?: string }
 /** The band's buttons elsewhere than the terminal, where they stand and in their order there (Bj\u00F6rn's wish, 2026-10-27). */
 export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp[] }[] = [
   {
     place: 'Oben rechts',
     buttons: [
-      { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Detailliert dazu Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
-      { sign: HELP, name: 'Buttons', does: 'Dieses Fenster: was jeder Button tut.', command: '/leitstand:buttons-zeigen' },
-      { sign: GEAR, name: 'Einstellungen', does: '\u00D6ffnet die Einstellungen des Leitstands.', command: '/leitstand:einstellungen-zeigen' },
+      {
+        sign: '▾',
+        name: 'Ansicht',
+        does: 'Wählt, wie viel die Leiste zeigt: Einfach Schritte und Fortschritt, Detailliert dazu Zeit und Tokens, Minimal eine Zeile mit dem Stand und darunter die Buttons. Im Terminal schaltet ein Druck zur nächsten Ansicht.',
+        command: '/leitstand:ansicht-einfach, /leitstand:ansicht-detailliert, /leitstand:ansicht-minimal',
+      },
+      { sign: HELP, name: 'Buttons', does: 'Öffnet dieses Fenster: was jeder Button tut.', command: '/leitstand:buttons-zeigen' },
+      { sign: GEAR, name: 'Einstellungen', does: 'Öffnet das Einstellungsfenster. Was du dort änderst, gilt nur in diesem Chat.', command: '/leitstand:einstellungen-zeigen' },
     ],
   },
   {
     place: 'Unten links',
     buttons: [
-      { sign: WORK_MODE_SIGNS.auto, name: 'Auto-Modus', does: 'Claude entscheidet selbst, ob es Helfer einsetzt. Ein Druck schaltet auf Gruppenarbeit.', command: '/leitstand:arbeitsmodus-auto' },
+      { sign: WORK_MODE_SIGNS.auto, name: 'Auto-Modus', does: 'Steht da, solange Claude selbst entscheidet, ob er Helfer einsetzt. Ein Druck schaltet auf Gruppenarbeit.', command: '/leitstand:arbeitsmodus-gruppenarbeit' },
       {
         sign: WORK_MODE_SIGNS.dynamisch,
         name: 'Gruppenarbeit',
-        does: 'Claude plant und pr\u00FCft, Arbeiter setzen um, und jeder Plan wartet auf deine Freigabe. Ein Druck schaltet auf Auto-Modus.',
-        command: '/leitstand:arbeitsmodus-gruppenarbeit',
+        does: `Steht da, solange Claude plant und prüft und Arbeiter (Helfer mit fester Stufe) umsetzen. ${PLAN_FREIGABE} Ein Druck schaltet auf Auto-Modus.`,
+        command: '/leitstand:arbeitsmodus-auto',
       },
-      { sign: NIGHTSHIFT, name: 'Autopilot', does: 'Claude macht ohne R\u00FCckfragen weiter, bis alles erledigt ist, und schreibt am Ende eine \u00DCbergabe. Leuchtet, solange er l\u00E4uft.', command: '/leitstand:autopilot-an' },
-      { sign: LONG_ANSWERS, name: 'Kurzantworten aus', does: 'Claude antwortet wie gewohnt. Ein Druck schaltet Kurzantworten ein.', command: '/leitstand:kurzantworten-aus' },
-      { sign: SHORT_ANSWERS, name: 'Kurzantworten an', does: 'Claude nennt zuerst den n\u00E4chsten Schritt und antwortet in nummerierten Schritten. Ein Druck schaltet sie aus.', command: '/leitstand:kurzantworten-an' },
+      {
+        sign: NIGHTSHIFT,
+        name: 'Autopilot',
+        does: 'Claude arbeitet weiter, während du weg bist, und stellt dir keine Fragen; am Ende schreibt er eine Übergabe in den Chat. Bleibt Claude unfertig stehen, schiebt der Autopilot an, so oft wie eingestellt (Standard 10). Erlaubnis-Abfragen für Werkzeuge beantwortet er nicht. Leuchtet, solange er läuft; ein Druck schaltet ihn ein oder aus.',
+        command: '/autopilot',
+      },
+      { sign: LONG_ANSWERS, name: 'Kurzantworten aus', does: 'Steht da, solange Claude wie gewohnt antwortet. Ein Druck schaltet Kurzantworten ein.', command: '/leitstand:kurzantworten-an' },
+      { sign: SHORT_ANSWERS, name: 'Kurzantworten an', does: 'Steht da, solange Claude kurz antwortet: zuerst der nächste Schritt, dann nummerierte Schritte. Ein Druck schaltet sie aus.', command: '/leitstand:kurzantworten-aus' },
       { sign: HUMANIZE, name: 'Vermenschlichen', does: 'Claude schreibt seine letzte Antwort um, damit sie nicht nach KI klingt.', command: '/leitstand:vermenschlichen' },
-      { sign: GRILL, name: 'Grill mich', does: 'Claude l\u00F6chert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
-      { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint in einem eigenen Fenster.', command: '/leitstand:selbstkritik' },
-      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code pr\u00FCft Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', command: '/leitstand:sauberer-code' },
-      { sign: FILETREE, name: 'Dateien', does: 'Zeigt die Dateien des Projekts als Baum in einem Fenster.', command: '/leitstand:dateien' },
-      { sign: REMOTE, name: 'Remote Control', does: 'Damit steuerst du den Chat vom Handy aus. Leuchtet, solange es verbunden ist, und fehlt, wenn der Chat es nicht kann.', command: '/leitstand:fernsteuerung-an' },
-      { sign: MASK_ON, name: 'Verdecken an', does: 'Passw\u00F6rter, Schl\u00FCssel und pers\u00F6nliche Daten stehen auf dem Bildschirm als Punkte. Claude liest alles unver\u00E4ndert.', command: '/leitstand:verdecken-an' },
-      { sign: MASK_OFF, name: 'Verdecken aus', does: 'Alles erscheint so, wie es im Chat steht.', command: '/leitstand:verdecken-aus' },
-      { sign: VAULT, name: 'Geheimnisse sichern', does: 'Verschiebt Passw\u00F6rter und Schl\u00FCssel aus dem Chat in die .env im Projektordner. Zweimal dr\u00FCcken.', command: '/leitstand:geheimnisse-sichern' },
-      { name: 'Plan', does: 'Zeigt den ganzen Plan in einem Fenster, sobald es einen gibt.', command: '/leitstand:plan-zeigen' },
-      { name: 'Verlauf', does: 'Deine Auftr\u00E4ge von heute und fr\u00FCheren Tagen, mit Tages- und Wochenbericht.', command: '/leitstand:verlauf-zeigen' },
+      { sign: GRILL, name: 'Grill mich', does: 'Claude löchert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
+      { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint im Fenster Selbstkritik.', command: '/leitstand:selbstkritik' },
+      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code (ein mitgelieferter Ablauf für Claude) prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', command: '/leitstand:sauberer-code' },
+      { sign: FILETREE, name: 'Dateien', does: 'Öffnet das Fenster Dateien: die Dateien des Projekts als Baum.', command: '/leitstand:dateien' },
+      {
+        sign: REMOTE,
+        name: 'Remote Control',
+        does: 'Damit steuerst du den Chat vom Handy aus. Leuchtet, solange es verbunden ist; ein Druck schaltet es ein oder aus. Fehlt, wo der Chat es nicht kann.',
+        command: '/leitstand:fernsteuerung-an, /leitstand:fernsteuerung-aus',
+      },
+      { sign: MASK_ON, name: 'Verdecken an', does: 'Steht da, solange Passwörter, Schlüssel und persönliche Daten auf dem Bildschirm als Punkte erscheinen; Claude liest alles unverändert. Ein Druck schaltet Verdecken aus.', command: '/leitstand:verdecken-aus' },
+      { sign: MASK_OFF, name: 'Verdecken aus', does: 'Steht da, solange alles so erscheint, wie es im Chat steht. Ein Druck schaltet Verdecken ein.', command: '/leitstand:verdecken-an' },
+      {
+        sign: VAULT,
+        name: 'Geheimnisse sichern',
+        does: 'Verschiebt Passwörter und Schlüssel aus dem Chat in die Datei .env (aus ihr lesen Programme im Projektordner geheime Werte) und verdichtet den Chat wie /compact. Zweimal drücken: Der erste Druck fragt nach, der zweite führt aus.',
+        command: '/leitstand:geheimnisse-sichern ja',
+      },
     ],
   },
   {
-    place: 'Unten rechts',
+    place: 'Unten links, hinter den Zeichen',
     buttons: [
-      { name: 'Neuer Chat', does: 'Claude schreibt eine \u00DCbergabenotiz und beginnt damit einen neuen Chat. Zweimal dr\u00FCcken.', command: '/leitstand:neuer-chat' },
-      { name: 'Push', does: 'Nach einem fertigen Auftrag in einem GitHub-Projekt: Commit, Pull Request und Merge. Zweimal dr\u00FCcken.', command: '/leitstand:abschliessen' },
-      { name: 'Start', does: 'Startet den Plan, der auf deine Freigabe wartet.', command: '/leitstand:plan-starten' },
-      { name: 'Pause', does: 'H\u00E4lt Claude mitten im Auftrag an.', command: '/leitstand:pause' },
-      { name: 'Weiter', does: 'Claude macht dort weiter, wo es aufgeh\u00F6rt hat.', command: '/leitstand:weiter' },
+      { name: 'Plan', does: 'Öffnet das Fenster Plan mit allen Schritten; erscheint, sobald es einen Plan gibt.', command: '/leitstand:plan-zeigen' },
+      { name: 'Verlauf', does: 'Öffnet das Fenster Verlauf: deine Aufträge von heute und früheren Tagen, mit Tagesbericht, Wochenbericht und Deine Woche.', command: '/leitstand:verlauf-zeigen' },
+    ],
+  },
+  {
+    place: 'Unten rechts, nur wenn sie passen',
+    buttons: [
+      { name: 'Pause', does: 'Hält Claude mitten im Auftrag an, wie Esc, und Weiter macht dort weiter; erscheint, solange Claude arbeitet.', command: '/leitstand:pause' },
+      { name: 'Start', does: 'Startet den Plan, der auf deine Freigabe wartet; erscheint nur dann. Statt zu drücken kannst du auch los schreiben.', command: '/leitstand:plan-starten' },
+      { name: 'Weiter', does: 'Claude macht dort weiter, wo er aufgehört hat; erscheint, wenn Claude angehalten ist oder festhängt.', command: '/leitstand:weiter' },
+      {
+        name: 'Neuer Chat',
+        does: 'Claude schreibt eine Übergabenotiz, leert diesen Chat und beginnt mit der Notiz einen neuen. Erscheint, sobald ein Auftrag fertig oder angehalten ist (im Terminal, sobald es einen Auftrag gibt). Zweimal drücken: Der erste Druck fragt nach, der zweite führt aus.',
+        command: '/leitstand:neuer-chat ja',
+      },
+      {
+        name: 'Push',
+        does: 'Nach einem fertigen Auftrag in einem Projekt auf GitHub: Commit, Pull Request und Merge, also Änderungen festhalten, auf GitHub zur Prüfung vorlegen und nach deiner Freigabe in den Hauptzweig übernehmen. Erscheint nur, wenn Auf GitHub abschließen an ist. Zweimal drücken.',
+        command: '/leitstand:abschliessen ja',
+      },
     ],
   },
 ]
@@ -1048,10 +1094,10 @@ const showReport = async ($: $, isShown: boolean, text: string, surface?: Render
   const isMine = (await read($, historyAtom))?.reportSpan === 'mine'
   $.ui.toast(
     !copied.isCopied
-      ? 'Der Bericht steht in der Seitenleiste: Markier ihn dort, um ihn zu kopieren.'
+      ? 'Der Bericht steht im Fenster Verlauf: Markier ihn dort, um ihn zu kopieren.'
       : isMine
         ? 'Deine Woche ist kopiert: Füg sie ein, wo du willst.'
-        : 'Teambericht kopiert: Füg ihn in Slack, Teams oder eine E-Mail ein.',
+        : 'Bericht kopiert: Füg ihn in Slack, Teams oder eine E-Mail ein.',
   )
 }
 
@@ -1374,7 +1420,7 @@ const holdSecretMessage = async ($: $, text: string, kinds: string[]) => {
   $.clock.after(50, () => void $.prompt.fill({ text }).catch(() => undefined))
   $.ui.toast(
     `Diese Nachricht enthält offenbar ${kinds.join(' und ')}, deshalb hält der Leitstand sie zwei Minuten zurück. ` +
-      'Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, im Terminal geht auch noch mal Enter.',
+      'In der Leiste: Trotzdem senden oder Verwerfen, als Befehl /trotzdem-senden oder /nachricht-verwerfen; im Terminal schickt sie auch ein zweites Enter ab. Nach zwei Minuten ohne Entscheidung ist sie verworfen.',
   )
 }
 
@@ -1577,7 +1623,10 @@ const setCalm = async ($: $, isOn: boolean) => {
 /** Moves the welcome on a card, or ends it for good. */
 const stepTour = async ($: $, step: number | null) => {
   await update($, tourAtom, () => (step === null || step >= TOUR.length ? null : step))
-  if (step === null || step >= TOUR.length) await $.store.set(TOUR_KEY, true)
+  if (step === null || step >= TOUR.length) {
+    isTourAsked = false
+    await $.store.set(TOUR_KEY, true)
+  }
 }
 
 /** Desktop notices: on shows one when Claude needs you, gets stuck or finishes a long job. A sample shows at once. */
@@ -1607,7 +1656,7 @@ const setMasking = async ($: $, isOn: boolean) => {
 }
 
 const MASKING_WORDS = {
-  on: 'Verdecken an: Passwörter, Schlüssel und persönliche Daten erscheinen als Punkte.',
+  on: 'Verdecken an: Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.',
   off: 'Verdecken aus: alles ist wieder sichtbar.',
 }
 
@@ -2184,10 +2233,13 @@ const resetSettings = async ($: $) => {
     await writeOwn($, sid, {})
     await applySettings($, defaults)
   })
-  $.ui.toast('Auf den Standard zurückgesetzt, nur in diesem Chat.')
+  $.ui.toast('Auf den Standard für neue Chats zurückgesetzt, nur in diesem Chat.')
 }
 
 const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'Leitstand-Einstellungen', closeOnEscape: true })
+/** The settings pane's first two lines: how far a change reaches, and the way to the default for new chats. */
+const SETTINGS_HERE = 'Änderungen gelten sofort, nur in diesem Chat.'
+const SETTINGS_DEFAULT = `Den Standard für neue Chats stellst du anders ein. ${STANDARD_WEG}`
 const showButtonHelp = ($: $) => $.ui.open({ id: HELP_PANE, title: 'Leitstand-Buttons', closeOnEscape: true })
 
 /** The one button: Simple → Detailliert → Minimal → Simple; from Off back to Simple. Off is in Settings and /leitstand off. */
@@ -2196,7 +2248,7 @@ const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed'
   await setView($, next)
   $.ui.toast(
     next === 'detailed'
-      ? 'Leitstand detailliert: Zeit, Tokens und Cache'
+      ? 'Leitstand detailliert: dazu Zeit und Tokens je Schritt'
       : next === 'minimal'
         ? 'Leitstand minimal: eine Zeile mit Stand, Fortschritt, Restzeit und Tokens'
         : 'Leitstand einfach: nur die Schritte und der Fortschritt',
@@ -2305,7 +2357,7 @@ function answerOf(text: string): string {
 // zu sehen sind, sagt die Antwort das oder bringt den Inhalt selbst mit.
 
 const NUR_HIER = '(nur in diesem Chat)'
-const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Button im Leitstand.'
+const BEFEHL_FEHLER = 'Das hat nicht geklappt: Im Leitstand ging beim Ausführen etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.'
 const COMPACTING_WORDS = 'Der Chat wird gerade aufgeräumt. Versuch es gleich noch einmal.'
 // The skill behind 📖/📝 (Kurzantworten) is ADHD_NAMES, beside its toggle.
 const ANSICHT_WORTE = { simple: 'Einfach', detailed: 'Detailliert', minimal: 'Minimal' } as const
@@ -2372,7 +2424,7 @@ const skillAntwort = (label: string, lage: Awaited<ReturnType<typeof skillLage>>
   if (lage.typed === null) return { text: `${label} ist in dieser Sitzung nicht verfügbar.`, run: false }
   if (lage.hit === null) {
     return isPhone
-      ? { text: `${label} lässt sich von hier nicht starten. Schreib /${lage.typed}.`, run: false }
+      ? { text: `${label} startet der Leitstand vom Handy nicht selbst. Schick jetzt /${lage.typed}.`, run: false }
       : { text: `/${lage.typed} steht im Eingabefeld: Drück Enter, um zu starten.`, run: true }
   }
   return { text: gestartet, run: true }
@@ -2391,7 +2443,7 @@ const bericht = async ($: $, span: GlanceHistoryView['reportSpan']) => {
 /** In Gruppenarbeit every plan waits for approval: there, as on the button, nothing changes. */
 const planFreigeben = async ($: $, isOn: boolean) => {
   if ((await read($, workModeAtom)) === 'dynamisch') {
-    return 'In der Gruppenarbeit wartet jeder Plan auf deine Freigabe: Plan zuerst freigeben ist dort immer an.'
+    return 'In der Gruppenarbeit wartet ein Plan auf deine Freigabe: Plan zuerst freigeben ist dort immer an.'
   }
   await setApprove($, isOn)
   return zustand('Plan zuerst freigeben ist', isOn)
@@ -2467,7 +2519,7 @@ const verlaufZeigen = async ($: $, args: string, isPhone: boolean) => {
   const entries = (await read($, historyAtom))?.entries ?? []
   imHintergrund(() => oeffneVerlauf($))
   if (isPhone) return verlaufAlsText(day, entries)
-  return `Verlauf für ${germanDay(day)}: ${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}. Er ist in der Seitenleiste.`
+  return `Verlauf für ${germanDay(day)}: ${entries.length} ${entries.length === 1 ? 'Aufgabe' : 'Aufgaben'}. Er steht im Fenster Verlauf.`
 }
 
 /** Where tidying up went: the Statistik mod's, since 2026-10-26. */
@@ -2475,6 +2527,43 @@ const AUFRAEUMEN_UMGEZOGEN =
   'Aufräumen mit Sicherungspunkt gehört jetzt zur Statistik: /statistik:chat-aufraeumen räumt auf, /statistik:letzter-stand-zeigen zeigt den Sicherungspunkt.'
 
 const NICHTS_ZURUECKGEHALTEN = 'Es wartet keine zurückgehaltene Nachricht.'
+
+/** Whether something stands still that Weiter picks up, as the band's Weiter shows it: paused, stopped, stuck, or waiting for an answer. */
+const isHalted = (list: GlanceChecklist | null) =>
+  list !== null && (list.phase === 'stopped' || list.phase === 'stuck' || (list.phase === 'needsYou' && list.needsYouReason === WAITING))
+
+/** This chat's settings as the settings pane shows them, for the phone, where the pane does not show. */
+const einstellungenJetzt = async ($: $): Promise<EinstellungenJetzt> => {
+  const detail = await read($, detailAtom)
+  return {
+    ansicht: !(await read($, enabledAtom)) ? 'off' : detail === 'detailed' ? 'detailed' : detail === 'minimal' ? 'minimal' : 'simple',
+    arbeitsweise: await read($, workModeAtom),
+    toene: await read($, soundAtom),
+    benachrichtigungen: await read($, noticeAtom),
+    andereChats: await read($, showsOthersAtom),
+    ruhemodus: await read($, calmAtom),
+    planFreigeben: await read($, approveAtom),
+    githubAbschluss: await read($, shipOnGithubAtom),
+    passwortschutz: await read($, guardAtom),
+    verdecken: await read($, maskAtom),
+    ...(await partsNow($)),
+  }
+}
+
+/** What holds in this chat beyond the settings pane: the parts' switches, Kurzantworten, Autopilot, Remote Control. */
+const partsNow = async ($: $): Promise<Pick<EinstellungenJetzt, 'korrekturen' | 'selbstkritikAuto' | 'kurzantworten' | 'autopilot' | 'remote'>> => {
+  // Selbstkritik und Regeln keep their own per chat (reflect.einstellungen:<chat>); read here, never written.
+  const sid = await $.session.id().catch(() => '')
+  const stored = (await $.store.get(`reflect.einstellungen:${sid}`).catch(() => undefined)) as { values?: Record<string, unknown> } | undefined
+  const own = typeof stored?.values === 'object' && stored.values !== null ? stored.values : {}
+  return {
+    korrekturen: typeof own.pruefung === 'boolean' ? own.pruefung : reflectDefaults.pruefung,
+    selbstkritikAuto: typeof own.selbstkritikAuto === 'boolean' ? own.selbstkritikAuto : reflectDefaults.selbstkritikAuto,
+    kurzantworten: await read($, adhdAtom),
+    autopilot: await isNightShiftOn($),
+    remote: remoteShown(await read($, remoteAtom)),
+  }
+}
 
 /** What one of the own commands does, as its button does it; its answer. */
 const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boolean): Promise<string> => {
@@ -2488,9 +2577,11 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       return zustand('Der Leitstand ist', isOn)
     }
     case 'leitstand:tour':
+      if (isPhone) return 'Die Begrüßung gibt es nur am Rechner, in der Leiste über dem Eingabefeld. /leitstand:hilfe erklärt dasselbe als Text.'
+      isTourAsked = true
       await update($, enabledAtom, () => true)
       await update($, tourAtom, () => 0)
-      return 'Die Begrüßung steht über dem Eingabefeld: Drück Weiter, um sie durchzugehen.'
+      return 'Die Begrüßung steht in der Leiste über dem Eingabefeld: Drück Weiter, um sie durchzugehen.'
 
     case 'leitstand:ansicht-einfach':
     case 'leitstand:ansicht-detailliert':
@@ -2517,17 +2608,18 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
     case 'leitstand:pause':
       if (runningTurn === undefined) return 'Gerade läuft nichts, das sich anhalten ließe.'
       return (await pauseJob($))
-        ? 'Pausiert. Mit /leitstand:weiter macht Claude dort weiter, wo es aufgehört hat.'
-        : 'Anhalten geht gerade nicht. Drück stattdessen Esc, um zu stoppen.'
+        ? 'Pausiert. Mit /leitstand:weiter macht Claude dort weiter, wo er aufgehört hat.'
+        : 'Das hat nicht geklappt: Claude ließ sich gerade nicht anhalten. Drück Esc, um ihn zu stoppen.'
     case 'leitstand:weiter':
       if (await read($, compactingAtom)) return COMPACTING_WORDS
+      if (!isHalted(await read($, checklistAtom))) return 'Gerade ist nichts angehalten. Schreib Claude einfach, was er als Nächstes tun soll.'
       danach($, () => continueJob($))
       return 'Claude macht weiter.'
     case 'leitstand:plan-zeigen': {
       const list = await read($, checklistAtom)
-      if (list === null || !list.hasPlan) return 'Noch kein Plan. Bitte Claude um etwas, dann erscheint hier sein Plan.'
+      if (list === null || !list.hasPlan) return isPhone ? 'Noch kein Plan. Bitte Claude um etwas; dann zeigt /leitstand:plan-zeigen den Plan hier.' : 'Noch kein Plan. Bitte Claude um etwas, dann erscheint hier sein Plan.'
       imHintergrund(() => showPlan($))
-      return isPhone ? planAlsText(list) : 'Der Plan ist in der Seitenleiste.'
+      return isPhone ? planAlsText(list) : 'Der Plan steht im Fenster Plan.'
     }
     case 'leitstand:neuer-chat':
       if (!istJa(args)) {
@@ -2573,8 +2665,12 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       danach($, () => toggleAdhd($))
       return `Kurzantworten gehen aus ${NUR_HIER}.`
     case 'leitstand:fernsteuerung-an':
-    case 'leitstand:fernsteuerung-aus':
-      return fernsteuerung($, name === 'leitstand:fernsteuerung-an')
+    case 'leitstand:fernsteuerung-aus': {
+      const isOn = name === 'leitstand:fernsteuerung-an'
+      const answer = await fernsteuerung($, isOn)
+      // Vom Handy trennt das Aus die Verbindung, über die diese Antwort kommt.
+      return isPhone && !isOn && /jetzt aus|geht aus/.test(answer) ? `${answer} Damit ist die Verbindung zum Handy getrennt; einschalten geht nur am Rechner.` : answer
+    }
 
     case 'leitstand:verdecken-an':
     case 'leitstand:verdecken-aus': {
@@ -2600,13 +2696,12 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
 
     case 'leitstand:buttons-zeigen':
       imHintergrund(() => showButtonHelp($))
-      return isPhone ? buttonHelpText() : 'Die Erklärung der Buttons ist in der Seitenleiste.'
+      return isPhone ? buttonHelpText() : 'Die Erklärung der Buttons steht im Fenster Leitstand-Buttons.'
 
     case 'leitstand:einstellungen-zeigen':
+      if (isPhone) return einstellungenAlsText(await einstellungenJetzt($))
       imHintergrund(() => showSettings($))
-      return isPhone
-        ? 'Die Einstellungen öffnen sich am Computer; auf dem Handy sind Fenster nicht zu sehen. Umstellen geht hier mit den Befehlen, siehe /leitstand:hilfe.'
-        : 'Die Einstellungen sind in der Seitenleiste.'
+      return 'Das Einstellungsfenster ist offen.'
     case 'leitstand:ton-aus':
     case 'leitstand:ton-signalton':
     case 'leitstand:ton-stimme': {
@@ -2649,7 +2744,7 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
     }
     case 'leitstand:zuruecksetzen':
       await resetSettings($)
-      return `Alle Leitstand-Einstellungen stehen wieder auf dem Standard ${NUR_HIER}.`
+      return `Alle Einstellungen aus dem Einstellungsfenster stehen wieder auf dem Standard für neue Chats ${NUR_HIER}.`
     default:
       return BEFEHL_FEHLER
   }
@@ -2701,7 +2796,9 @@ const rewriteOldView = async ($: $): Promise<void> => {
 export function registerGlance(on: On, options: PluginOptions = {}): void {
   // What a new chat starts with; a change in the config menu reloads the module with the new values.
   defaults = defaultSettings(options)
+  reflectDefaults = { pruefung: options.regelpruefung !== false, selbstkritikAuto: options.selbstkritikAuto === true }
   isViewRewriteOpen = false
+  isTourAsked = false
   // A chat that ends says so, so the other chats stop mentioning it; its checklist stays for when it is resumed.
   on('session.end', async ($, e, next) => {
     saveTimer?.cancel()
@@ -2825,8 +2922,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     })
     await $.command.register({
       name: 'leitstand',
-      description:
-        'Den Leitstand steuern: /leitstand on|off, details on|off, sound on|voice|off, notify on|off, others on|off, calm on|off, guard on|off, privacy on|off, approve on|off, arbeitsweise auto|dynamisch, ship on|off, week, tour, pause, continue, plan, checkpoint, settings, tidy [at N|off], history [gestern|JJJJ-MM-TT], handoff',
+      description: `${LEITSTAND_GRUNDBEFEHL.description}; alle Befehle: /leitstand:hilfe`,
     })
     // One command of its own for each button and switch. The long form /leitstand:pause is a file in the plugin's
     // commands/ folder (a name with a colon cannot be registered); the short form /pause is registered here. Immediate,
@@ -2851,6 +2947,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
 
   on('command.run', { command: ['leitstand'] }, async ($, e) => {
     const answer = await (async () => {
+      // hilfe and ? explain the command and change nothing.
+      if (fragtNachHilfe(e.args)) return { text: befehlsHilfe(LEITSTAND_GRUNDBEFEHL) }
       const arg = e.args.trim().toLowerCase()
       if (arg.startsWith('arbeitsweise') || arg.startsWith('modus')) {
         const choice = arg.replace(/^(arbeitsweise|modus)/, '').trim()
@@ -2867,8 +2965,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         return {
           text:
             mode === 'dynamisch'
-              ? 'Gruppenarbeit: Claude plant und prüft, Arbeiter in sechs Stufen von Haiku bis Fable setzen um. Jeder Plan wartet auf deine Freigabe.'
-              : 'Auto-Modus: Claude entscheidet selbst, ob und welche Helfer es einsetzt.',
+              ? `Gruppenarbeit: Claude plant und prüft, Arbeiter setzen um. ${PLAN_FREIGABE}`
+              : 'Auto-Modus: Claude entscheidet selbst, ob und welche Helfer er einsetzt.',
         }
       }
       if (arg.startsWith('sound')) {
@@ -2896,7 +2994,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         await setGuard($, isOn)
         return {
           text: isOn
-            ? 'Der Passwortschutz ist an: Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zwei Minuten zurückgehalten. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab. Berichte von Helfern gehen durch.'
+            ? `Der Passwortschutz ist an: ${PASSWORTSCHUTZ_TEXT}`
             : 'Der Passwortschutz ist aus: Jede Nachricht wird so gesendet, wie du sie schreibst.',
         }
       }
@@ -2906,9 +3004,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         return { text: isOn ? MASKING_WORDS.on : MASKING_WORDS.off }
       }
       if (arg === 'tour') {
+        isTourAsked = true
         await update($, enabledAtom, () => true)
         await update($, tourAtom, () => 0)
-        return { text: 'Die Begrüßung steht über dem Eingabefeld: Drück Weiter, um sie durchzugehen.' }
+        return { text: 'Die Begrüßung steht in der Leiste über dem Eingabefeld: Drück Weiter, um sie durchzugehen.' }
       }
       if (arg.startsWith('notify')) {
         const choice = arg.slice('notify'.length).trim()
@@ -2961,7 +3060,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       if (arg.startsWith('history')) {
         const day = dayFromArgument(arg.slice('history'.length), await now($))
         if (day === null) {
-          return { text: 'Versuch /leitstand history, /leitstand history gestern oder /leitstand history 2026-10-06.' }
+          return { text: 'Versuch /leitstand:verlauf-zeigen, /leitstand:verlauf-zeigen gestern oder /leitstand:verlauf-zeigen 2026-10-06.' }
         }
         const opened = await showHistory($, day, true)
         const entries = (await read($, historyAtom))?.entries ?? []
@@ -2970,7 +3069,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         return {
           text: opened?.isPlaced
             ? `Verlauf für ${germanDay(day)}: ${count}.`
-            : `Verlauf für ${germanDay(day)}: ${count}. Mach das Fenster breiter, um die Seitenleiste zu sehen.`,
+            : `Verlauf für ${germanDay(day)}: ${count}. Mach das Fenster breiter, um das Fenster Verlauf zu sehen.`,
         }
       }
       if (arg === 'pause') {
@@ -2983,11 +3082,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       }
       if (arg === 'settings') {
         await showSettings($)
-        return { text: 'Die Einstellungen sind in der Seitenleiste.' }
+        return { text: 'Das Einstellungsfenster ist offen.' }
       }
       if (arg === 'plan') {
         await showPlan($)
-        return { text: 'Der Plan ist in der Seitenleiste.' }
+        return { text: 'Der Plan steht im Fenster Plan.' }
       }
       if (arg === 'continue') {
         void continueJob($)
@@ -3107,7 +3206,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     await holdSecretMessage($, e.text, kinds)
 
     return {
-      drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel. Der Leitstand hält sie zwei Minuten zurück: Trotzdem senden im Band oder /trotzdem-senden schickt sie ab.',
+      drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel. Der Leitstand hält sie zwei Minuten zurück: Trotzdem senden in der Leiste oder /trotzdem-senden schickt sie ab, Verwerfen oder /nachricht-verwerfen verwirft sie.',
     }
   })
 
@@ -3875,10 +3974,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       )
 
     const viewHelp = {
-      simple: 'Die Schritte und der Fortschritt in einfachen Worten, ohne Tool-Details. Für alle.',
+      simple: 'Die Schritte und der Fortschritt in einfachen Worten, ohne Werkzeug-Details. Für alle.',
       detailed: 'Dazu Zeit und Tokens pro Schritt, mit dem Code im Blick. Für Entwickler.',
-      minimal: 'Nur eine Zeile über dem Eingabefeld: was gerade passiert, wie viele Schritte fertig sind, die geschätzte Restzeit und die bisher genutzten Tokens.',
-      off: 'Claude Code wie gewohnt: keine Checkliste, alle Tool-Zeilen sichtbar. Der Passwortschutz behält seine eigene Einstellung.',
+      minimal: 'Eine Zeile mit dem Stand (was gerade passiert, wie viele Schritte fertig sind, Restzeit und Tokens), darunter die Buttons.',
+      off: 'Claude Code wie gewohnt: keine Checkliste, alle Werkzeugzeilen sichtbar. Der Passwortschutz behält seine eigene Einstellung.',
     }[view]
     const soundHelp = {
       off: 'Keine Töne. Schalte sie ein, wenn du wegschauen willst, während Claude arbeitet.',
@@ -3890,14 +3989,22 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       <Box flexDirection="column" width={columns}>
         {vector ? (
           // The app titles the panel; the body starts with how changes behave.
-          <Text dimColor wrap="wrap">
-            Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.
-          </Text>
+          <Box flexDirection="column" gap={1}>
+            <Text dimColor wrap="wrap">
+              {SETTINGS_HERE}
+            </Text>
+            <Text dimColor wrap="wrap">
+              {SETTINGS_DEFAULT}
+            </Text>
+          </Box>
         ) : (
           <Box flexDirection="column">
             <Text bold>{`${vector ? '⚙' : TERMINAL_GEAR} Leitstand-Einstellungen`}</Text>
             <Text dimColor wrap="wrap">
-              Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.
+              {SETTINGS_HERE}
+            </Text>
+            <Text dimColor wrap="wrap">
+              {SETTINGS_DEFAULT}
             </Text>
             <Text dimColor>{rule}</Text>
           </Box>
@@ -3925,8 +4032,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           WORK_MODE_WORDS[workMode],
           choice('mode', [['auto', WORK_MODE_WORDS.auto], ['dynamisch', WORK_MODE_WORDS.dynamisch]], workMode, value => setWorkMode($, value)),
           workMode === 'dynamisch'
-            ? 'Claude plant, entscheidet das Design und prüft jedes Ergebnis. Arbeiter in sechs Stufen setzen um, von Haiku bis Fable, jeweils so günstig wie möglich. Jeder Plan wartet auf deine Freigabe, und Claude ändert keine Dateien, solange Arbeiter laufen. Lohnt sich bei großen Aufgaben.'
-            : 'Claude entscheidet selbst, ob und welche Helfer es einsetzt. Schnell und flexibel, gut für kleine und mittlere Aufgaben.',
+            ? `Claude plant, entscheidet das Design und prüft jedes Ergebnis. Arbeiter, Helfer in sechs Stufen (${STUFEN}), setzen um, jeweils so günstig wie möglich, und Claude ändert keine Dateien, solange sie laufen. ${PLAN_FREIGABE} Kostet mehr Tokens, lohnt sich bei großen Aufgaben.`
+            : 'Claude entscheidet selbst, ob und welche Helfer er für Teilaufgaben startet. Schnell und flexibel, gut für kleine und mittlere Aufgaben.',
         )}
         {group(
           'sound',
@@ -3958,7 +4065,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           showsOthers ? 'An' : 'Aus',
           choice('others', [['off', 'Aus'], ['on', 'An']], showsOthers ? 'on' : 'off', value => setOthers($, value === 'on')),
           showsOthers
-            ? 'Die Leiste nennt einen anderen Chat auf diesem Computer, der dich braucht, aus jedem Projekt. Schalte das aus, bevor du deinen Bildschirm teilst.'
+            ? 'Die Leiste nennt andere Chats auf diesem Computer, die dich brauchen oder gerade arbeiten, aus jedem Projekt. Schalte das aus, bevor du deinen Bildschirm teilst.'
             : 'Schalte das ein, um zu sehen, wenn ein anderer Chat auf diesem Computer dich braucht.',
         )}
         {group(
@@ -3984,9 +4091,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             },
           ),
           workMode === 'dynamisch'
-            ? `In der Gruppenarbeit wartet jeder Plan auf deine Freigabe. Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll.`
+            ? `${PLAN_FREIGABE} Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll.`
             : approves
-            ? `Claude zeigt seinen Plan und wartet. Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll.`
+            ? `Claude zeigt seinen Plan und wartet. Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll. Ein Plan, der nur liest, und eine Nachricht, die mit Starte sofort beginnt, starten sofort.`
             : 'Claude legt direkt los, sobald der Plan steht.',
         )}
         {group(
@@ -4006,7 +4113,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           isGuarded ? 'An' : 'Aus',
           choice('guard', [['off', 'Aus'], ['on', 'An']], isGuarded ? 'on' : 'off', value => setGuard($, value === 'on')),
           isGuarded
-            ? 'Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zwei Minuten zurückgehalten. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, im Terminal auch noch mal Enter. Berichte von Helfern gehen durch.'
+            ? PASSWORTSCHUTZ_TEXT
             : masks
               ? 'Jede Nachricht wird so gesendet, wie du sie schreibst. Schlüssel und E-Mail-Adressen bleiben auf dem Bildschirm trotzdem verdeckt.'
               : 'Jede Nachricht wird so gesendet, wie du sie schreibst.',
@@ -4018,7 +4125,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           masks ? 'An' : 'Aus',
           choice('privacy', [['off', 'Aus'], ['on', 'An']], masks ? 'on' : 'off', value => setMasking($, value === 'on')),
           masks
-            ? 'Passwörter, Schlüssel, Kartennummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte, auch in Befehls- und Werkzeugausgaben. Claude liest alles unverändert.'
+            ? VERDECKEN_TEXT
             : 'Alles erscheint so, wie es im Chat steht. Schalte das ein, bevor du deinen Bildschirm teilst.',
         )}
         {!vector && <Text dimColor>{rule}</Text>}
@@ -4406,7 +4513,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     if (view === null) {
       return (
         <Box flexDirection="column">
-          <Text dimColor>Schreib /leitstand history, um die Aufgaben von heute zu sehen.</Text>
+          <Text dimColor>Schreib /leitstand:verlauf-zeigen, um die Aufträge von heute zu sehen.</Text>
           {close}
         </Box>
       )
@@ -5135,7 +5242,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       )
     }
 
-    const tourStep = isEnabled && !isMinimal && list === null ? await read($, tourAtom) : null
+    const tourStep = isEnabled && (!isMinimal || isTourAsked) && list === null ? await read($, tourAtom) : null
     if (tourStep !== null) {
       const isLast = tourStep === TOUR.length - 1
       if (vector) {
@@ -5199,6 +5306,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       const took = list ? (vector ? durationWords : formatDuration)(clockAt - list.startedAt) : ''
       const used = list ? list.tasks.reduce((sum, one) => sum + one.tokens, list.extraTokens) : 0
       const isPause = list?.stopKind === 'pause'
+      // A first start shows no welcome here: one line names it, until it is seen or skipped.
+      const showsTourHint = list === null && !isCompacting && (await read($, tourAtom)) !== null
       const lead = isCompacting
         ? COMPACTING
         : list === null
@@ -5258,6 +5367,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
               {gear}
             </Box>
           </Box>
+          {showsTourHint && (
+            <Text key="tour-hint" dimColor wrap="truncate-end">
+              {TOUR_HINT}
+            </Text>
+          )}
           {actions}
         </Box>,
       )

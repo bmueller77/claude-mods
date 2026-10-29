@@ -1,5 +1,5 @@
 ---
-description: "Modell und Aufwand für diesen Chat passend zur Aufgabe vorschlagen; ja übernimmt, nein verwirft (Modellwahl)"
+description: "Modellwahl: Schlägt Modell und Aufwand für diesen Chat passend zur Aufgabe vor; ja übernimmt, nein verwirft, hilfe erklärt"
 argument-hint: "[Aufgabe | ja | nein]"
 disable-model-invocation: true
 ---

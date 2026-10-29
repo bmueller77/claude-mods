@@ -1,5 +1,5 @@
 ---
-description: "Getippte Prompts gehen direkt raus, nur in diesem Chat"
+description: "Was du tippst, wird wieder direkt gesendet (nur dieser Chat)"
 disable-model-invocation: true
 ---
 

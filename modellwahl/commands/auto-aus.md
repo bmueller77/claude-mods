@@ -1,5 +1,5 @@
 ---
-description: "Automatische Modellwahl bei der ersten Nachricht eines neuen Chats ausschalten, nur für diesen Chat"
+description: "Vorschlag beim Neubeginn dieses Chats aus: erste Nachricht, auch nach /clear (nur dieser Chat)"
 argument-hint: "[hilfe]"
 disable-model-invocation: true
 ---

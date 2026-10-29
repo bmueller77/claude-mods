@@ -1,5 +1,5 @@
 ---
-description: "Prompt-Cache ohne Ende warm halten, bis dieser Chat endet"
+description: "Hält den Cache warm, bis dieser Chat endet"
 disable-model-invocation: true
 ---
 

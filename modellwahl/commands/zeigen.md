@@ -1,5 +1,5 @@
 ---
-description: "Aktuelle Modellwahl mit Grund, ob sie zurückgezogen ist, und den Stand der Kalibrierung zeigen"
+description: "Zeigt, welches Modell und welcher Aufwand in diesem Chat gelten und warum"
 argument-hint: "[hilfe]"
 disable-model-invocation: true
 ---

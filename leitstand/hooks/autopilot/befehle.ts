@@ -2,24 +2,33 @@ import type { LeitstandBefehl } from '../logic'
 
 const GRUPPE = 'Autopilot'
 
-/** Die Befehle von Autopilot (früher ein eigener Mod), in der Reihenfolge der Übersicht. */
+/** Was der Autopilot tut, in der einen Fassung, die auch die Übersicht des Leitstands nennt. */
+export const AUTOPILOT_TUT =
+  'Ohne Rückfragen heißt: Claude stellt dir keine Fragen und entscheidet selbst, bei Zweifeln für das, was sich leicht rückgängig machen lässt; was du nicht vorher verlangt hast, löscht, veröffentlicht, verschickt oder pusht er nicht, und Buttons wie Push drückt der Autopilot nicht. ' +
+  'Erlaubnis-Abfragen von Claude Code für Werkzeuge beantwortet er nicht; dann wartet die Arbeit, bis du zurück bist. ' +
+  'Bleibt Claude nach einer Runde unfertig stehen, schiebt der Autopilot an: Er schickt eine neue Nachricht, weiterzumachen, so oft wie eingestellt (Option Autopilot: Höchstzahl angeschobener Runden, Standard 10); eine Nachricht von dir zählt von vorn. Solange Helfer im Hintergrund laufen, wartet er. Ein wartender Plan startet nach 30 Sekunden von selbst. ' +
+  'Am Ende schreibt Claude eine Übergabe in den Chat: was fertig ist, was er selbst entschieden hat, was liegen blieb. Der Autopilot endet, wenn Claude fertig ist, die Grenze erreicht ist oder Claude ohne dich nicht weiterkommt; stoppen kannst du ihn mit 🅰️ (im Terminal 🤖) oder /leitstand:autopilot-aus.'
+
+const AUTOPILOT_KNOPF = 'Button: 🅰️ unten links (im Terminal 🤖); leuchtet, solange der Autopilot läuft.'
+
+/** Die Befehle von Autopilot (bis 2026-10-26 ein eigener Mod), in der Reihenfolge der Übersicht. */
 export const AUTOPILOT_BEFEHLE: readonly LeitstandBefehl[] = [
   {
     name: 'leitstand:autopilot-an',
     description: 'Autopilot einschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist',
     gruppe: GRUPPE,
-    tut: 'Claude stellt keine Rückfragen mehr, schiebt Runden ohne Abschluss an und schreibt am Ende eine Übergabe. Ein angehaltener Autopilot läuft wieder.',
-    knopf: '🅰️ (leuchtet, solange der Autopilot an ist)',
+    tut: `${AUTOPILOT_TUT} Ein angehaltener Autopilot läuft wieder.`,
+    knopf: AUTOPILOT_KNOPF,
     gilt: 'chat',
     argumente: '',
     beispiel: '/leitstand:autopilot-an',
   },
   {
     name: 'leitstand:autopilot-aus',
-    description: 'Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld',
+    description: 'Autopilot ausschalten; danach steht sein Bericht in der Leiste',
     gruppe: GRUPPE,
-    tut: 'Beendet den Autopiloten. Sein Bericht steht danach über dem Eingabefeld, bis du ihn wegräumst.',
-    knopf: '🅰️, solange er an ist, oder Beenden in der Autopilot-Zeile',
+    tut: 'Beendet den Autopiloten. Sein Bericht steht danach in der Leiste über dem Eingabefeld, bis du ihn wegräumst: wie oft er angeschoben hat und welche Fragen Claude selbst entschieden hat. Claudes Übergabe steht im Chat.',
+    knopf: 'Button: 🅰️ unten links (im Terminal 🤖), solange er leuchtet, oder Beenden in der Zeile des Autopiloten',
     gilt: 'chat',
     argumente: '',
     beispiel: '/leitstand:autopilot-aus',
@@ -29,17 +38,17 @@ export const AUTOPILOT_BEFEHLE: readonly LeitstandBefehl[] = [
     description: 'Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text',
     gruppe: GRUPPE,
     tut: 'Zeigt die Rückfragen, die Claude während des Autopiloten selbst entschieden hat, als Liste im Chat.',
-    knopf: 'Fragen in der Autopilot-Zeile, hier als Text statt aufgeklappt',
+    knopf: 'Button: Fragen in der Zeile des Autopiloten; der klappt die Liste in der Leiste auf.',
     gilt: 'einmal',
     argumente: '',
     beispiel: '/leitstand:autopilot-fragen-zeigen',
   },
   {
     name: 'leitstand:autopilot-bericht-weg',
-    description: 'Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen',
+    description: 'Den Bericht des beendeten Autopiloten aus der Leiste wegräumen',
     gruppe: GRUPPE,
-    tut: 'Räumt den Bericht des beendeten Autopiloten über dem Eingabefeld weg.',
-    knopf: 'Schließen in der Autopilot-Zeile',
+    tut: 'Räumt den Bericht des beendeten Autopiloten aus der Leiste über dem Eingabefeld weg.',
+    knopf: 'Button: Schließen in der Zeile des Autopiloten',
     gilt: 'einmal',
     argumente: '',
     beispiel: '/leitstand:autopilot-bericht-weg',
@@ -47,18 +56,18 @@ export const AUTOPILOT_BEFEHLE: readonly LeitstandBefehl[] = [
 ]
 
 /**
- * Der Grundbefehl /autopilot [an|aus], wie er als eigener Mod hieß. Er steht nicht in der Übersicht des Leitstands (dort
- * stehen nur Befehle mit leitstand: davor); seine Hilfe kommt aus diesem Eintrag.
+ * Der Grundbefehl /autopilot [an|aus], wie er als eigener Mod hieß. Die Übersicht des Leitstands nennt ihn in der Gruppe
+ * Autopilot; seine Hilfe kommt aus diesem Eintrag.
  */
 export const AUTOPILOT_GRUNDBEFEHL: LeitstandBefehl = {
   name: 'autopilot',
   description: 'Autopilot ein- oder ausschalten: Claude arbeitet ohne Rückfragen weiter, während du weg bist',
   argumentHint: '[an|aus]',
   gruppe: GRUPPE,
-  tut: 'Schaltet den Autopiloten ein oder aus, wie /leitstand:autopilot-an und /leitstand:autopilot-aus.',
-  knopf: '🅰️',
+  tut: 'Schaltet den Autopiloten ein oder aus, wie /leitstand:autopilot-an und /leitstand:autopilot-aus. Was er tut, erklärt /leitstand:autopilot-an hilfe.',
+  knopf: 'Button: 🅰️ unten links (im Terminal 🤖)',
   gilt: 'chat',
-  argumente: 'an oder aus. Ohne Argument schaltet er um.',
+  argumente: 'an oder aus (freiwillig). Ohne Argument schaltet er um.',
   beispiel: '/autopilot an',
 }
 

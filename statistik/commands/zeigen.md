@@ -1,5 +1,5 @@
 ---
-description: "Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick, wie /statistik"
+description: "Zeigt Cache, Kontext, Kosten, Limits und Warmhalten dieses Chats als Text, wie /statistik"
 disable-model-invocation: true
 ---
 

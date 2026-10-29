@@ -1,5 +1,5 @@
 ---
-description: "Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben"
+description: "Verwirft den offenen Vorschlag der Modellwahl; Modell und Aufwand bleiben"
 argument-hint: "[hilfe]"
 disable-model-invocation: true
 ---

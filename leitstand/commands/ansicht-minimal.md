@@ -1,5 +1,5 @@
 ---
-description: "Ansicht Minimal: eine Zeile"
+description: "Ansicht Minimal: eine Zeile mit dem Stand"
 disable-model-invocation: true
 ---
 

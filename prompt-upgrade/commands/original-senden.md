@@ -1,5 +1,5 @@
 ---
-description: "Schickt nach einem Fehler den Original-Prompt unverändert ab"
+description: "Sendet nach einem Fehler deinen Prompt unverändert an Claude"
 disable-model-invocation: true
 ---
 

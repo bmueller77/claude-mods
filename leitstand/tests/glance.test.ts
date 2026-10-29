@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_KURZFORMEN, TEIL_BEFEHLE, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 
@@ -762,12 +762,12 @@ describe('Passwortschutz nach Herkunft und Freigabe einer zurückgehaltenen Nach
     const { clock, seen } = guarded(on)
     const held = await submit($, 'sdk')
     expect(held.drop).toBe(
-      'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel. Der Leitstand hält sie zwei Minuten zurück: Trotzdem senden im Band oder /trotzdem-senden schickt sie ab.',
+      'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel. Der Leitstand hält sie zwei Minuten zurück: Trotzdem senden in der Leiste oder /trotzdem-senden schickt sie ab, Verwerfen oder /nachricht-verwerfen verwirft sie.',
     )
     expect(seen.entered).toEqual([])
     await clock.advance(100)
     expect(seen.toasts).toEqual([
-      `Diese Nachricht enthält offenbar ${KINDS}, deshalb hält der Leitstand sie zwei Minuten zurück. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, im Terminal geht auch noch mal Enter.`,
+      `Diese Nachricht enthält offenbar ${KINDS}, deshalb hält der Leitstand sie zwei Minuten zurück. In der Leiste: Trotzdem senden oder Verwerfen, als Befehl /trotzdem-senden oder /nachricht-verwerfen; im Terminal schickt sie auch ein zweites Enter ab. Nach zwei Minuten ohne Entscheidung ist sie verworfen.`,
     ])
     for (const surface of SURFACES) {
       const shown = await band($, surface)
@@ -880,8 +880,8 @@ describe('Passwortschutz nach Herkunft und Freigabe einer zurückgehaltenen Nach
     // hilfe explains each, as for the other commands.
     for (const name of ['leitstand:trotzdem-senden', 'leitstand:nachricht-verwerfen']) {
       const help = await run($, name, 'hilfe')
-      expect(help.startsWith(`/${name}: Zurückgehaltene Nachricht`)).toBe(true)
-      expect(help).toContain('Gilt: einmal, sofort')
+      expect(help.startsWith(`/${name} · Zurückgehaltene Nachricht`)).toBe(true)
+      expect(help).toContain('Gilt: einmal, sofort; ändert keine Einstellung.')
       expect(help.endsWith(`\nKurzform: /${name.slice('leitstand:'.length)}`)).toBe(true)
     }
   })
@@ -4945,7 +4945,7 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
     expect((await texts($, 'terminal', 120)).join('\n')).toContain(card)
   }
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('✓ Verstanden')
-  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du alle Optionen.')
+  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du das Einstellungsfenster.')
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Unten unter Einstellungen')
   const last = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await last.press({ key: 'tour-next' })
@@ -4962,6 +4962,39 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
   await band.press({ key: 'tour-skip' })
   await band.unmount()
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
+})
+
+test('in der Ansicht Minimal zeigt der erste Start eine Zeile mit /leitstand:tour; der Befehl zeigt die Karten auch dort', async ($, on) => {
+  mock.store(on)
+  mock.clock(on, { now: 1_000_000 })
+  on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+  on('tool.register', () => ({ value: undefined }) as never)
+  on('command.register', () => ({ value: undefined }) as never)
+  await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
+  const HINT = 'Neu hier? /leitstand:tour zeigt in drei Schritten, was der Leitstand kann.'
+  for (const surface of SURFACES) {
+    const shown = (await texts($, surface, 120)).join('\n')
+    expect(shown).toContain(HINT)
+    expect(shown).not.toContain('Willkommen im Leitstand')
+  }
+  // Eine Zeile mehr, nicht mehr: ohne den Hinweis ist die Leiste genau eine Zeile kürzer.
+  const withHint = (await texts($, 'terminal', 120)).length
+
+  await $.command.run({ command: 'leitstand:tour', args: '' } as never)
+  const tour = (await texts($, 'terminal', 120)).join('\n')
+  expect(tour).toContain('Willkommen im Leitstand · 1 von 3')
+  expect(tour).not.toContain(HINT)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'tour-skip' })
+  await band.unmount()
+  const after = await texts($, 'terminal', 120)
+  expect(after.join('\n')).not.toContain('Willkommen im Leitstand')
+  expect(after.join('\n')).not.toContain(HINT)
+  expect(after.length).toBe(withHint - 1)
+
+  // Der nächste Chat zeigt den Hinweis nicht mehr.
+  await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
+  expect((await texts($, 'terminal', 120)).join('\n')).not.toContain(HINT)
 })
 
 test('someone who already uses Leitstand is not welcomed again', async ($, on) => {
@@ -5428,7 +5461,7 @@ test('▤ Plan opens the whole plan beside the chat: every step, what it got don
   await desktop.unmount()
 
   const result = await $.command.run({ command: 'leitstand', args: 'plan' } as never)
-  expect(result.text).toBe('Der Plan ist in der Seitenleiste.')
+  expect(result.text).toBe('Der Plan steht im Fenster Plan.')
   expect(opened).toHaveLength(2)
 })
 
@@ -5746,7 +5779,7 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
   expect((await texts($, 'terminal')).join('\n')).toContain('○ Aus')
 
   const result = await $.command.run({ command: 'leitstand', args: 'settings' } as never)
-  expect(result.text).toBe('Die Einstellungen sind in der Seitenleiste.')
+  expect(result.text).toBe('Das Einstellungsfenster ist offen.')
   expect(opened).toHaveLength(2)
 })
 
@@ -5857,7 +5890,8 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(shown).toContain('● Gruppenarbeit')
     expect(shown).toContain('sechs Stufen')
     // Plan zuerst freigeben gilt in Dynamisch immer, und die Einstellung sagt es.
-    expect(shown).toContain('In der Gruppenarbeit wartet jeder Plan auf deine Freigabe')
+    expect(shown).toContain('In der Gruppenarbeit wartet ein Plan auf deine Freigabe')
+    expect(shown).not.toContain('jeder Plan')
 
     const auto = await $.command.run({ command: 'leitstand', args: 'arbeitsweise auto' } as never)
     expect(String(auto.text)).toContain('Auto-Modus:')
@@ -7224,8 +7258,8 @@ describe('Arbeitsweise und Grill mich', () => {
     await pressAt({ columns: 100, rows: 40, isFullscreen: true })
     expect(opened).toEqual([])
     expect(state.toasts.slice(-2)).toEqual([
-      'Das Fenster Dateien steht in der Seitenleiste, und die braucht das Vollbild-Layout. Führ /tui fullscreen aus, dann /dateien.',
-      'Das Fenster Dateien steht in der Seitenleiste, und die braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /dateien.',
+      'Das Fenster Dateien steht neben dem Chat, und das braucht im Terminal das Vollbild-Layout. Führ /tui fullscreen aus, dann /dateien.',
+      'Das Fenster Dateien steht neben dem Chat, und das braucht ein Terminal mit mindestens 110 Spalten. Mach es breiter, dann /dateien.',
     ])
   })
 
@@ -7359,7 +7393,7 @@ describe('Ansicht Minimal', () => {
     await settings.unmount()
     expect(choices).toContain('● Minimal')
     expect(choices).toContain('○ Aus')
-    expect(help).toContain('Nur eine Zeile über dem Eingabefeld')
+    expect(help).toContain('Eine Zeile mit dem Stand (was gerade passiert, wie viele Schritte fertig sind, Restzeit und Tokens), darunter die Buttons.')
   })
 })
 
@@ -7701,7 +7735,7 @@ describe('Verdecken und Tresor', () => {
 
     await pressBand($, 'privacy')
     expect(await bandButton($, 'privacy')).toBe(LOCK)
-    expect(toasts).toContain('Verdecken an: Passwörter, Schlüssel und persönliche Daten erscheinen als Punkte.')
+    expect(toasts).toContain('Verdecken an: Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.')
     expect(await shows()).toEqual(hidden)
 
     // The command and the settings switch it too.
@@ -9002,7 +9036,10 @@ describe('Einstellungen je Chat', () => {
     await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
     const shown = await settingsTexts($)
     expect(shown).toContain('An (in der Gruppenarbeit immer)')
-    expect(shown).toContain('Änderungen gelten sofort, nur in diesem Chat. Den Standard für neue Chats stellst du im Einstellungsmenü ein.')
+    expect(shown).toContain('Änderungen gelten sofort, nur in diesem Chat.')
+    // Der Weg zum Standard für neue Chats steht im Fenster selbst, wörtlich wie in /leitstand:hilfe.
+    expect(shown).toContain(`Den Standard für neue Chats stellst du anders ein. ${STANDARD_WEG}`)
+    expect(shown).not.toContain('Einstellungsmenü')
     await settingsPress($, 'approve-off')
     await settingsPress($, 'approve-on')
     expect((store.get('settings:chat-1') as { values: unknown }).values).toEqual({ workMode: 'dynamisch' })
@@ -9200,9 +9237,20 @@ describe('Eigene Befehle /leitstand-…', () => {
       expect(one.description.length).toBeGreaterThan(5)
       for (const ask of ['hilfe', '?', ' Hilfe ']) {
         const help = await run($, one.name, ask)
-        expect(help.startsWith(`/${one.name}: ${one.description}\n`)).toBe(true)
-        for (const part of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:']) expect(help).toContain(part)
-        if (one.gilt !== 'einmal') expect(help).toContain('nur in diesem Chat')
+        expect(help.startsWith(`/${one.name} · ${one.description}\n`)).toBe(true)
+        for (const part of ['\nWas: ', '\nGilt: ', '\nArgumente: ']) expect(help).toContain(part)
+        // Button oder Einstellungsfenster (Leitfaden 4); ein Beispiel nur bei einem Argument.
+        expect(help).toMatch(/\n(Button: |Im Einstellungsfenster: )/)
+        expect(help.includes('\nBeispiel: /leitstand:')).toBe(one.argumente !== '')
+        const gilt = one.giltText !== undefined ? `Gilt: ${one.giltText}` : {
+          einstellung: `Gilt: nur in diesem Chat. Standard für neue Chats: Option "${one.option}", siehe /leitstand:hilfe unter Einstellen.`,
+          chat: 'Gilt: nur in diesem Chat.',
+          dauerhaft: `Gilt: dauerhaft: schreibt in ${one.ort}.`,
+          einmal: 'Gilt: einmal, sofort; ändert keine Einstellung.',
+        }[one.gilt]
+        expect(help).toContain(`\n${gilt}\n`)
+        if (one.gilt === 'einstellung') expect(one.option?.length).toBeGreaterThan(3)
+        if (one.gilt === 'dauerhaft' && one.giltText === undefined) expect(one.ort?.length).toBeGreaterThan(3)
       }
     }
     // Short forms without leitstand: in front: the same command, the menu names the mod.
@@ -9216,7 +9264,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       expect(spec?.argumentHint).toBe(one?.argumentHint)
       expect(spec?.immediate).toBe(true)
       const help = await run($, kurz, 'hilfe')
-      expect(help.startsWith(`/${name}: `)).toBe(true)
+      expect(help.startsWith(`/${name} · `)).toBe(true)
       expect(help.endsWith(`\nKurzform: /${kurz}`)).toBe(true)
     }
     expect(registered.find(one => one.name === 'verlauf-zeigen')?.argumentHint).toBe('[gestern|JJJJ-MM-TT]')
@@ -9247,14 +9295,104 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(await stateOf($, 'isGuarded')).toBe(true)
   })
 
+  test('hilfe und ? an /leitstand und an jeder Kurzform zeigen die Hilfe und ändern nichts', READS, async ($, on) => {
+    world(on)
+    on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+    on('tool.register', () => ({ value: undefined }) as never)
+    on('command.register', () => ({ value: undefined }) as never)
+    await $.session.start(START)
+    const vorher = await $.command.run({ command: 'zustand', args: '' } as never)
+    // Der Grundbefehl: /leitstand hilfe schaltete bis 0.63.2 den Leitstand aus.
+    for (const ask of ['hilfe', '?', ' Hilfe ', 'help']) {
+      const help = await run($, 'leitstand', ask)
+      expect(help).toBe(befehlsHilfe(LEITSTAND_GRUNDBEFEHL))
+      expect(help.startsWith('/leitstand · Leitstand ein- oder ausschalten\n')).toBe(true)
+      expect(help).toContain('/leitstand:hilfe')
+    }
+    expect(await stateOf($, 'glanceEnabled')).toBe(true)
+    // Jede Kurzform der eigenen Befehle, auch die Schalter: nur die Hilfe, kein Zustand ändert sich.
+    for (const [kurz, name] of LEITSTAND_KURZFORMEN) {
+      if (!LEITSTAND_BEFEHLE.some(one => one.name === name && one.gruppe !== 'Selbstkritik' && one.gruppe !== 'Regeln' && one.gruppe !== 'Dateien' && one.gruppe !== 'Autopilot')) continue
+      for (const ask of ['hilfe', '?']) expect((await run($, kurz, ask)).startsWith(`/${name} · `)).toBe(true)
+    }
+    expect((await $.command.run({ command: 'zustand', args: '' } as never)).text).toBe(vorher.text)
+  })
+
+  test('/leitstand:weiter sagt, wenn nichts angehalten ist, und schickt dann nichts', async ($, on) => {
+    world(on)
+    const sent: string[] = []
+    on('prompt.submit', (_, e) => {
+      sent.push(String((e as { text: string }).text))
+      return { value: {} } as never
+    })
+    expect(await run($, 'leitstand:weiter')).toBe('Gerade ist nichts angehalten. Schreib Claude einfach, was er als Nächstes tun soll.')
+    expect(await run($, 'weiter')).toBe('Gerade ist nichts angehalten. Schreib Claude einfach, was er als Nächstes tun soll.')
+    await settle()
+    expect(sent).toEqual([])
+  })
+
+  test('/leitstand:tour vom Handy sagt, dass es die Begrüßung nur am Rechner gibt', async ($, on) => {
+    world(on)
+    expect(await run($, 'leitstand:tour', '', 'bridge')).toBe('Die Begrüßung gibt es nur am Rechner, in der Leiste über dem Eingabefeld. /leitstand:hilfe erklärt dasselbe als Text.')
+  })
+
+  test('einstellungenAlsText nennt je Einstellung den Wert dieses Chats und den Befehl dazu', () => {
+    const text = einstellungenAlsText({
+      ansicht: 'minimal',
+      arbeitsweise: 'dynamisch',
+      toene: 'voice',
+      benachrichtigungen: true,
+      andereChats: false,
+      ruhemodus: true,
+      planFreigeben: false,
+      githubAbschluss: true,
+      passwortschutz: false,
+      verdecken: true,
+      korrekturen: true,
+      selbstkritikAuto: false,
+      kurzantworten: true,
+      autopilot: false,
+      remote: 'on',
+    }).split('\n')
+    expect(text).toEqual([
+      'Die Einstellungen dieses Chats; jede gilt nur hier:',
+      'Ansicht: Minimal · umstellen: /leitstand:ansicht-einfach, /leitstand:ansicht-detailliert, /leitstand:aus',
+      'Arbeitsweise: Gruppenarbeit · umstellen: /leitstand:arbeitsmodus-auto',
+      'Töne: Signalton und Stimme · umstellen: /leitstand:ton-aus, /leitstand:ton-signalton',
+      'Desktop-Benachrichtigungen: An · umschalten: /leitstand:benachrichtigungen-aus',
+      'Andere Chats: Aus · umschalten: /leitstand:andere-chats-an',
+      'Ruhemodus: An · umschalten: /leitstand:ruhemodus-aus',
+      'Plan zuerst freigeben: An (in der Gruppenarbeit immer)',
+      'Auf GitHub abschließen: An · umschalten: /leitstand:github-abschluss-aus',
+      'Passwortschutz: Aus · umschalten: /leitstand:passwortschutz-an',
+      'Verdecken: An · umschalten: /leitstand:verdecken-aus',
+      'Nicht im Einstellungsfenster:',
+      'Korrekturen prüfen: An · umschalten: /leitstand:regelpruefung-aus',
+      'Selbstkritik nach Dateiänderungen: Aus · umschalten: /leitstand:selbstkritik-auto-an',
+      'Kurzantworten: An · umschalten: /leitstand:kurzantworten-aus',
+      'Autopilot: Aus · umschalten: /leitstand:autopilot-an',
+      'Remote Control: An · ausschalten trennt das Handy: /leitstand:fernsteuerung-aus',
+      'Alles zurück auf den Standard für neue Chats: /leitstand:zuruecksetzen. Den Standard für neue Chats stellst du anders ein: /leitstand:hilfe unter Einstellen.',
+    ])
+  })
+
   test('leitstand:hilfe listet alle Befehle nach Gruppen, je eine Zeile', async ($, on) => {
     world(on)
-    const lines = (await run($, 'leitstand:hilfe')).split('\n')
+    const all = (await run($, 'leitstand:hilfe')).split('\n')
+    // Vor der Liste: Zuerst wichtig, Einstellen, Kosten und Handy (Leitfaden 2).
+    for (const kopf of ['Zuerst wichtig', 'Einstellen', 'Kosten', 'Vom Handy (Remote Control)', 'Befehle']) expect(all).toContain(kopf)
+    expect(all.indexOf('Zuerst wichtig')).toBeLessThan(all.indexOf('Einstellen'))
+    const lines = all.slice(all.indexOf('Befehle'))
     for (const one of LEITSTAND_BEFEHLE) {
       const own = lines.filter(line => line.startsWith(`/${one.name}:`) || line.startsWith(`/${one.name} `))
-      expect(own).toEqual([`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''}: ${one.description}`])
+      expect(own).toEqual([`/${one.name}${one.argumentHint ? ` ${one.argumentHint}` : ''} · ${one.description}`])
     }
     for (const gruppe of new Set(LEITSTAND_BEFEHLE.map(one => one.gruppe))) expect(lines).toContain(gruppe)
+    // merke: und /autopilot stehen in ihren Gruppen; der Weg zum Standard für neue Chats wörtlich.
+    expect(lines.some(line => line.startsWith('merke: <Regel> · '))).toBe(true)
+    expect(lines.some(line => line.startsWith('/autopilot [an|aus] · '))).toBe(true)
+    expect(all).toContain(STANDARD_WEG)
+    expect(all.join('\n')).not.toMatch(/Einstellungsmenü|Seitenleiste|früher|Reflect|Filetree|GlanceFlow|\bBand\b/)
   })
 
   test('jeder Schalter wirkt wie sein Knopf, nur in diesem Chat, und die Antwort nennt den neuen Zustand', READS, async ($, on) => {
@@ -9312,7 +9450,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(await stateOf($, 'isCalm')).toBe(true)
 
     // Zurücksetzen as its button: this chat's own values go.
-    expect(await run($, 'leitstand:zuruecksetzen')).toBe('Alle Leitstand-Einstellungen stehen wieder auf dem Standard (nur in diesem Chat).')
+    expect(await run($, 'leitstand:zuruecksetzen')).toBe('Alle Einstellungen aus dem Einstellungsfenster stehen wieder auf dem Standard für neue Chats (nur in diesem Chat).')
     expect(store.has('settings:chat-1')).toBe(false)
     expect(await stateOf($, 'masksPrivate')).toBe(true)
   })
@@ -9323,7 +9461,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     await $.session.start(START)
     await run($, 'leitstand:arbeitsmodus-gruppenarbeit')
     for (const command of ['leitstand:plan-freigeben-aus', 'leitstand:plan-freigeben-an']) {
-      expect(await run($, command)).toBe('In der Gruppenarbeit wartet jeder Plan auf deine Freigabe: Plan zuerst freigeben ist dort immer an.')
+      expect(await run($, command)).toBe('In der Gruppenarbeit wartet ein Plan auf deine Freigabe: Plan zuerst freigeben ist dort immer an.')
     }
     expect(await stateOf($, 'approvePlan')).toBe(false)
     expect((store.get('settings:chat-1') as { values: Record<string, unknown> }).values).toEqual({ workMode: 'dynamisch' })
@@ -9439,18 +9577,32 @@ describe('Eigene Befehle /leitstand-…', () => {
       opened.push(String((e as { id?: string }).id))
       return { value: { isPlaced: true } } as never
     })
-    expect(await run($, 'leitstand:plan-zeigen', '', 'bridge')).toBe('Noch kein Plan. Bitte Claude um etwas, dann erscheint hier sein Plan.')
+    expect(await run($, 'leitstand:plan-zeigen', '', 'bridge')).toBe('Noch kein Plan. Bitte Claude um etwas; dann zeigt /leitstand:plan-zeigen den Plan hier.')
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
     await callTool($, { tool: PROGRESS, task: 'Lies die Notizen', percent: 100, summary: 'Die Notizen gelesen' })
 
     const phone = await run($, 'leitstand:plan-zeigen', '', 'bridge')
     expect(phone.split('\n').slice(1)).toEqual(['1 von 2 Schritten fertig.', '', '✓ Lies die Notizen', '   Die Notizen gelesen', '▶ Baue die Tabelle'])
-    expect(await run($, 'leitstand:plan-zeigen')).toBe('Der Plan ist in der Seitenleiste.')
+    expect(await run($, 'leitstand:plan-zeigen')).toBe('Der Plan steht im Fenster Plan.')
     await settle()
     expect(opened).toEqual(['leitstand-plan', 'leitstand-plan'])
-    expect(await run($, 'leitstand:einstellungen-zeigen', '', 'bridge')).toContain('auf dem Handy sind Fenster nicht zu sehen')
-    expect(await run($, 'leitstand:einstellungen-zeigen')).toBe('Die Einstellungen sind in der Seitenleiste.')
+    // Vom Handy die Werte dieses Chats als Text, je mit dem Befehl zum Umschalten; kein Fenster.
+    const before = opened.length
+    const phoneSettings = (await run($, 'leitstand:einstellungen-zeigen', '', 'bridge')).split('\n')
+    expect(phoneSettings[0]).toBe('Die Einstellungen dieses Chats; jede gilt nur hier:')
+    expect(phoneSettings).toContain('Ansicht: Einfach · umstellen: /leitstand:ansicht-detailliert, /leitstand:ansicht-minimal, /leitstand:aus')
+    expect(phoneSettings).toContain('Arbeitsweise: Auto-Modus · umstellen: /leitstand:arbeitsmodus-gruppenarbeit')
+    expect(phoneSettings).toContain('Töne: Aus · umstellen: /leitstand:ton-signalton, /leitstand:ton-stimme')
+    expect(phoneSettings).toContain('Passwortschutz: An · umschalten: /leitstand:passwortschutz-aus')
+    expect(phoneSettings).toContain('Verdecken: An · umschalten: /leitstand:verdecken-aus')
+    expect(phoneSettings).toContain('Plan zuerst freigeben: Aus · umschalten: /leitstand:plan-freigeben-an')
+    expect(phoneSettings.at(-1)).toContain('/leitstand:zuruecksetzen')
+    await settle()
+    expect(opened.length).toBe(before)
+    // Jeder genannte Befehl gibt es.
+    for (const one of phoneSettings.join('\n').matchAll(/\/(leitstand:[a-z-]+)/g)) expect(LEITSTAND_BEFEHLE.some(b => b.name === one[1])).toBe(true)
+    expect(await run($, 'leitstand:einstellungen-zeigen')).toBe('Das Einstellungsfenster ist offen.')
     await settle()
     expect(opened.at(-1)).toBe('leitstand-settings')
   })
@@ -9462,15 +9614,15 @@ describe('Eigene Befehle /leitstand-…', () => {
       opened.push(String((e as { id?: string }).id))
       return { value: { isPlaced: true } } as never
     })
-    expect(await run($, 'leitstand:buttons-zeigen')).toBe('Die Erklärung der Buttons ist in der Seitenleiste.')
+    expect(await run($, 'leitstand:buttons-zeigen')).toBe('Die Erklärung der Buttons steht im Fenster Leitstand-Buttons.')
     await settle()
     expect(opened).toEqual(['leitstand-knoepfe'])
     const phone = await run($, 'leitstand:buttons-zeigen', '', 'bridge')
     expect(phone.startsWith('Die Buttons des Leitstands:\n\nOben rechts\n')).toBe(true)
-    expect(phone).toContain('\u2753 Buttons: Dieses Fenster')
+    expect(phone).toContain('\u2753 Buttons: Öffnet dieses Fenster')
     expect(phone).toContain('\u{1F468}\u200D\u{1F4BC} Auto-Modus: ')
     expect(phone).toContain('Neuer Chat: ')
-    const named = [...phone.matchAll(/\((\/leitstand:[a-z-]+)\)/g)].map(one => one[1]?.slice(1))
+    const named = [...phone.matchAll(/\/(leitstand:[a-z-]+)/g)].map(one => one[1])
     expect(named.length).toBeGreaterThan(20)
     for (const name of named) expect(LEITSTAND_BEFEHLE.some(one => one.name === name)).toBe(true)
   })
@@ -9502,7 +9654,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       'Versuch /leitstand:verlauf-zeigen, /leitstand:verlauf-zeigen gestern oder /leitstand:verlauf-zeigen 2026-10-06.',
     )
     expect(await run($, 'leitstand:verlauf-zeigen', 'gestern', 'bridge')).toMatch(/^Verlauf für \d\d\.\d\d\.\d{4}: 0 Aufgaben\.$/)
-    expect(await run($, 'leitstand:verlauf-zeigen')).toMatch(/: 0 Aufgaben\. Er ist in der Seitenleiste\.$/)
+    expect(await run($, 'leitstand:verlauf-zeigen')).toMatch(/: 0 Aufgaben\. Er steht im Fenster Verlauf\.$/)
   })
 
   test('Plan starten ohne wartenden Plan sagt das; ein Fehler kommt als schlichter Satz', async ($, on) => {
@@ -9512,7 +9664,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     })
     expect(await run($, 'leitstand:plan-starten')).toBe('Gerade wartet kein Plan auf Start.')
     expect(await run($, 'leitstand:pause')).toBe('Gerade läuft nichts, das sich anhalten ließe.')
-    expect(await run($, 'leitstand:verlauf-zeigen')).toBe('Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Button im Leitstand.')
+    expect(await run($, 'leitstand:verlauf-zeigen')).toBe('Das hat nicht geklappt: Im Leitstand ging beim Ausführen etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.')
   })
 
   test('der Vorsatz-Hook hängt die Herkunft auch an die Antwort eines neuen Befehls', async ($, on) => {

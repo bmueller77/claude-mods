@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
-import { ALTE_BEFEHLE, BEFEHLE, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, relPfad, zeilenUmbruch } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, KURZFORMEN, SYSTEM, SYSTEM_MEHR, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, modIdAus, relPfad, schrittArt, uebersicht, zeilenUmbruch } from '../hooks/register'
 
 const BAND = { plugin: 'zusammenfassung', component: 'AbovePrompt' } as const
 
@@ -311,6 +311,14 @@ NONE`])
         expect(JSON.stringify(block)).not.toContain('paddingX')
         // Die Breite des Bands bekommt der Block nur in der App.
         expect(block!.props.width).toBe(surface === 'desktop' ? 60 : undefined)
+        // Nur in der App 2 px Luft unter der Kopfzeile (0.2 halbe Zeilen), im Terminal kein Bruchteil.
+        const text = await u.find({ type: 'Box', key: 'zf-text' })
+        if (surface === 'desktop') {
+            expect(text).toBeDefined()
+            expect(text!.props.marginTop).toBe(0.2)
+        } else {
+            expect(text).toBeUndefined()
+        }
     }
 
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: schmal })
@@ -445,7 +453,7 @@ test('der Kreispfeil oeffnet das Replay, das Schritt fuer Schritt durch die Aend
         await seite.press({ key: 'zf-weiter' })
         text = await leiste(seite as never)
         expect(text).toContain('Schritt 2 von 3')
-        expect(text).toContain('MultiEdit · Teil 1 von 2')
+        expect(text).toContain('Stelle geändert, Teil 1 von 2')
         await seite.press({ key: 'zf-zurueck' })
         expect(await leiste(seite as never)).toContain('Schritt 1 von 3')
         await seite.unmount()
@@ -465,7 +473,8 @@ test('/replay ohne Aenderungen sagt es, mit Aenderungen oeffnet es das Fenster',
     await runde($ as never, 't1', 5_000, [EDIT])
     await clock.advance(0)
     const voll = await $.command.run({ command: 'replay', args: '' } as never)
-    expect(String(voll.text)).toContain('1 Änderung in 1 Datei')
+    expect(String(voll.text)).toBe('Replay: 1 Änderung in 1 Datei. Das Fenster geht gleich auf.')
+    await clock.advance(0)
     expect(fenster).toEqual(['zusammenfassung-replay'])
 })
 
@@ -712,9 +721,12 @@ for (const b of BEFEHLE) {
         for (const arg of ['hilfe', '?', ' Hilfe ']) {
             const t = await befehl($ as never, b.name, arg)
             expect(t).toBe(hilfeText(b))
-            for (const teil of [`/${b.name}: `, 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+            expect(t.startsWith(`/${b.name} · `)).toBe(true)
+            for (const teil of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ']) {
                 expect(t).toContain(teil)
             }
+            // Ohne Argument kein Beispiel.
+            expect(t).not.toContain('Beispiel: ')
         }
     })
 }
@@ -749,11 +761,25 @@ test('/zusammenfassung:hilfe listet alle Befehle des Mods mit einer Zeile, die K
     mock.store(on, {})
     boden(on, [ANTWORT_MODELL])
     await start($ as never)
-    const zeilen = (await befehl($ as never, 'zusammenfassung:hilfe')).split('\n')
+    const text = await befehl($ as never, 'zusammenfassung:hilfe')
+    const zeilen = text.split('\n')
     for (const name of [...NEUE, 'zusammenfassung', 'replay']) {
-        expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
+        expect(zeilen.filter(z => z.startsWith(`/${name} · `))).toHaveLength(1)
     }
-    expect(zeilen).toHaveLength(NEUE.length + 3)
+    // Die Pflichtteile aus dem Leitfaden, in dieser Reihenfolge.
+    const teile = ['Was der Mod tut', 'So arbeitest du damit', 'Einstellen', 'Kosten', 'Vom Handy (Remote Control)', 'Befehle']
+    const stellen = teile.map(t => zeilen.indexOf(t))
+    expect(stellen.every(n => n >= 0)).toBe(true)
+    expect([...stellen].sort((a, b) => a - b)).toEqual(stellen)
+    expect(text).toContain('Standard für neue Chats:')
+    expect(text).toContain('`claude plugin configure zusammenfassung@bm-mods`')
+    expect(text).toContain('zusammenfassung@bjoern-mods')
+    expect(text).toContain('--values-stdin')
+    expect(text).toContain('`claude plugin disable zusammenfassung@bm-mods`')
+    expect(zeilen[zeilen.indexOf('Befehle') + 1]).toBe('Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.')
+    expect(zeilen.at(-1)).toBe('Mehr zu jedem Befehl: hilfe dahinter, etwa /zusammenfassung:replay hilfe.')
+    // Keine Zeichen, die nicht auf der Tastatur liegen.
+    expect(text).not.toMatch(/[\u2013\u2014\u201E\u201C\u201D\u2026]/)
 })
 
 test('/zusammenfassung:aus und :an schalten nur diesen Chat, wie /zusammenfassung; das Replay bleibt', async ($, on) => {
@@ -761,7 +787,7 @@ test('/zusammenfassung:aus und :an schalten nur diesen Chat, wie /zusammenfassun
     mock.store(on, {})
     const { fragen, chat } = boden(on, [ANTWORT_MODELL])
     await start($ as never)
-    expect(await befehl($ as never, 'zusammenfassung:aus')).toBe('Die Zusammenfassung ist in diesem Chat aus, das Replay bleibt.')
+    expect(await befehl($ as never, 'zusammenfassung:aus')).toBe('Die Zusammenfassung ist in diesem Chat aus. Das Replay bleibt: ⟲ oder /replay.')
     // Zweimal aus bleibt aus, anders als der Umschalter.
     await befehl($ as never, 'zusammenfassung:aus')
     await runde($ as never, 't1', 5_000, [EDIT])
@@ -789,7 +815,7 @@ test('/zusammenfassung:aus und :an schalten nur diesen Chat, wie /zusammenfassun
     await clock.advance(0)
     expect(fragen).toHaveLength(2)
     // Der alte Umschalter sieht denselben Zustand.
-    expect(await befehl($ as never, 'zusammenfassung')).toContain('ist aus')
+    expect(await befehl($ as never, 'zusammenfassung')).toContain('ist in diesem Chat aus')
 })
 
 test('/zusammenfassung:aufklappen und :zuklappen wirken wie der Chevron', async ($, on) => {
@@ -855,10 +881,10 @@ test('/zusammenfassung:replay vom Handy: die Schritte als Text, kein Fenster', a
     expect(t).toBe(
         [
             'Replay: 3 Änderungen in 2 Dateien.',
-            '1. src/leiste.ts (Edit) +1 −1',
-            '2. src/leiste.test.ts (MultiEdit, Teil 1 von 2) +1 −0',
-            '3. src/leiste.test.ts (MultiEdit, Teil 2 von 2) +0 −1',
-            'Das Fenster mit den Diffs gibt es nur am Rechner.',
+            '1. src/leiste.ts (Stelle geändert) +1 −1',
+            '2. src/leiste.test.ts (Stelle geändert, Teil 1 von 2) +1 −0',
+            '3. src/leiste.test.ts (Stelle geändert, Teil 2 von 2) +0 −1',
+            'Das Fenster mit den geänderten Zeilen gibt es nur am Rechner.',
         ].join('\n'),
     )
     await clock.advance(0)
@@ -886,11 +912,97 @@ test('scheitert ein Befehl, kommt ein schlichter deutscher Satz', async ($, on) 
     await start($ as never)
     kaputt = true
     expect(await befehl($ as never, 'zusammenfassung:aus')).toBe(fehlerText('zusammenfassung:aus'))
-    expect(fehlerText('zusammenfassung:aus')).toBe('/zusammenfassung:aus hat nicht geklappt. Versuch es gleich noch einmal.')
+    expect(fehlerText('zusammenfassung:aus')).toBe('Das hat nicht geklappt: /zusammenfassung:aus ist an einem Fehler im Mod gescheitert. Versuch es gleich noch einmal.')
 })
 
 test('auch die Antworten der Einzelbefehle nennen den Mod am Ende statt davor', async ($, on) => {
     expect(await gespeichert($, on, '<local-command-stdout>zusammenfassung: Die Zusammenfassung ist zugeklappt.</local-command-stdout>')).toEqual([
         '<local-command-stdout>Die Zusammenfassung ist zugeklappt. (gemeldet vom Mod Zusammenfassung)</local-command-stdout>',
     ])
+})
+
+// --- hilfe an den Kurzformen und die volle ID ---
+
+test('/zusammenfassung hilfe und ? zeigen die Hilfe und schalten nichts um', async ($, on) => {
+    const clock = mock.clock(on, { now: Date.UTC(2026, 9, 29, 10, 0) })
+    mock.store(on, {})
+    const { fragen } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    const umschalten = KURZFORMEN.find(k => k.name === 'zusammenfassung')!
+    for (const arg of ['hilfe', '?', ' Hilfe ']) {
+        expect(await befehl($ as never, 'zusammenfassung', arg)).toBe(hilfeText(umschalten))
+    }
+    expect(hilfeText(umschalten).startsWith('/zusammenfassung · ')).toBe(true)
+    // Noch an: die naechste Runde wird zusammengefasst.
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+})
+
+test('/replay hilfe und ? zeigen die Hilfe und oeffnen kein Fenster', async ($, on) => {
+    const clock = mock.clock(on, { now: Date.UTC(2026, 9, 29, 10, 0) })
+    mock.store(on, {})
+    const { fenster } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    const replay = KURZFORMEN.find(k => k.name === 'replay')!
+    for (const arg of ['hilfe', '?']) {
+        expect(await befehl($ as never, 'replay', arg)).toBe(hilfeText(replay))
+    }
+    await clock.advance(0)
+    expect(fenster).toEqual([])
+    // Ohne Argument wie bisher.
+    expect(await befehl($ as never, 'replay')).toBe(await befehl($ as never, 'zusammenfassung:replay'))
+    await clock.advance(0)
+    expect(fenster).toEqual(['zusammenfassung-replay', 'zusammenfassung-replay'])
+})
+
+test('die volle ID kommt aus enabledPlugins; ohne sie bm-mods mit dem Hinweis auf den alten Namen', async ($, on) => {
+    expect(modIdAus({ 'zusammenfassung@bjoern-mods': true, 'statistik@bjoern-mods': true }, 'zusammenfassung')).toBe('zusammenfassung@bjoern-mods')
+    expect(modIdAus({ 'zusammenfassung@bjoern-mods': false, 'zusammenfassung@bm-mods': true }, 'zusammenfassung')).toBe('zusammenfassung@bm-mods')
+    expect(modIdAus({ 'zusammenfassungx@bm-mods': true }, 'zusammenfassung')).toBeNull()
+    expect(modIdAus(undefined, 'zusammenfassung')).toBeNull()
+    expect(uebersicht('zusammenfassung@bjoern-mods')).toContain('`claude plugin configure zusammenfassung@bjoern-mods`')
+    expect(uebersicht('zusammenfassung@bjoern-mods')).not.toContain('Ältere Installationen')
+    expect(uebersicht(null)).toContain('Ältere Installationen heißen `zusammenfassung@bjoern-mods`')
+
+    mock.clock(on, { now: Date.UTC(2026, 9, 29, 10, 0) })
+    mock.store(on, {})
+    boden(on, [ANTWORT_MODELL])
+    on('settings.read', (_$, _e, _next) => ({ value: { enabledPlugins: { 'zusammenfassung@bjoern-mods': true } } }) as never)
+    await start($ as never)
+    const text = await befehl($ as never, 'zusammenfassung:hilfe')
+    expect(text).toContain('`claude plugin configure zusammenfassung@bjoern-mods`')
+    expect(text).not.toContain('Ältere Installationen')
+})
+
+test('das Replay nennt die Art der Aenderung in Worten', () => {
+    expect(schrittArt({ werkzeug: 'Edit', datei: 'a', diff: [], notiz: '' })).toBe('Stelle geändert')
+    expect(schrittArt({ werkzeug: 'Edit', datei: 'a', diff: [], notiz: 'alle ersetzt' })).toBe('Stelle geändert, an jeder Fundstelle')
+    expect(schrittArt({ werkzeug: 'Write', datei: 'a', diff: [], notiz: 'neue Datei' })).toBe('Datei neu angelegt')
+    expect(schrittArt({ werkzeug: 'Write', datei: 'a', diff: [], notiz: 'überschrieben' })).toBe('Datei ganz neu geschrieben')
+})
+
+test('/replay vom Handy: dieselbe Liste wie /zusammenfassung:replay, kein Fenster', async ($, on) => {
+    const clock = mock.clock(on, { now: Date.UTC(2026, 9, 29, 10, 0) })
+    mock.store(on, {})
+    const { fenster } = boden(on, [ANTWORT_MODELL])
+    await start($ as never)
+    expect(await befehl($ as never, 'replay', '', { kind: 'bridge' })).toBe('Replay: keine Dateiänderungen in der letzten Runde.')
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    const kurz = await befehl($ as never, 'replay', '', { kind: 'bridge' })
+    expect(kurz).toBe(await befehl($ as never, 'zusammenfassung:replay', '', { kind: 'bridge' }))
+    expect(kurz).toContain('2. src/leiste.test.ts (Stelle geändert, Teil 1 von 2) +1 −0')
+    await clock.advance(0)
+    expect(fenster).toEqual([])
+})
+
+test('der Prompt an das Modell verlangt echte Umlaute und zeigt Beispiele mit Umlauten', () => {
+    for (const system of [SYSTEM, SYSTEM_MEHR]) {
+        expect(system).toContain('echte Umlaute (ä, ö, ü, ß)')
+        expect(system).not.toMatch(/fuer|geaendert|hoechstens|Erklaere|Aufzaehl/)
+    }
+    expect(SYSTEM).toContain('ergänzt, er läuft grün')
 })

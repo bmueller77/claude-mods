@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, fehlerText, hilfeText, leseVorschlaege, passtInEineZeile } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, fehlerText, hilfeText, leseVorschlaege, modIdAus, passtInEineZeile, uebersicht } from '../hooks/register'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 160 } }
 const ANTWORT = 'Ich habe Tests fuer das Login-Formular geschrieben, sie laufen lokal durch.'
@@ -367,9 +367,12 @@ describe('naechste-schritte: Befehle', () => {
             for (const arg of ['hilfe', '?', ' Hilfe ']) {
                 const t = await befehl($, b.name, arg)
                 expect(t).toBe(hilfeText(b))
-                for (const teil of [`/${b.name}: `, 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+                expect(t.startsWith(`/${b.name} · `)).toBe(true)
+                for (const teil of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ']) {
                     expect(t).toContain(teil)
                 }
+                // Ohne Argument kein Beispiel.
+                expect(t).not.toContain('Beispiel: ')
             }
         })
     }
@@ -401,16 +404,27 @@ describe('naechste-schritte: Befehle', () => {
 
     test('/naechste-schritte:hilfe listet alle Befehle des Mods mit einer Zeile', async ($, on) => {
         engine(on, () => MODELL)
-        const zeilen = (await befehl($, 'naechste-schritte:hilfe')).split('\n')
+        const text = await befehl($, 'naechste-schritte:hilfe')
+        const zeilen = text.split('\n')
         for (const name of NEUE) {
-            expect(zeilen.filter(z => z.startsWith(`/${name}: `))).toHaveLength(1)
+            expect(zeilen.filter(z => z.startsWith(`/${name} · `))).toHaveLength(1)
         }
-        expect(zeilen).toHaveLength(NEUE.length + 1)
+        // Die Pflichtteile aus dem Leitfaden, in dieser Reihenfolge.
+        const teile = ['Was der Mod tut', 'So arbeitest du damit', 'Einstellen', 'Kosten', 'Vom Handy (Remote Control)', 'Befehle']
+        const stellen = teile.map(t => zeilen.indexOf(t))
+        expect(stellen.every(n => n >= 0)).toBe(true)
+        expect([...stellen].sort((a, b) => a - b)).toEqual(stellen)
+        expect(text).toContain('Einstellen lässt sich nichts')
+        expect(text).toContain('`claude plugin disable naechste-schritte@bm-mods`')
+        expect(text).toContain('naechste-schritte@bjoern-mods')
+        expect(zeilen[zeilen.indexOf('Befehle') + 1]).toBe('Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.')
+        expect(zeilen.at(-1)).toBe('Mehr zu jedem Befehl: hilfe dahinter, etwa /naechste-schritte:zeigen hilfe.')
+        expect(text).not.toMatch(/[\u2013\u2014\u201E\u201C\u201D\u2026]/)
     })
 
     test('/naechste-schritte:zeigen nennt die Vorschlaege nummeriert und laesst sie stehen', async ($, on) => {
         engine(on, () => MODELL)
-        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Gerade gibt es keine Vorschläge für den nächsten Schritt.')
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Gerade gibt es keine Vorschläge für den nächsten Schritt. Sie kommen nach der nächsten Antwort von Claude.')
         await rundeFertig($)
         expect(await befehl($, 'naechste-schritte:zeigen')).toBe(
             'Als Nächstes:\n1. Fuehr die neuen Tests aus\n2. Mach dasselbe fuer die Einstellungen\n3. Oeffne einen Entwurf fuer den PR',
@@ -447,7 +461,7 @@ describe('naechste-schritte: Befehle', () => {
     test('ohne Vorschlag schicken die Befehle nichts ab und sagen das', async ($, on) => {
         const gesendet: { text: string; origin: unknown }[] = []
         engine(on, () => 'Fuehr die neuen Tests aus\nMach dasselbe fuer die Einstellungen', [], gesendet)
-        expect(await befehl($, 'naechste-schritte:1')).toBe('Gerade gibt es keine Vorschläge, abgeschickt ist nichts.')
+        expect(await befehl($, 'naechste-schritte:1')).toBe('Gerade gibt es keine Vorschläge, abgeschickt ist nichts. Sie kommen nach der nächsten Antwort von Claude.')
         await rundeFertig($)
         expect(await befehl($, 'naechste-schritte:3')).toBe('Gerade gibt es keinen 3. Vorschlag, nur 2; abgeschickt ist nichts.')
         await warte()
@@ -460,7 +474,7 @@ describe('naechste-schritte: Befehle', () => {
         on('state.get', () => ({ value: { value: { turnId: 't1', eintraege: null }, version: 1 } }))
         await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/arbeit' } as any)
         expect(await befehl($, 'naechste-schritte:2')).toBe(fehlerText('naechste-schritte:2'))
-        expect(fehlerText('naechste-schritte:2')).toBe('/naechste-schritte:2 hat nicht geklappt. Versuch es gleich noch einmal.')
+        expect(fehlerText('naechste-schritte:2')).toBe('Das hat nicht geklappt: /naechste-schritte:2 ist an einem Fehler im Mod gescheitert. Versuch es gleich noch einmal.')
     })
 
     test('die gespeicherte Befehlsantwort nennt den Mod am Ende statt davor', async ($, on) => {
@@ -477,5 +491,23 @@ describe('naechste-schritte: Befehle', () => {
             `<local-command-stdout>statistik: Als Nächstes:\n1. A\n${GEMELDET}\n</local-command-stdout>`,
             '<local-command-stdout>statistik: Erledigt.</local-command-stdout>',
         ])
+    })
+})
+
+describe('naechste-schritte: volle ID', () => {
+    test('die volle ID kommt aus enabledPlugins; ohne sie bm-mods mit dem Hinweis auf den alten Namen', async ($, on) => {
+        expect(modIdAus({ 'naechste-schritte@bjoern-mods': true }, 'naechste-schritte')).toBe('naechste-schritte@bjoern-mods')
+        expect(modIdAus({ 'naechste-schritte@bjoern-mods': false, 'naechste-schritte@bm-mods': true }, 'naechste-schritte')).toBe('naechste-schritte@bm-mods')
+        expect(modIdAus({ 'naechste-schrittex@bm-mods': true }, 'naechste-schritte')).toBeNull()
+        expect(modIdAus(null, 'naechste-schritte')).toBeNull()
+        expect(uebersicht(null)).toContain('Ältere Installationen heißen `naechste-schritte@bjoern-mods`')
+        expect(uebersicht('naechste-schritte@bm-mods')).not.toContain('Ältere Installationen')
+
+        engine(on, () => MODELL)
+        on('settings.read', () => ({ value: { enabledPlugins: { 'naechste-schritte@bjoern-mods': true } } }))
+        await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/arbeit' } as any)
+        const text = await befehl($, 'naechste-schritte:hilfe')
+        expect(text).toContain('`claude plugin disable naechste-schritte@bjoern-mods`')
+        expect(text).not.toContain('Ältere Installationen')
     })
 })

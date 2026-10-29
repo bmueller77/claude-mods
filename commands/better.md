@@ -1,6 +1,6 @@
 ---
-description: Prompt Upgrade: einen groben Prompt mit Rückfragen verbessern, gesendet wird erst auf Ausführen
-argument-hint: "[Prompt|an|aus|verlauf]"
+description: "Prompt-Upgrade: verbessert deinen Prompt mit Rückfragen, bevor du ihn sendest; an, aus, verlauf, hilfe"
+argument-hint: "[Prompt | an | aus | verlauf]"
 disable-model-invocation: true
 ---
 

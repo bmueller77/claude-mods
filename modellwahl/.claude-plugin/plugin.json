@@ -1,7 +1,7 @@
 {
   "name": "modellwahl",
-  "version": "0.3.3",
-  "description": "Schlägt einmal je Aufgabe Modell und Aufwand für den Chat vor: automatisch bei der ersten Nachricht eines neuen Chats oder mit /modellwahl. Haiku schätzt die Aufgabe ein. Am Rechner gilt der Vorschlag nach 15 Sekunden von selbst (Übernehmen und Nein über der Eingabe), vom Handy erst auf ja oder ok.",
+  "version": "0.3.3.1",
+  "description": "Schlägt einmal je Aufgabe Modell und Aufwand für den Chat vor: von selbst bei der ersten Nachricht eines neuen Chats oder mit /modellwahl; ein kleiner Aufruf von Haiku schätzt die Aufgabe ein. Am Rechner gilt der Vorschlag nach 15 Sekunden, wenn du nicht Nein drückst, vom Handy erst auf ja oder ok; eine Nachricht nur aus ja, ok oder okay nimmt einen offenen Vorschlag immer an. Hilfe: /modellwahl:hilfe.",
   "author": {
     "name": "Björn Müller"
   },
@@ -10,13 +10,13 @@
     "autoBeiNeuemChat": {
       "type": "boolean",
       "title": "Automatisch bei neuem Chat",
-      "description": "Standard für neue Chats: die erste Nachricht wählt Modell und Aufwand. /modellwahl:auto-an und /modellwahl:auto-aus gelten nur im Chat.",
+      "description": "Standard für neue Chats: an oder aus (im Terminal true oder false); eingebaut: an. An: Die erste Nachricht eines neuen Chats bekommt einen Vorschlag für Modell und Aufwand. Aus: Modellwahl schlägt nur auf /modellwahl vor. Nur für einen Chat (bleibt auch nach /clear im selben Fenster): /modellwahl:auto-an oder /modellwahl:auto-aus. Gilt für Chats, die danach beginnen.",
       "default": true
     },
     "modell": {
       "type": "string",
       "title": "Modell der Einschätzung",
-      "description": "Welches Modell die Aufgabe einschätzt. haiku ist schnell und günstig.",
+      "description": "Welches Modell von Claude die Aufgabe einschätzt: haiku, sonnet, opus oder fable, von klein und günstig (haiku) bis groß (fable). Leer heißt haiku. Eingebaut: haiku. Im Chat nicht umstellbar; gilt für Chats, die danach beginnen. Die Einschätzung darf höchstens 5 Sekunden dauern, ein großes Modell schafft das oft nicht.",
       "default": "haiku"
     }
   }

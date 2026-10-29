@@ -7,6 +7,7 @@ import {
     BEFEHLE,
     BEFEHL_FEHLER,
     GRUND_ABGEFANGEN,
+    HILFE_BETTER,
     PANE,
     TEXT_AN,
     TEXT_AUS,
@@ -129,7 +130,7 @@ test('genau die freigegebenen Befehle, mit Beschreibung; angemeldet ist nur /bet
         // Die Langform ist eine Datei in commands/: Einen Namen mit Doppelpunkt nimmt $.command.register nicht.
         expect(b.angemeldet.find(s => s.name === k.name)).toBeUndefined()
     }
-    expect(BEFEHLE.find(k => k.name === 'prompt-upgrade:starten')?.argumentHint).toBe('<Prompt>')
+    expect(BEFEHLE.find(k => k.name === 'prompt-upgrade:starten')?.argumentHint).toBe('[Prompt]')
     // Die Kurzform bleibt, die alten Namen mit Bindestrich sind nicht mehr angemeldet.
     expect(b.angemeldet.map(s => s.name)).toEqual(['better'])
 })
@@ -161,10 +162,13 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, ohne etwas zu tun', async 
     for (const name of NAMEN) {
         for (const arg of ['hilfe', '?', 'Hilfe']) {
             const text = await run($, name, arg)
-            expect(text).toContain(`/${name}`)
-            for (const teil of ['Button:', 'Gilt:', 'Argumente:', 'Beispiel:']) {
-                expect(text).toContain(teil)
+            const k = BEFEHLE.find(x => x.name === name)
+            expect(text.split('\n')[0]).toBe(`/${name}${k?.argumentHint ? ` ${k.argumentHint}` : ''} · ${k?.titel}`)
+            for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:']) {
+                expect(text).toContain(`\n${teil} `)
             }
+            // Ein Beispiel nur, wo es ein Argument gibt.
+            expect(text.includes('\nBeispiel: ')).toBe(k?.argumentHint !== undefined)
         }
     }
     await clock.settle()
@@ -180,8 +184,43 @@ test('/prompt-upgrade:hilfe listet alle Befehle mit einer Zeile', async ($, on) 
     await start($)
     const text = await run($, 'prompt-upgrade:hilfe')
     for (const k of BEFEHLE) {
-        expect(text).toContain(`/${k.name}${k.argumentHint ? ` ${k.argumentHint}` : ''} – ${k.description}`)
+        expect(text).toContain(`/${k.name}${k.argumentHint ? ` ${k.argumentHint}` : ''} · ${k.description}`)
     }
+    // Was jemand ohne Vorwissen braucht: Abschnitte, der Weg zum Standard für neue Chats, Kosten, Handy.
+    const zeilen = text.split('\n')
+    const ueberschriften = ['Was der Mod tut', 'So arbeitest du damit', 'Einstellen', 'Kosten', 'Vom Handy (Remote Control)', 'Befehle']
+    const stellen = ueberschriften.map(u => zeilen.indexOf(u))
+    expect(stellen.every(i => i > 0)).toBe(true)
+    expect([...stellen].sort((x, y) => x - y)).toEqual(stellen)
+    expect(zeilen[stellen.at(-1)! + 1]).toBe('Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.')
+    expect(zeilen.at(-1)).toBe('Mehr zu jedem Befehl: hilfe dahinter, etwa /prompt-upgrade:starten hilfe.')
+    for (const teil of ['Nur in diesem Chat:', 'Standard für neue Chats:', 'Ganz abschalten: `claude plugin disable prompt-upgrade@bm-mods`', 'Im Chat nicht umstellbar.', '--values-stdin', 'Das gilt für Chats, die danach beginnen.']) {
+        expect(text).toContain(teil)
+    }
+    expect(text).toContain('`claude plugin configure prompt-upgrade@bm-mods`')
+    expect(text).toContain('`prompt-upgrade@bjoern-mods`')
+    expect(text).toContain('/better ohne Argument öffnet es mit einem leeren Feld zum Eintippen.')
+    // Gerade Zeichen in neuen Texten: kein Gedankenstrich, keine Auslassungspunkte.
+    expect(/[\u2013\u2014\u2026\u201e\u201c]/.test(text)).toBe(false)
+})
+
+test('/better hilfe und /better ? zeigen die Hilfe der Kurzform und tun sonst nichts', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, clock)
+    await start($)
+    for (const arg of ['hilfe', '?', 'Hilfe', ' hilfe ']) {
+        expect(await run($, 'better', arg)).toBe(HILFE_BETTER)
+    }
+    expect(HILFE_BETTER.split('\n')[0]).toBe('/better [Prompt | an | aus | verlauf] · Kurzform von Prompt-Upgrade')
+    for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:', 'Beispiel:']) {
+        expect(HILFE_BETTER).toContain(`\n${teil} `)
+    }
+    await clock.settle()
+    expect(b.geoeffnet).toEqual([])
+    expect(b.modell).toEqual([])
+    expect(b.eingang).toEqual([])
+    expect(b.gefuellt).toEqual([])
 })
 
 test('ohne offenen Durchlauf sagen die Durchlauf-Befehle das in einem Satz', async ($, on) => {
@@ -346,5 +385,5 @@ test('die Antworten der neuen Befehle bekommen den Zusatz statt des Vorsatzes', 
     }
     const r = await $.session.append(ein as unknown as Parameters<Engine['session']['append']>[0])
     const k = r.message?.content[0]
-    expect(k?.type === 'text' ? k.text : '').toBe(aus(`${TEXT_KEIN_DURCHLAUF} (gemeldet vom Mod Prompt Upgrade)`))
+    expect(k?.type === 'text' ? k.text : '').toBe(aus(`${TEXT_KEIN_DURCHLAUF} (gemeldet vom Mod Prompt-Upgrade)`))
 })

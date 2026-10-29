@@ -117,6 +117,14 @@ function fragenText(n: number): string {
   return n === 1 ? '1 Frage' : `${n} Fragen`
 }
 
+/** Die Zahlen einer Schicht als Satz, für die Antwort eines Befehls. */
+function zahlenSatz(geschoben: number, fragen: number): string {
+  return `Er hat Claude ${geschoben}-mal angeschoben${fragen > 0 ? `, und Claude hat ${fragenText(fragen)} selbst entschieden` : ''}.`
+}
+
+/** Vom Handy: Den Bericht in der Leiste sieht nur der Rechner. */
+const BERICHT_HANDY = ' Den Bericht in der Leiste siehst du am Rechner; die selbst entschiedenen Fragen zeigt hier /leitstand:autopilot-fragen-zeigen.'
+
 /** Die Zahlen einer Schicht in einer Zeile. */
 function zahlen(geschoben: number, fragen: number): string {
   const teile = [`${geschoben}x angeschoben`]
@@ -134,7 +142,7 @@ const STATUS: Record<AutopilotPhase, string> = {
 
 /** Was ein Befehl des Autopiloten sagt, wenn er scheitert. */
 export function fehlerText(name: string): string {
-  return `/${name} hat nicht geklappt. Versuch es gleich noch einmal.`
+  return `Das hat nicht geklappt: Im Leitstand ging beim Ausführen von /${name} etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.`
 }
 
 /** Die vollen Namen der Befehle (leitstand:autopilot-an) und ihre Kurzformen (autopilot-an), je mit ihrem Eintrag. */
@@ -349,18 +357,18 @@ async function berichtWeg($: $): Promise<void> {
 }
 
 /** Schaltet den Autopiloten an (`soll`) oder aus; zurück kommt die Antwort des Befehls. */
-async function schalte($: $, soll: boolean): Promise<string> {
+async function schalte($: $, soll: boolean, handy = false): Promise<string> {
   const s = await read($, schicht)
   if (!soll) {
     // Kommt das Aus vom Knopf 🅰️, sagt der Bericht das.
     const b = await beenden($, s && (await sollAus($, s)) ? GRUND_KNOPF : 'du hast ihn beendet')
     if (b) {
-      return `Der Autopilot ist aus: ${zahlen(b.geschoben, b.fragen.length)}.`
+      return `Der Autopilot ist aus. ${zahlenSatz(b.geschoben, b.fragen.length)}${handy ? BERICHT_HANDY : ''}`
     }
     // Den Druck auf 🅰️ hat die Schicht meist schon am Ende der Runde erledigt; das /autopilot-aus des Knopfs kommt erst
     // danach, wenn die Sitzung still ist.
     const vorher = await read($, bericht)
-    return vorher?.grund === GRUND_KNOPF ? `Der Autopilot ist aus: ${zahlen(vorher.geschoben, vorher.fragen.length)}.` : 'Der Autopilot war nicht an.'
+    return vorher?.grund === GRUND_KNOPF ? `Der Autopilot ist aus. ${zahlenSatz(vorher.geschoben, vorher.fragen.length)}` : 'Der Autopilot war nicht an.'
   }
   if (s?.phase === 'laeuft') {
     return 'Der Autopilot läuft schon. /autopilot aus beendet ihn.'
@@ -373,8 +381,8 @@ async function schalte($: $, soll: boolean): Promise<string> {
   const gleich = await beginnen($)
   return (
     'Der Autopilot ist an: Claude arbeitet ohne Rückfragen weiter und schreibt am Ende eine Übergabe. ' +
-    (gleich ? 'Es macht jetzt gleich weiter. ' : '') +
-    'Freigabe-Dialoge halten ihn trotzdem an. /autopilot schaltet ihn wieder aus.'
+    (gleich ? 'Claude macht jetzt gleich weiter. ' : '') +
+    'Fragt Claude Code um Erlaubnis für ein Werkzeug, wartet er trotzdem auf dich. Aus geht er mit 🅰️ oder /leitstand:autopilot-aus.'
   )
 }
 
@@ -406,12 +414,12 @@ async function berichtWegText($: $): Promise<string> {
 }
 
 /** Was ein Befehl tut, nach seinem vollen Namen; zurück kommt die Antwort. */
-async function wirke($: $, name: string): Promise<string> {
+async function wirke($: $, name: string, handy: boolean): Promise<string> {
   switch (name) {
     case 'leitstand:autopilot-an':
       return schalte($, true)
     case 'leitstand:autopilot-aus':
-      return schalte($, false)
+      return schalte($, false, handy)
     case 'leitstand:autopilot-fragen-zeigen':
       return fragenAlsText($)
     case 'leitstand:autopilot-bericht-weg':
@@ -461,7 +469,7 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
       const arg = (e.args ?? '').trim().toLowerCase()
       const s = await read($, schicht)
       const soll = arg === 'an' || arg === 'ein' ? true : arg === 'aus' ? false : s === null
-      return antwort(await schalte($, soll))
+      return antwort(await schalte($, soll, e.origin?.kind === 'bridge'))
     } catch {
       return antwort(fehlerText(AUTOPILOT_GRUNDBEFEHL.name))
     }
@@ -478,7 +486,7 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
       return antwort(befehlsHilfe(eintrag))
     }
     try {
-      return antwort(await wirke($, eintrag.name))
+      return antwort(await wirke($, eintrag.name, e.origin?.kind === 'bridge'))
     } catch {
       return antwort(fehlerText(eintrag.name))
     }

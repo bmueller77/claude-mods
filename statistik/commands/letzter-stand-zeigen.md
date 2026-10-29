@@ -1,5 +1,5 @@
 ---
-description: "Den Sicherungspunkt zeigen, den Claude beim letzten Aufräumen gespeichert hat"
+description: "Zeigt den Sicherungspunkt vom letzten Aufräumen dieses Chats"
 disable-model-invocation: true
 ---
 

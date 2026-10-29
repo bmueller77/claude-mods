@@ -1,5 +1,5 @@
 ---
-description: "Autopilot ausschalten; danach steht der Bericht über dem Eingabefeld"
+description: "Autopilot ausschalten; danach steht sein Bericht in der Leiste"
 disable-model-invocation: true
 ---
 

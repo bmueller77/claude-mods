@@ -1,5 +1,5 @@
 ---
-description: "Die Zusammenfassung aufklappen: ungekürzt, mit Erklärung zum Hinweis und Dateiliste"
+description: "Die Zusammenfassung aufklappen: ganze Zeilen, Erklärung zum Hinweis, geänderte Dateien"
 disable-model-invocation: true
 ---
 

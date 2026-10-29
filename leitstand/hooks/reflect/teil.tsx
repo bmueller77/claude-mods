@@ -54,6 +54,10 @@ const MAX_QUEUE = 20
 /** Das Fenster mit den wartenden Regeln. */
 const REGELN_PANE = 'leitstand-regeln'
 const REGELN_TITEL = 'Regeln'
+/** Oben im Fenster Regeln: was passiert ist, und was die drei Ziele heißen. */
+const REGELN_FRAGE = 'Claude hat aus deiner Nachricht eine Regel herausgelesen. Wo soll sie gelten?'
+const REGELN_ZIELE =
+  'Alle Projekte schreibt sie in deine globale CLAUDE.md, Dieses Projekt in die CLAUDE.md im Projektordner (Textdateien mit Anweisungen, die Claude bei jedem Start liest), Nur dieser Chat in keine Datei. Ändern kannst du sie später in der Datei oder mit einer Bitte an Claude. Geschlossen? /leitstand:regeln öffnet das Fenster wieder.'
 /** Die eigenen Nachrichten der Person: im Terminal getippt (composer), in der Desktop-App (sdk) oder per Remote Control (bridge, Android-App). */
 const HUMAN = /^(composer|sdk|bridge)$/
 
@@ -350,7 +354,7 @@ function istEinstellungen(v: unknown): v is EinstellungenEintrag {
   return typeof v === 'object' && v !== null && typeof (v as EinstellungenEintrag).at === 'number' && typeof (v as EinstellungenEintrag).values === 'object' && (v as EinstellungenEintrag).values !== null
 }
 
-/** Was in diesem Chat gilt: seine eigenen Werte, sonst der Standard aus dem Einstellungsmenü. */
+/** Was in diesem Chat gilt: seine eigenen Werte, sonst der Standard für neue Chats (userConfig). */
 async function einstellungen($: EngineInterface, sid: string): Promise<ReflectEinstellungen> {
   const v = await $.store.get(EINSTELLUNGEN + sid)
   const values = istEinstellungen(v) ? v.values : {}
@@ -545,8 +549,8 @@ const NEU: Verweise = {
   auto: '/leitstand:selbstkritik-auto-an oder -aus',
 }
 
-export const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.'
-const REFLECT_FEHLER = 'Das hat nicht geklappt. Bitte noch einmal versuchen; /reflect hilfe zeigt die Befehle.'
+export const BEFEHL_FEHLER = 'Das hat nicht geklappt: Im Leitstand ging beim Ausführen etwas schief. Versuch es gleich noch einmal; /leitstand:hilfe zeigt alle Befehle.'
+const REFLECT_FEHLER = BEFEHL_FEHLER
 
 /** Ob der Befehl vom Handy kam (Remote Control), wo kein Fenster zu sehen ist. */
 const vomHandy = (e: Pick<CommandRunInput, 'origin'>) => e.origin?.kind === 'bridge'
@@ -579,18 +583,19 @@ async function regelNr($: EngineInterface, wort: string | undefined, v: Verweise
   return { fund }
 }
 
-/** Was /reflect hilfe sagt: die neuen Namen, was /reflect weiter versteht, und wie es in diesem Chat steht. */
+/** Was /reflect hilfe sagt: was /reflect versteht, dieselben Befehle mit eigenen Namen, und wie es in diesem Chat steht. */
 async function hilfe($: EngineInterface) {
   const jetzt = await einstellungen($, await $.session.id())
-  const zeile = (b: (typeof REFLECT_BEFEHLE)[number]) => `/${kurzform(b.name) ?? b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''}: ${b.description}`
+  const zeile = (b: (typeof REFLECT_BEFEHLE)[number]) => `/${kurzform(b.name) ?? b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`
   return [
-    'Selbstkritik und Regeln gehören jetzt zum Leitstand. Die Befehle, jeder auch mit leitstand: davor, und jeder erklärt sich mit hilfe:',
+    '/reflect · Selbstkritik und Regeln des Leitstands',
+    'Was: /reflect allein startet eine Selbstkritik: Claude prüft seine bisherige Arbeit im Hintergrund, ein Modellaufruf, der den ganzen Chat liest. Dahinter geht ein Schwerpunkt oder zeigen, regeln, speichern <Nr> [global|projekt|chat], verwerfen <Nr>, pruefung an|aus und auto an|aus.',
+    'Dieselben Befehle mit eigenen Namen, jeder auch mit leitstand: davor und mit hilfe dahinter:',
     ...REFLECT_BEFEHLE.map(zeile),
-    'merke: <Regel> schlägt eine Regel ohne Modellaufruf vor.',
+    'merke: <Regel> · am Anfang einer Nachricht: schlägt diese Regel vor, ohne Modellaufruf',
     '',
-    '/reflect versteht weiter: /reflect [Schwerpunkt], zeigen, regeln, speichern <Nr> [global|projekt|chat], verwerfen <Nr>, pruefung an|aus, auto an|aus.',
     `In diesem Chat: Korrekturen prüfen ist ${jetzt.pruefung ? 'an' : 'aus'}, Selbstkritik nach Dateiänderungen ist ${jetzt.selbstkritikAuto ? 'an' : 'aus'}.`,
-    'Einstellungen gelten nur im Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü. /leitstand:hilfe zeigt alle Leitstand-Befehle.',
+    'Gilt: nur in diesem Chat. Standard für neue Chats: Optionen "Regeln: Korrekturen prüfen" und "Selbstkritik nach Dateiänderungen", siehe /leitstand:hilfe unter Einstellen.',
   ].join('\n')
 }
 
@@ -601,7 +606,7 @@ async function befehlStart($: EngineInterface, schwerpunkt: string, v: Verweise,
   if (!handy) oeffneFenster($)
   if (id === undefined) return `Es läuft schon eine Selbstkritik. ${v.zeigen} gibt sie aus, sobald sie fertig ist.`
   return handy
-    ? `Selbstkritik läuft … Das Fenster geht nur am Rechner; ${v.zeigen} gibt das Ergebnis hier als Text aus.`
+    ? `Selbstkritik läuft. Das Fenster geht nur am Rechner; ${v.zeigen} gibt das Ergebnis hier als Text aus, sobald sie fertig ist.`
     : `Selbstkritik läuft … Das Ergebnis erscheint im Fenster „Selbstkritik“; ${v.zeigen} gibt es als Text aus.`
 }
 
@@ -662,7 +667,7 @@ async function befehlPruefung($: EngineInterface, wort: string | undefined, v: V
   if (!wert) queue.length = 0
   return wert
     ? `Korrekturen prüfen ist in diesem Chat an: Kurze Nachrichten gehen an ${modell}, ein kleiner Aufruf je Nachricht. Andere Chats behalten ihre Einstellung.`
-    : 'Korrekturen prüfen ist in diesem Chat aus; „merke:“ geht weiter. Andere Chats behalten ihre Einstellung, neue starten mit dem Standard aus dem Einstellungsmenü.'
+    : 'Korrekturen prüfen ist in diesem Chat aus; merke: <Regel> geht weiter. Andere Chats behalten ihre Einstellung; den Standard für neue Chats zeigt /leitstand:hilfe unter Einstellen.'
 }
 
 async function befehlAuto($: EngineInterface, wort: string | undefined, v: Verweise) {
@@ -708,12 +713,14 @@ async function reflectBefehl($: EngineInterface, args: string, e: CommandRunInpu
 }
 
 /** Speichern, Bearbeiten, Verwerfen per Nummer: die Regel zur Nummer, oder ein Satz, warum nicht. */
-async function befehlRegelNr($: EngineInterface, args: string, was: ReflectZiel | 'bearbeiten' | 'verwerfen') {
+async function befehlRegelNr($: EngineInterface, args: string, was: ReflectZiel | 'bearbeiten' | 'verwerfen', handy = false) {
   const nr = args.split(/\s+/)[0] ?? ''
   const gefunden = await regelNr($, nr === '' ? undefined : nr, NEU)
   if ('fehler' in gefunden) return gefunden.fehler
   if (was === 'verwerfen') return verwerfe($, gefunden.fund.id)
   if (was !== 'bearbeiten') return speichere($, gefunden.fund.id, was)
+  // Vom Handy ist das Eingabefeld nicht zu sehen: Die Regel bleibt, wie sie ist, und die Antwort sagt den Weg.
+  if (handy) return `Schick die Regel umformuliert neu, als merke: ${gefunden.fund.rule} Die alte verwirfst du mit /leitstand:regel-verwerfen ${nr}.`
   const wie = await bearbeite($, gefunden.fund.id)
   if (wie === 'voll') return `${FELD_VOLL}.`
   if (wie === 'abgelehnt') return 'Das Eingabefeld hat den Text nicht genommen.'
@@ -765,7 +772,7 @@ async function befehlAus($: EngineInterface, name: string, args: string, e: Comm
     case 'leitstand:regel-chat':
       return befehlRegelNr($, args, 'chat')
     case 'leitstand:regel-bearbeiten':
-      return befehlRegelNr($, args, 'bearbeiten')
+      return befehlRegelNr($, args, 'bearbeiten', vomHandy(e))
     case 'leitstand:regel-verwerfen':
       return befehlRegelNr($, args, 'verwerfen')
     case 'leitstand:regelpruefung-an':
@@ -972,6 +979,10 @@ export function registerReflect(on: On, options: PluginOptions): void {
     }
     return (
       <Box flexDirection="column" rowGap={1}>
+        <Text wrap="wrap">{REGELN_FRAGE}</Text>
+        <Text dimColor wrap="wrap">
+          {REGELN_ZIELE}
+        </Text>
         {list.map(l => (
           <Box key={`zeile:${l.id}`} flexDirection="column">
             <Text color="green" wrap="wrap">

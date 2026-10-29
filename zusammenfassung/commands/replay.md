@@ -1,5 +1,5 @@
 ---
-description: "Die Dateiänderungen der letzten Runde Schritt für Schritt zeigen"
+description: "Jede Dateiänderung der letzten Runde Schritt für Schritt zeigen"
 disable-model-invocation: true
 ---
 

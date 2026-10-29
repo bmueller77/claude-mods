@@ -1,5 +1,5 @@
 ---
-description: Cache, Kontext, Kosten und Warmhalten dieser Sitzung im Überblick (Statistik)
+description: Zeigt Cache, Kontext, Kosten, Limits und Warmhalten dieses Chats als Text (Statistik)
 disable-model-invocation: true
 ---
 

@@ -1,7 +1,7 @@
 {
   "name": "zusammenfassung",
-  "version": "0.7.3",
-  "description": "Nach jeder Arbeitsrunde eine kurze Zusammenfassung über dem Eingabefeld: was getan wurde und was man leicht übersieht. Aufklappbar mit Erklärung und Dateiliste, dazu ein Replay der Dateiänderungen Schritt für Schritt. Ersetzt zweiter-blick und replay-theater.",
+  "version": "0.7.3.1",
+  "description": "Nach jeder Runde zwei Zeilen über dem Eingabefeld: was Claude getan hat und was man leicht übersieht. Aufklappbar mit Erklärung und Dateiliste, dazu ein Replay, das jede Dateiänderung Schritt für Schritt zeigt. Hilfe: /zusammenfassung:hilfe. Grundlage für das Replay: Replay Theater von Anthropic (Apache-2.0).",
   "author": {
     "name": "Björn Müller",
     "email": "bjoern@mueller.family"
@@ -11,19 +11,19 @@
     "an": {
       "type": "boolean",
       "title": "Zusammenfassung",
-      "description": "Zeigt nach einer Arbeitsrunde eine kurze Zusammenfassung. Standard für neue Chats; /zusammenfassung schaltet nur im Chat um.",
+      "description": "Standard für neue Chats: ob nach jeder Runde die Zusammenfassung in der Leiste über dem Eingabefeld steht. An oder aus (im Terminal true oder false), eingebaut: an. Nur im laufenden Chat schaltet /zusammenfassung um. Das Replay bleibt in jedem Fall.",
       "default": true
     },
     "modell": {
       "type": "string",
       "title": "Modell für die Zusammenfassung",
-      "description": "Welches Modell die Runde liest und zusammenfasst. haiku ist günstig und reicht dafür.",
+      "description": "Welches Modell die Runde liest und die zwei Zeilen schreibt: haiku (klein und günstig, eingebaut), sonnet oder opus. Ein größeres Modell kostet mehr von deinem Nutzungslimit. Gilt für Chats, die danach beginnen; im Chat nicht umstellbar.",
       "default": "haiku"
     },
     "mindestSekunden": {
       "type": "number",
-      "title": "Mindestdauer einer Runde",
-      "description": "Runden ohne Werkzeugaufruf werden nur zusammengefasst, wenn sie mindestens so viele Sekunden gedauert haben. Runden mit Werkzeugaufrufen immer.",
+      "title": "Mindestdauer einer Runde (Sekunden)",
+      "description": "Eine Runde, in der Claude kein Werkzeug benutzt hat (nichts gelesen, geändert oder ausgeführt), fasst der Mod erst ab so vielen Sekunden zusammen. Runden mit Werkzeug immer. Eingebaut: 60. Gilt für Chats, die danach beginnen; im Chat nicht umstellbar.",
       "default": 60
     }
   }

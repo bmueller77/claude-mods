@@ -1,5 +1,5 @@
 ---
-description: "Den offenen Vorschlag der Modellwahl sofort übernehmen"
+description: "Nimmt den offenen Vorschlag der Modellwahl an, wie /modellwahl ja"
 argument-hint: "[hilfe]"
 disable-model-invocation: true
 ---

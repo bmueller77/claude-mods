@@ -1,5 +1,5 @@
 ---
-description: "Den Bericht des beendeten Autopiloten über dem Eingabefeld wegräumen (Leitstand)"
+description: "Den Bericht des beendeten Autopiloten aus der Leiste wegräumen (Leitstand)"
 disable-model-invocation: true
 ---
 

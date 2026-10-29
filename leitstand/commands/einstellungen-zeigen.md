@@ -1,5 +1,5 @@
 ---
-description: "Die Leitstand-Einstellungen öffnen"
+description: "Das Einstellungsfenster öffnen"
 disable-model-invocation: true
 ---
 

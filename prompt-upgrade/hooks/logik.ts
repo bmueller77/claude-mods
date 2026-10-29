@@ -359,7 +359,7 @@ export function leseAbdeckung(text: string): PromptUpgradeAbdeckung | null {
 export type AbdeckungTeil = { text: string; art: 'ja' | 'nein' | 'luecke' | 'leise' }
 
 const KERNTEIL_NAMEN = {
-    lang: { auftrag: 'Auftrag', warum: 'Warum', leitplanken: 'Leitplanken', fertig: 'Fertig wenn' },
+    lang: { auftrag: 'Auftrag', warum: 'Warum', leitplanken: 'Grenzen', fertig: 'Fertig wenn' },
     kurz: { auftrag: 'Auftrag', warum: 'Warum', leitplanken: 'Grenzen', fertig: 'Fertig' },
 } as const
 

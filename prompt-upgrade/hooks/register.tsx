@@ -16,7 +16,7 @@ import type { CommandRunInput, EngineInterface, PromptOrigin, Register, UiOpenRe
 
 import type { PromptUpgradeAblauf, PromptUpgradeAntwort, PromptUpgradeEintrag } from '../types'
 import { zeichne } from './ansicht'
-import { alteNamen, heisstJetzt, hilfeText, istHilfe, uebersicht } from './knopfbefehle'
+import { alteNamen, befehlsZeilen, heisstJetzt, hilfeText, istHilfe } from './knopfbefehle'
 import type { Knopfbefehl } from './knopfbefehle'
 import type { Aktionen, Kit } from './ansicht'
 import {
@@ -55,14 +55,17 @@ const TAG_MS = 24 * 60 * 60_000
 const ZURUECK_NACH_MS = 50
 
 /** Was beim Abfangen als Grund erscheint: kurz, die Person sieht ja das Fenster. */
-export const GRUND_ABGEFANGEN = 'Liegt zum Verbessern im Seitenfenster.'
-export const TEXT_AN = 'Automatik in diesem Chat an. Am Rechner getippte Prompts gehen erst ins Seitenfenster; mit > am Anfang gehen sie direkt raus.'
-export const TEXT_AUS = 'Automatik in diesem Chat aus.'
+export const GRUND_ABGEFANGEN = 'Die Automatik von Prompt-Upgrade hat die Nachricht angehalten; sie liegt zum Verbessern im Seitenfenster. Mit > am Anfang wird sie direkt gesendet.'
+export const TEXT_AN =
+    'Automatik in diesem Chat an: Was du am Rechner tippst, geht erst ins Seitenfenster zum Verbessern. Mit > am Anfang wird es direkt gesendet, kurze Antworten wie ja oder ok auch.'
+export const TEXT_AUS = 'Automatik in diesem Chat aus: Was du tippst, wird direkt gesendet.'
 export const TEXT_OFFEN = 'Dein Prompt liegt im Seitenfenster.'
-export const TEXT_EINGABE = 'Seitenfenster offen, tipp deinen Prompt dort ein.'
-export const TEXT_HANDY = 'Prompt-Upgrade braucht das Seitenfenster am Rechner. Vom Handy aus gehen /better an, /better aus und /better verlauf. Gesendet wurde nichts.'
-export const TEXT_FEHLER = 'Das hat nicht geklappt. Gesendet wurde nichts; versuch es noch einmal.'
-export const TEXT_ZU_SCHMAL = 'Das Seitenfenster passt hier gerade nicht hin; dein Prompt steht wieder im Eingabefeld.'
+export const TEXT_EINGABE = 'Das Seitenfenster ist offen; tipp deinen Prompt dort ein.'
+export const TEXT_HANDY = 'Ein Upgrade braucht das Seitenfenster am Rechner; gesendet wurde nichts. Vom Handy gehen /better an, /better aus und /better verlauf.'
+export const TEXT_FEHLER =
+    'Das hat nicht geklappt: Prompt-Upgrade ist auf einen internen Fehler gestoßen. Gesendet wurde nichts. Versuch es noch einmal; /prompt-upgrade:hilfe zeigt alle Befehle.'
+export const TEXT_ZU_SCHMAL =
+    'Das Seitenfenster passt hier gerade nicht hin, etwa weil das Fenster zu schmal ist. Dein Prompt steht wieder im Eingabefeld; du kannst ihn so senden.'
 
 const ablauf = atom({ plugin: 'prompt-upgrade', key: 'ablauf' } as const, null as PromptUpgradeAblauf | null)
 const verlauf = atom({ plugin: 'prompt-upgrade', key: 'verlauf' } as const, [] as PromptUpgradeEintrag[])
@@ -122,6 +125,9 @@ function neuerAblauf(id: string, schritt: PromptUpgradeAblauf['schritt'], origin
     }
 }
 
+/** Der eine Satz, wenn das Modell nichts lieferte, auch auf der Fehlerkarte ohne Grund. */
+export const KEINE_ANTWORT = 'Das Modell hat nicht geantwortet.'
+
 function fehlerText(err: unknown): string {
     return err instanceof Error ? err.message : String(err)
 }
@@ -129,16 +135,14 @@ function fehlerText(err: unknown): string {
 /** Ein Satz, warum das Modell keinen Text lieferte. */
 function grundAus(r: { reason: string; status?: number | null; error?: string }): string {
     if (r.reason === 'api-error') {
-        const status = typeof r.status === 'number' ? ` (Status ${r.status}${r.error ? `, ${r.error}` : ''})` : ''
-        return `Der Dienst hat mit einem Fehler geantwortet${status}.`
+        const ueberlastet = r.status === 529 || /overloaded/i.test(r.error ?? '')
+        const status = typeof r.status === 'number' ? ` (Fehler ${r.status})` : ''
+        return ueberlastet ? `Der Dienst ist gerade überlastet${status}.` : `Der Dienst hat mit einem Fehler geantwortet${status}.`
     }
     if (r.reason === 'aborted') {
         return 'Die Anfrage hat zu lange gedauert und wurde abgebrochen.'
     }
-    if (r.reason === 'empty-reply') {
-        return 'Das Modell hat nichts geantwortet.'
-    }
-    return 'Das Modell hat nicht geantwortet.'
+    return KEINE_ANTWORT
 }
 
 // --- Verlauf ---
@@ -238,7 +242,7 @@ async function zurueckInsFeld($: EngineInterface, text: string, meldung: string 
         gefuellt = false
     }
     if (!gefuellt) {
-        $.ui.log(`Prompt-Upgrade: Das Eingabefeld nahm den Text nicht an. Hier ist er: ${text}`)
+        $.ui.log(`Prompt-Upgrade: Das Eingabefeld nahm den Text nicht an. Kopier ihn von hier: ${text}`)
     } else if (meldung !== null) {
         $.ui.log(meldung)
     }
@@ -280,7 +284,7 @@ async function oeffneFenster($: EngineInterface, original: string | null): Promi
         }
         await zurueckInsFeld($, original, TEXT_ZU_SCHMAL)
     } else {
-        $.ui.log('Prompt-Upgrade: Das Seitenfenster passt hier gerade nicht hin.')
+        $.ui.log('Prompt-Upgrade: Das Seitenfenster passt hier gerade nicht hin, etwa weil das Fenster zu schmal ist.')
     }
 }
 
@@ -481,15 +485,18 @@ async function nimm($: EngineInterface, passt: (a: PromptUpgradeAblauf) => boole
     return halt.a
 }
 
+/** Wenn Claude Code das Senden ablehnt. */
+const NICHT_GESENDET = 'Das hat nicht geklappt: Claude Code hat die Nachricht nicht angenommen. Sie steht wieder im Eingabefeld; schick sie von dort ab.'
+
 /** Senden, als haette die Person es getippt; wird es abgelehnt, steht es wieder im Eingabefeld. */
 async function sende($: EngineInterface, text: string): Promise<void> {
     try {
         const r = await $.prompt.submit({ text, asUser: true })
         if (r.drop !== undefined) {
-            await zurueckInsFeld($, text, 'Gesendet wurde nichts; der Text steht im Eingabefeld.')
+            await zurueckInsFeld($, text, NICHT_GESENDET)
         }
     } catch {
-        await zurueckInsFeld($, text, 'Gesendet wurde nichts; der Text steht im Eingabefeld.')
+        await zurueckInsFeld($, text, NICHT_GESENDET)
     }
 }
 
@@ -685,107 +692,162 @@ async function starteMitFenster($: EngineInterface, text: string): Promise<strin
 
 // --- Je Knopf und Schalter ein Befehl; /better bleibt als Kurzform ---
 
-export const BEFEHL_FEHLER = 'Das hat nicht geklappt. Gesendet wurde nichts; /prompt-upgrade:hilfe zeigt die Befehle.'
-export const TEXT_KEIN_DURCHLAUF = 'Gerade läuft kein Prompt-Upgrade; /prompt-upgrade:starten <Prompt> beginnt eins.'
+export const BEFEHL_FEHLER =
+    'Das hat nicht geklappt: Prompt-Upgrade ist auf einen internen Fehler gestoßen. Gesendet wurde nichts. Versuch es noch einmal; /prompt-upgrade:hilfe zeigt alle Befehle.'
+export const TEXT_KEIN_DURCHLAUF = 'Gerade ist kein Upgrade offen; /better [Prompt] startet eins.'
 export const TEXT_HANDY_BEFEHLE =
-    'Prompt-Upgrade braucht das Seitenfenster am Rechner. Vom Handy aus gehen /prompt-upgrade:automatik-an, /prompt-upgrade:automatik-aus und /prompt-upgrade:verlauf. Gesendet wurde nichts.'
+    'Ein Upgrade braucht das Seitenfenster am Rechner; gesendet wurde nichts. Vom Handy gehen /prompt-upgrade:automatik-an, /prompt-upgrade:automatik-aus und /prompt-upgrade:verlauf.'
 
-const DURCHLAUF = 'der offene Durchlauf im Seitenfenster; ohne offenen Durchlauf sagt der Befehl das'
+/** Wie weit ein Befehl wirkt, der nur einmal etwas tut. */
+const EINMAL = 'einmal, sofort; ändert keine Einstellung.'
+/** Wie weit die Schalter der Automatik wirken. */
+const NUR_CHAT = 'nur in diesem Chat. Standard für neue Chats: Option "Automatik", siehe /prompt-upgrade:hilfe unter Einstellen.'
+/** Was die Automatik durchlässt, für Hilfe und Antworten gleich. */
+const AUSNAHMEN =
+    'Direkt gesendet werden weiter: Text mit > am Anfang (das > fällt weg); kurze Antworten bis 40 Zeichen wie ja, ok oder mach weiter; ein einzelnes Wort bis 15 Zeichen; eine Auswahl wie 1 oder 2 und 3; Befehle mit / oder !; Nachrichten mit Anhang oder @-Datei; alles, was du schickst, während Claude noch arbeitet; alles vom Handy.'
 
 /** Die Befehle in der Reihenfolge der Hilfe; die Wirkung steht in `befehlAus`. */
 export const BEFEHLE: readonly Knopfbefehl[] = [
     {
         name: 'prompt-upgrade:hilfe',
-        description: 'Listet alle Befehle von Prompt-Upgrade',
-        tut: 'Listet alle Befehle von Prompt-Upgrade mit je einer Zeile.',
-        knopf: 'keiner, nur Übersicht',
-        geltung: 'überall; ändert nichts',
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:hilfe',
+        titel: 'Hilfe',
+        description: 'Erklärt Prompt-Upgrade: wie du damit arbeitest, es einstellst und welche Befehle es gibt',
+        tut: 'Zeigt, was Prompt-Upgrade tut, wie du damit arbeitest und es einstellst, was es kostet, was vom Handy geht und alle Befehle.',
+        knopf: 'keiner.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:starten',
-        description: 'Verbessert einen Prompt im Seitenfenster, bevor er rausgeht (wie /better <Prompt>)',
-        argumentHint: '<Prompt>',
-        tut: 'Öffnet das Seitenfenster mit diesem Prompt: Rückfragen, Umschreiben, Prüfen, gesendet wird erst mit Ausführen. Ohne Prompt öffnet sich ein Feld zum Eintippen. Geht nur am Rechner.',
-        knopf: 'keiner; wie /better <Prompt>',
-        geltung: 'dieser Chat',
-        argumente: 'der Prompt, der verbessert werden soll; alles nach dem Befehl zählt als Prompt',
+        titel: 'Upgrade starten',
+        description: 'Öffnet deinen Prompt im Seitenfenster zum Verbessern; gesendet wird erst mit Ausführen',
+        argumentHint: '[Prompt]',
+        tut: 'Öffnet das Seitenfenster mit deinem Prompt, wie /better [Prompt]. Dort stellt das eingestellte Modell bis zu drei Rückfragen und schreibt den Prompt dann um, mit je einem Modellaufruf. Gesendet wird erst, wenn du Ausführen drückst. Geht nur am Rechner.',
+        knopf: 'keiner.',
+        geltung: EINMAL,
+        argumente: '[Prompt] (freiwillig) · alles nach dem Befehl ist der Prompt; ohne Prompt öffnet sich ein Feld zum Eintippen.',
         beispiel: '/prompt-upgrade:starten Mach die Login-Seite schneller',
     },
     {
         name: 'prompt-upgrade:automatik-an',
-        description: 'Getippte Prompts erst ins Seitenfenster, nur in diesem Chat',
-        tut: 'Schaltet die Automatik ein: Am Rechner getippte Prompts gehen erst ins Seitenfenster; mit > am Anfang gehen sie direkt raus.',
-        knopf: 'keiner im Fenster; wie /better an und der Schalter „Automatik“ im Einstellungsmenü',
-        geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü',
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:automatik-an',
+        titel: 'Automatik an',
+        description: 'Hält jede Nachricht, die du am Rechner tippst, zum Verbessern an (nur dieser Chat)',
+        tut: `Schaltet die Automatik ein, wie /better an: Jede Nachricht, die du am Rechner tippst, hält Prompt-Upgrade vor dem Senden an und öffnet sie im Seitenfenster zum Verbessern. ${AUSNAHMEN}`,
+        knopf: 'keiner.',
+        geltung: NUR_CHAT,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:automatik-aus',
-        description: 'Getippte Prompts gehen direkt raus, nur in diesem Chat',
-        tut: 'Schaltet die Automatik aus: Getippte Prompts gehen unverändert raus.',
-        knopf: 'keiner im Fenster; wie /better aus und der Schalter „Automatik“ im Einstellungsmenü',
-        geltung: 'nur in diesem Chat; neue Chats starten mit dem Standard aus dem Einstellungsmenü',
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:automatik-aus',
+        titel: 'Automatik aus',
+        description: 'Was du tippst, wird wieder direkt gesendet (nur dieser Chat)',
+        tut: 'Schaltet die Automatik aus, wie /better aus: Was du tippst, wird wieder direkt gesendet. /better [Prompt] geht weiter.',
+        knopf: 'keiner.',
+        geltung: NUR_CHAT,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:verlauf',
-        description: 'Zeigt die letzten Upgrades als Text, am Rechner auch im Fenster',
-        tut: 'Gibt die letzten 20 Upgrades als Text aus, neueste zuerst; am Rechner öffnet sich dahinter das Fenster mit der Liste, wie /better verlauf.',
-        knopf: '„Verlauf“ im Seitenfenster',
-        geltung: 'alle Chats (ein gemeinsamer Verlauf)',
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:verlauf',
+        titel: 'Verlauf',
+        description: 'Zeigt deine letzten 20 Upgrades aus allen Chats, am Rechner auch im Seitenfenster',
+        tut: 'Listet deine letzten 20 Upgrades aus allen Chats als Text, neueste zuerst, wie /better verlauf; der Verlauf liegt im Speicher des Mods, nur auf diesem Rechner. Am Rechner öffnet sich dazu das Seitenfenster mit der Liste; ein Klick dort öffnet ein Upgrade wieder zum Prüfen.',
+        knopf: '„Verlauf“ im Seitenfenster.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:jetzt-verbessern',
-        description: 'Überspringt die übrigen Rückfragen und verbessert jetzt',
-        tut: 'Überspringt die Rückfragen, die noch offen sind, und lässt den Prompt jetzt umschreiben.',
-        knopf: '„Rest überspringen, jetzt verbessern“ im Seitenfenster',
-        geltung: DURCHLAUF,
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:jetzt-verbessern',
+        titel: 'Rest überspringen',
+        description: 'Überspringt die offenen Rückfragen und schreibt den Prompt jetzt um',
+        tut: 'Überspringt die Rückfragen, die im offenen Upgrade noch unbeantwortet sind, und lässt den Prompt jetzt umschreiben (ein Modellaufruf). Ist kein Upgrade offen, sagt der Befehl das.',
+        knopf: '„Rest überspringen, jetzt verbessern“ im Seitenfenster.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:ausfuehren',
-        description: 'Schickt den verbesserten Prompt ab',
-        tut: 'Schickt den verbesserten Prompt ab, so wie er im Seitenfenster steht (auch bearbeitet), und schließt das Fenster.',
-        knopf: '„Ausführen“ im Seitenfenster',
-        geltung: DURCHLAUF,
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:ausfuehren',
+        titel: 'Ausführen',
+        description: 'Sendet das Upgrade an Claude und schließt das Seitenfenster',
+        tut: 'Sendet das Upgrade an Claude, so wie es im Seitenfenster steht (auch bearbeitet), und schließt das Fenster. Offene Platzhalter in eckigen Klammern gehen so mit, wie sie stehen. Ist kein Upgrade offen, sagt der Befehl das.',
+        knopf: '„Ausführen“ im Seitenfenster.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:original-senden',
-        description: 'Schickt nach einem Fehler den Original-Prompt unverändert ab',
-        tut: 'Schickt den Original-Prompt unverändert ab, wenn das Upgrade gescheitert ist, und schließt das Fenster.',
-        knopf: '„Original senden“ auf der Fehlerkarte im Seitenfenster',
-        geltung: DURCHLAUF,
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:original-senden',
+        titel: 'Original senden',
+        description: 'Sendet nach einem Fehler deinen Prompt unverändert an Claude',
+        tut: 'Sendet deinen ursprünglichen Prompt unverändert an Claude, wenn das Upgrade gescheitert ist, und schließt das Seitenfenster.',
+        knopf: '„Original senden“ auf der Fehlerkarte im Seitenfenster.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:kopieren',
-        description: 'Kopiert den verbesserten Prompt in die Zwischenablage',
-        tut: 'Kopiert den verbesserten Prompt in die Zwischenablage. Vom Handy aus kommt er als Text zum Kopieren.',
-        knopf: '„Kopieren“ im Seitenfenster',
-        geltung: DURCHLAUF,
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:kopieren',
+        titel: 'Kopieren',
+        description: 'Legt das Upgrade in die Zwischenablage, ohne es zu senden',
+        tut: 'Legt das Upgrade in die Zwischenablage, ohne es zu senden; das Seitenfenster bleibt offen. Vom Handy kommt es als Text zum Kopieren.',
+        knopf: '„Kopieren“ im Seitenfenster.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
     {
         name: 'prompt-upgrade:abbrechen',
-        description: 'Bricht ab, schließt das Fenster und legt den Prompt zurück ins Eingabefeld',
-        tut: 'Bricht den Durchlauf ab: Das Fenster geht zu, laufende Anfragen stoppen, der Original-Prompt steht wieder im Eingabefeld. Gesendet wird nichts.',
-        knopf: '„Abbrechen“ im Seitenfenster',
-        geltung: DURCHLAUF,
-        argumente: 'keine',
-        beispiel: '/prompt-upgrade:abbrechen',
+        titel: 'Abbrechen',
+        description: 'Bricht das Upgrade ab und legt deinen Prompt zurück ins Eingabefeld',
+        tut: 'Bricht das offene Upgrade ab: Das Seitenfenster geht zu, laufende Modellaufrufe stoppen, dein Prompt steht wieder im Eingabefeld. Gesendet wird nichts.',
+        knopf: '„Abbrechen“ im Seitenfenster.',
+        geltung: EINMAL,
+        argumente: 'keine.',
     },
 ]
+
+/** Die Hilfe der Kurzform /better, im selben Aufbau wie die der Befehle. */
+export const HILFE_BETTER = [
+    '/better [Prompt | an | aus | verlauf] · Kurzform von Prompt-Upgrade',
+    'Was: Mit einem Prompt dahinter öffnet es das Seitenfenster zum Verbessern, wie /prompt-upgrade:starten; das kostet bis zu zwei kleine Modellaufrufe. Ohne Argument öffnet es das Seitenfenster mit einem leeren Feld zum Eintippen. an und aus schalten die Automatik, verlauf zeigt deine letzten Upgrades; das gilt nur, wenn das Wort allein dahinter steht, /better an die Kunden schreiben ist ein Prompt.',
+    'Button: keiner.',
+    `Gilt: mit Prompt oder verlauf einmal, sofort; ändert keine Einstellung. Mit an oder aus ${NUR_CHAT}`,
+    'Argumente: [Prompt] (freiwillig) · der Prompt, der verbessert werden soll. Oder an, aus, verlauf (auch on, off, history).',
+    'Beispiel: /better Mach die Login-Seite schneller',
+].join('\n')
+
+/** Was /prompt-upgrade:hilfe antwortet. */
+export const HILFE = [
+    'Prompt-Upgrade · Hilfe',
+    '',
+    'Was der Mod tut',
+    'Prompt-Upgrade ist ein Mod, also eine Erweiterung für Claude Code. Er macht aus einer groben Nachricht an Claude (einem Prompt) eine klare, bevor du sie sendest. Dazu stellt er dir im Seitenfenster bis zu drei Rückfragen, schreibt den Prompt um und zeigt Original und Upgrade nebeneinander. Gesendet wird erst, wenn du Ausführen drückst.',
+    '',
+    'So arbeitest du damit',
+    '1. Tipp /better und deinen Prompt dahinter, etwa /better Mach die Login-Seite schneller. Das Seitenfenster öffnet sich mit deinem Prompt. /better ohne Argument öffnet es mit einem leeren Feld zum Eintippen.',
+    '2. Beantworte die Rückfragen mit einem Button, tipp mit "Andere (eintippen)" eine eigene Antwort ein oder überspring sie.',
+    '3. Prüf das Upgrade. Die Zeile der Kernteile zeigt mit ✓, was drinsteht: Auftrag (was Claude tun soll), Warum (wofür und für wen), Grenzen (was nicht passieren darf, mit Grund) und Fertig wenn (woran man sieht, dass es fertig ist). Eckige Klammern wie [Zielgruppe] sind offene Platzhalter: Füll sie mit Bearbeiten aus, sonst gehen sie so mit.',
+    '4. Ausführen sendet das Upgrade an Claude und legt es in den Verlauf (die letzten 20, gespeichert nur auf diesem Rechner). Kopieren legt es in die Zwischenablage, Abbrechen legt dein Original zurück ins Eingabefeld.',
+    `5. Willst du jede Nachricht verbessern, schalte die Automatik ein: /better an. Dann hält Prompt-Upgrade jede Nachricht, die du am Rechner tippst, vor dem Senden an und öffnet sie im Seitenfenster. ${AUSNAHMEN}`,
+    '6. an, aus und verlauf gelten nur, wenn sie allein hinter /better stehen. /better an die Kunden schreiben ist ein Prompt.',
+    '',
+    'Einstellen',
+    'Nur in diesem Chat: /better an und /better aus schalten die Automatik.',
+    'Standard für neue Chats:',
+    '- Automatik · an oder aus (im Terminal true oder false); eingebaut: aus.',
+    '- Modell für Rückfragen und Upgrade · haiku, sonnet, opus oder fable; eingebaut: haiku. Im Chat nicht umstellbar.',
+    'Haiku, Sonnet, Opus und Fable sind Modelle von Claude, von klein und günstig bis groß.',
+    'Sag Claude zum Beispiel: Stell bei Prompt-Upgrade den Standard für neue Chats: Automatik auf an. Claude macht das mit `claude plugin configure prompt-upgrade@bm-mods`. Im Terminal geht es auch selbst: `claude plugin configure prompt-upgrade@bm-mods` zeigt die Optionen. Setzen geht mit `--values-stdin`, etwa `echo \'{"automatik": true}\' | claude plugin configure prompt-upgrade@bm-mods --values-stdin`. Das gilt für Chats, die danach beginnen. Ältere Installationen heißen `prompt-upgrade@bjoern-mods`; `claude plugin list` zeigt den Namen. "not set" heißt dort: Es gilt der eingebaute Standard.',
+    'Ganz abschalten: `claude plugin disable prompt-upgrade@bm-mods` (wieder an mit `enable`), oder sag Claude, er soll den Mod abschalten. Das wirkt nach einem Neustart von Claude Code.',
+    '',
+    'Kosten',
+    'Jedes Upgrade ruft das eingestellte Modell bis zu zweimal auf, einmal für die Rückfragen und einmal fürs Umschreiben; Erneut versuchen ruft es noch einmal auf. Das kostet Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit), mit Haiku wenige. Mit eingeschalteter Automatik startet jede Nachricht, die sie anhält, ein Upgrade und kostet genauso viel. Was direkt gesendet wird, kostet nichts.',
+    '',
+    'Vom Handy (Remote Control)',
+    'Ein Upgrade starten geht nur am Rechner, denn dort tippst und bearbeitest du den Prompt im Seitenfenster. Was du vom Handy schickst, hält die Automatik nie an. Vom Handy gehen /better an, /better aus und /better verlauf (als Text). Ein Upgrade, das am Rechner offen ist, führst du vom Handy mit /prompt-upgrade:jetzt-verbessern, /prompt-upgrade:ausfuehren, /prompt-upgrade:kopieren (kommt als Text), /prompt-upgrade:original-senden oder /prompt-upgrade:abbrechen weiter.',
+    '',
+    'Befehle',
+    'Befehlsnamen schreiben Umlaute als ae, oe, ue und ss.',
+    '/better [Prompt | an | aus | verlauf] · Kurzform: ohne Argument das leere Feld, mit Prompt ein Upgrade, an und aus die Automatik, verlauf der Verlauf',
+    ...befehlsZeilen(BEFEHLE),
+    'Mehr zu jedem Befehl: hilfe dahinter, etwa /prompt-upgrade:starten hilfe.',
+].join('\n')
 
 async function befehlJetztVerbessern($: EngineInterface): Promise<string> {
     const a = await read($, ablauf)
@@ -855,7 +917,7 @@ async function befehlAus($: EngineInterface, name: string, args: string, e: Comm
     const amPlatz = amRechner(e.origin)
     switch (name) {
         case 'prompt-upgrade:hilfe':
-            return uebersicht('Prompt-Upgrade – die Befehle:', BEFEHLE)
+            return HILFE
         case 'prompt-upgrade:starten':
             return amPlatz ? starteMitFenster($, args) : TEXT_HANDY_BEFEHLE
         case 'prompt-upgrade:automatik-an':
@@ -882,7 +944,7 @@ async function befehlAus($: EngineInterface, name: string, args: string, e: Comm
 }
 
 const VORSATZ_NAME = 'prompt-upgrade'
-const VORSATZ_LABEL = 'Prompt Upgrade'
+const VORSATZ_LABEL = 'Prompt-Upgrade'
 /**
  * Die Engine setzt vor die Antwort eines Befehls die Namen der Mods, die ihn hooken
  * ("name1+name2: Text"). In der gespeicherten Zeile streicht dieser Mod seinen eigenen
@@ -918,7 +980,7 @@ export const register: Register = (on, options) => {
         try {
             await $.command.register({
                 name: 'better',
-                description: 'Prompt verbessern, bevor er rausgeht: /better <Prompt>, /better an|aus, /better verlauf',
+                description: 'Prompt-Upgrade: verbessert deinen Prompt mit Rückfragen, bevor du ihn sendest; an, aus, verlauf, hilfe',
                 argumentHint: '[Prompt | an | aus | verlauf]',
                 immediate: true,
             })
@@ -952,6 +1014,9 @@ export const register: Register = (on, options) => {
     })
 
     on('command.run', { command: 'better' }, async ($, e) => {
+        if (istHilfe(e.args ?? '')) {
+            return { text: HILFE_BETTER }
+        }
         const b = leseBefehl(e.args)
         if (b.art === 'an' || b.art === 'aus') {
             await setzeAutomatik($, b.art === 'an')

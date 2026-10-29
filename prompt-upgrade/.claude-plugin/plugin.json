@@ -1,7 +1,7 @@
 {
   "name": "prompt-upgrade",
-  "version": "0.4.2",
-  "description": "Macht aus einem groben Prompt einen guten, bevor er rausgeht: bis zu drei schnelle Rückfragen, dann Original und Upgrade nebeneinander im Seitenfenster. Gesendet wird erst mit Ausführen. /better <Prompt>, /better an|aus, /better verlauf.",
+  "version": "0.4.2.1",
+  "description": "Macht aus einer groben Nachricht an Claude einen klaren Prompt, bevor du sie sendest: bis zu drei Rückfragen im Seitenfenster, dann Original und Upgrade nebeneinander; gesendet wird erst mit Ausführen. Start mit /better [Prompt]; auf Wunsch hält die Automatik jede Nachricht an, die du am Rechner tippst, außer kurzen Antworten, Befehlen und Text mit > am Anfang. Hilfe: /prompt-upgrade:hilfe. Grundlage: die Prompting-Leitfäden von OpenAI und Anthropic (siehe README).",
   "author": {
     "name": "Björn Müller"
   },
@@ -10,13 +10,13 @@
     "automatik": {
       "type": "boolean",
       "title": "Automatik",
-      "description": "Standard für neue Chats; /better an|aus gilt nur im Chat",
+      "description": "Standard für neue Chats: an oder aus (im Terminal true oder false); eingebaut: aus. An: Jede Nachricht, die du am Rechner tippst, geht erst ins Seitenfenster zum Verbessern und kostet wie ein Upgrade bis zu zwei kleine Modellaufrufe. Direkt gesendet werden kurze Antworten bis 40 Zeichen wie ja oder ok, ein einzelnes Wort, eine Auswahl wie 1, Befehle mit / oder !, Text mit > am Anfang, Nachrichten mit Anhang oder @-Datei, alles während Claude arbeitet und alles vom Handy. Nur in einem Chat: /better an oder /better aus. Gilt für Chats, die danach beginnen.",
       "default": false
     },
     "modell": {
       "type": "string",
-      "title": "Modell",
-      "description": "Welches Modell die Rückfragen stellt und den Prompt umschreibt. haiku ist schnell und günstig.",
+      "title": "Modell für Rückfragen und Upgrade",
+      "description": "Welches Modell von Claude die Rückfragen stellt und den Prompt umschreibt: haiku, sonnet, opus oder fable, von klein und günstig (haiku) bis groß (fable). Leer heißt haiku. Eingebaut: haiku. Im Chat nicht umstellbar; gilt für Chats, die danach beginnen. Größere Modelle kosten mehr Tokens deines Nutzungslimits.",
       "default": "haiku"
     }
   }

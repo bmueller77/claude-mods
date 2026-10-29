@@ -1,5 +1,5 @@
 ---
-description: "Dateien in der Seitenleiste zeigen"
+description: "Dateien im Seitenfenster zeigen"
 argument-hint: "[Pfad]"
 disable-model-invocation: true
 ---

@@ -1,5 +1,5 @@
 ---
-description: "Alle Befehle der Zusammenfassung mit einer Zeile Erklärung"
+description: "Was die Zusammenfassung tut, wie du sie einstellst, alle Befehle"
 disable-model-invocation: true
 ---
 
