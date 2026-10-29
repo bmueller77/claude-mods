@@ -99,7 +99,7 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, lang und kurz, ohne etwas 
       for (const arg of ['hilfe', '?', 'HILFE', ' Hilfe ']) {
         const text = await run($, name, arg)
         expect(text).toBe(befehlsHilfe(b))
-        for (const teil of ['Was:', 'Knopf:', 'Gilt:', 'Argumente:', 'Beispiel: /leitstand:', `Kurzform: /${kurzform(b.name)}`]) expect(text).toContain(teil)
+        for (const teil of ['Was:', 'Button:', 'Gilt:', 'Argumente:', 'Beispiel: /leitstand:', `Kurzform: /${kurzform(b.name)}`]) expect(text).toContain(teil)
       }
     }
   }

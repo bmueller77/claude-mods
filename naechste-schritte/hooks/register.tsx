@@ -144,7 +144,7 @@ export function istHilfe(args: string): boolean {
 
 /** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
 export function hilfeText(b: Befehl): string {
-    return [`/${b.name}: ${b.was}`, `Knopf: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+    return [`/${b.name}: ${b.was}`, `Button: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
 }
 
 /** Was ein Befehl sagt, wenn er scheitert. */

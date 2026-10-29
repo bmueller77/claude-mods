@@ -1600,7 +1600,7 @@ for (const b of BEFEHLE) {
         for (const arg of ['hilfe', '?', ' Hilfe ']) {
             const t = await befehl($ as never, b.name, arg)
             expect(t).toBe(hilfeText(b))
-            for (const teil of [`/${b.name}: `, 'Knopf: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+            for (const teil of [`/${b.name}: `, 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
                 expect(t).toContain(teil)
             }
         }

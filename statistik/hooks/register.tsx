@@ -1820,7 +1820,7 @@ export const BEFEHLE: readonly Befehl[] = [
         description: 'Prompt-Cache warm halten, ohne Angabe 6 h, sonst so lange wie angegeben',
         argumentHint: '[Dauer, z. B. 3h oder 90m]',
         was: 'Hält den Prompt-Cache warm: Kurz vor jedem Ablauf stellt ein Ping eine winzige Anfrage. Ohne Angabe 6 h wie /warmhalten, sonst die angegebene Dauer.',
-        knopf: '🔥 bzw. ❄️ in der Statistik-Leiste; der Knopf legt je Druck 3 h drauf',
+        knopf: '🔥 bzw. ❄️ in der Statistik-Leiste; der Button legt je Klick 3 h drauf',
         gilt: 'nur in diesem Chat',
         argumente: 'eine Dauer wie 3h, 90m oder 1h30m; ohne Angabe 6 h',
         beispiel: '/statistik:warmhalten-an 3h',
@@ -1900,7 +1900,7 @@ export function istHilfe(args: string): boolean {
 
 /** Die Hilfe eines Befehls: was er tut, welcher Knopf, wo er gilt, Argumente, Beispiel. */
 export function hilfeText(b: Befehl): string {
-    return [`/${b.name}: ${b.was}`, `Knopf: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
+    return [`/${b.name}: ${b.was}`, `Button: ${b.knopf}`, `Gilt: ${b.gilt}`, `Argumente: ${b.argumente}`, `Beispiel: ${b.beispiel}`].join('\n')
 }
 
 /** Was ein Befehl sagt, wenn er scheitert. */

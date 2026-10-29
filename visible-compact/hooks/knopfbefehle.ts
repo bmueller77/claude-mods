@@ -51,7 +51,7 @@ export function hilfeText(b: Knopfbefehl): string {
   return [
     `/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''}`,
     b.tut,
-    `Knopf: ${b.knopf}`,
+    `Button: ${b.knopf}`,
     `Gilt: ${b.geltung}`,
     `Argumente: ${b.argumente}`,
     `Beispiel: ${b.beispiel}`,

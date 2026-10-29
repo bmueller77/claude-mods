@@ -34,7 +34,7 @@ samt Einstellungen und Daten.
 6. Nur in der Desktop-App: alle Dateien aus dem Ordner commands/ des Katalogs nach
    ~/.claude/commands/ kopieren, vorhandene überschreiben. Dann in ~/.claude/commands/ entfernen,
    wo vorhanden: reflexion.md, dateibaum.md, jetzt-aufraeumen.md, letzter-stand-zeigen.md,
-   nachtschicht.md, ansicht-ausfuehrlich.md, adhs-an.md, adhs-aus.md und alle alten <mod>-*.md (leitstand-, statistik-,
+   nachtschicht.md, ansicht-ausfuehrlich.md, knoepfe-zeigen.md, adhs-an.md, adhs-aus.md und alle alten <mod>-*.md (leitstand-, statistik-,
    zusammenfassung-, autopilot-, naechste-schritte-, reflect-, prompt-upgrade-, modellwahl-,
    visible-compact-, filetree-). Alle anderen Dateien dort bleiben.
 7. Prüfen: `claude plugin list` zeigt jedes Plugin aus marketplace.json als enabled, Scope user,
@@ -55,3 +55,4 @@ samt Einstellungen und Daten.
 | 2026-10-26 | Befehlsdateien jetzt-aufraeumen.md, letzter-stand-zeigen.md | `/statistik:chat-aufraeumen`, `/statistik:letzter-stand-zeigen` |
 | 2026-10-26 | Befehlsdateien `<mod>-<funktion>.md` | `/<mod>:<funktion>`, die Dateien bringt jeder Mod selbst mit |
 | 2026-10-28 | Befehlsdatei ansicht-ausfuehrlich.md | `/ansicht-detailliert` (Ansicht heißt jetzt Detailliert) |
+| 2026-10-29 | Befehlsdatei knoepfe-zeigen.md | `/buttons-zeigen` (Knöpfe heißen jetzt Buttons) |

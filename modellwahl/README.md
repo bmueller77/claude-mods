@@ -21,7 +21,7 @@ schafft: Haiku, Sonnet, Opus oder Fable, Aufwand von niedrig bis maximal.
   ab dem nächsten Schritt. Über der Eingabe steht solange „Modellwahl schlägt …
   vor · gilt in 12 s“ mit **Übernehmen** und **Nein**. Das gilt für jedes Modell,
   auch für Opus und Fable mitten im Chat.
-- Vom Handy (Remote Control): nie von selbst. Dort gibt es keine Knöpfe, und
+- Vom Handy (Remote Control): nie von selbst. Dort gibt es keine Buttons, und
   nichts wartet. Der Vorschlag steht im ersten Satz der Antwort; `ja`, `ok`,
   `Okay` oder `/modellwahl ja` übernehmen ihn (10 Minuten lang). Ein `ja` geht
   trotzdem an Claude, falls es auch einer Frage galt.
@@ -33,7 +33,7 @@ Stellst du Modell oder Aufwand selbst um, zieht sich der Mod in diesem Chat zur�
 ## Befehle
 
 - `/modellwahl [Aufgabe | ja | nein]`: jetzt vorschlagen, übernehmen oder verwerfen.
-- `/modellwahl:uebernehmen`, `/modellwahl:ablehnen`: wie die Knöpfe.
+- `/modellwahl:uebernehmen`, `/modellwahl:ablehnen`: wie die Buttons.
 - `/modellwahl:zeigen`: Wahl, Grund, ob zurückgezogen, offener Vorschlag, Kalibrierung.
 - `/modellwahl:hilfe`: kurze Erklärung.
 - `/modellwahl:auto-an`, `/modellwahl:auto-aus`: Automatik nur für diesen Chat.
@@ -58,7 +58,7 @@ lehnt die eigene Sitzung ab. Deshalb schlägt er vor, und du kannst im Menü
 selbst wählen.
 
 Steht der Leitstand darüber, holt er die Zeile der Modellwahl ganz nach oben in
-sein Band, mit ihren Knöpfen.
+sein Band, mit ihren Buttons.
 
 Die Prozent-Schätzung lernt aus jeder Runde: Anstieg des 5-Stunden-Limits gegen
 die verbrauchten Tokens, umgerechnet auf Opus-Preise. Das Limit gilt für das

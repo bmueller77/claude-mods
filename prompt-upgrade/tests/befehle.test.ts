@@ -162,7 +162,7 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, ohne etwas zu tun', async 
         for (const arg of ['hilfe', '?', 'Hilfe']) {
             const text = await run($, name, arg)
             expect(text).toContain(`/${name}`)
-            for (const teil of ['Knopf:', 'Gilt:', 'Argumente:', 'Beispiel:']) {
+            for (const teil of ['Button:', 'Gilt:', 'Argumente:', 'Beispiel:']) {
                 expect(text).toContain(teil)
             }
         }

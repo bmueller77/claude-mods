@@ -88,13 +88,13 @@ export const BEFEHLE = [
         name: 'modellwahl:uebernehmen',
         description: 'Den offenen Vorschlag der Modellwahl sofort übernehmen',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:uebernehmen übernimmt den offenen Vorschlag sofort, wie der Knopf Übernehmen über der Eingabe oder /modellwahl ja.',
+        hilfe: '/modellwahl:uebernehmen übernimmt den offenen Vorschlag sofort, wie der Button Übernehmen über der Eingabe oder /modellwahl ja.',
     },
     {
         name: 'modellwahl:ablehnen',
         description: 'Den offenen Vorschlag der Modellwahl verwerfen; Modell und Aufwand bleiben',
         argumentHint: '[hilfe]',
-        hilfe: '/modellwahl:ablehnen verwirft den offenen Vorschlag, wie der Knopf Nein über der Eingabe oder /modellwahl nein. Modell und Aufwand bleiben, wie sie sind.',
+        hilfe: '/modellwahl:ablehnen verwirft den offenen Vorschlag, wie der Button Nein über der Eingabe oder /modellwahl nein. Modell und Aufwand bleiben, wie sie sind.',
     },
     {
         name: 'modellwahl:zeigen',

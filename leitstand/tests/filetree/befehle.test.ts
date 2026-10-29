@@ -157,7 +157,7 @@ test('jeder Befehl erklärt sich mit hilfe und ?, lang und kurz, und ändert nic
       for (const arg of ['hilfe', '?', 'Hilfe']) {
         const text = await run($, befehl, arg)
         expect(text.startsWith(`/${name}: `)).toBe(true)
-        for (const teil of ['\nWas: ', '\nKnopf: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:']) expect(text).toContain(teil)
+        for (const teil of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:']) expect(text).toContain(teil)
         expect(text.endsWith(`\nKurzform: /${kurz(name)}`)).toBe(true)
       }
     }

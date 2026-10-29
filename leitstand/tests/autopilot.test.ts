@@ -1077,7 +1077,7 @@ for (const b of AUTOPILOT_BEFEHLE) {
       for (const arg of ['hilfe', '?', ' Hilfe ']) {
         const t = await befehl$($ as never, name, arg)
         expect(t).toBe(befehlsHilfe(b))
-        for (const teil of [`/${b.name}: `, '\nWas: ', '\nKnopf: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:', `\nKurzform: /${kurzform(b.name)}`]) {
+        for (const teil of [`/${b.name}: `, '\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:', `\nKurzform: /${kurzform(b.name)}`]) {
           expect(t).toContain(teil)
         }
       }

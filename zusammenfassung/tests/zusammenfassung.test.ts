@@ -200,7 +200,7 @@ test('nach einer Arbeitsrunde: Kopf mit Chevron und Kreispfeil, zwei Zeilen, Tre
     }
 })
 
-test('die Zahl der Aenderungen steht im Kopf zwischen den Knoepfen', async ($, on) => {
+test('die Zahl der Aenderungen steht im Kopf zwischen den Buttons', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, [`${GETAN}
@@ -386,7 +386,7 @@ test('eine kurze Runde ohne Werkzeug kostet nichts und zeigt nichts', async ($, 
     expect(await leiste(ui as never)).toBe('engine')
 })
 
-test('der Chevron klappt auf: Erklaerung und Dateien, der Knopf zeigt nach oben', async ($, on) => {
+test('der Chevron klappt auf: Erklaerung und Dateien, der Button zeigt nach oben', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const { fragen } = boden(on, [ANTWORT_MODELL, 'Ausfuehrlich: Im Test fehlt die Flaeche der App.'])
@@ -712,7 +712,7 @@ for (const b of BEFEHLE) {
         for (const arg of ['hilfe', '?', ' Hilfe ']) {
             const t = await befehl($ as never, b.name, arg)
             expect(t).toBe(hilfeText(b))
-            for (const teil of [`/${b.name}: `, 'Knopf: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+            for (const teil of [`/${b.name}: `, 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
                 expect(t).toContain(teil)
             }
         }

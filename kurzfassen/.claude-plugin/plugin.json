@@ -1,7 +1,7 @@
 {
   "name": "kurzfassen",
-  "version": "0.1.0",
-  "description": "Kurzfassen als Skill: zuerst die nächste Handlung, nummerierte Schritte, keine Abschweifungen. Deutsche Fassung von i-have-adhd (Ayoub Ghriss, MIT); im Leitstand Kurzantworten mit dem Knopf 📖/📝.",
+  "version": "0.1.1",
+  "description": "Kurzfassen als Skill: zuerst die nächste Handlung, nummerierte Schritte, keine Abschweifungen. Deutsche Fassung von i-have-adhd (Ayoub Ghriss, MIT); im Leitstand Kurzantworten mit dem Button 📖/📝.",
   "author": { "name": "Björn Müller" },
   "license": "MIT"
 }

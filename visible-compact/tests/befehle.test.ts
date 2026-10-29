@@ -123,7 +123,7 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?', async ($, on) => {
     for (const arg of ['hilfe', '?', 'Hilfe']) {
       const text = await befehl($, name, arg)
       expect(text).toContain(`/${name}`)
-      for (const teil of ['Knopf:', 'Gilt:', 'Argumente:', 'Beispiel:']) expect(text).toContain(teil)
+      for (const teil of ['Button:', 'Gilt:', 'Argumente:', 'Beispiel:']) expect(text).toContain(teil)
     }
   }
   // Hilfe ändert nichts.
@@ -156,7 +156,7 @@ test('zeigen ohne Verdichtung sagt, was zu tun ist', async ($, on) => {
   expect(w.geoeffnet).toEqual([])
 })
 
-test('uebersetzen-an und -aus wirken wie der Knopf, nur in diesem Chat', async ($, on) => {
+test('uebersetzen-an und -aus wirken wie der Button, nur in diesem Chat', async ($, on) => {
   const w = welt(on)
   await start($)
   expect(await knoepfe($)).toContain('Übersetzen')

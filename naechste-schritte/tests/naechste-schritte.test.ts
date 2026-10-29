@@ -103,7 +103,7 @@ describe('naechste-schritte', () => {
         await ui.unmount()
     })
 
-    test('in der App stehen die Knoepfe einer je Zeile so weit auseinander, dass sie sich nicht ueberdecken', async ($, on) => {
+    test('in der App stehen die Buttons einer je Zeile so weit auseinander, dass sie sich nicht ueberdecken', async ($, on) => {
         engine(on, () => MODELL)
         await rundeFertig($)
         const ui = await band($, 50, 'desktop')
@@ -185,7 +185,7 @@ describe('naechste-schritte', () => {
         await ui.unmount()
     })
 
-    test('in der App Knoepfe 1 bis 3 ohne Hotkey, im Terminal keine', async ($, on) => {
+    test('in der App Buttons 1 bis 3 ohne Hotkey, im Terminal keine', async ($, on) => {
         engine(on, () => MODELL)
         await rundeFertig($)
         const app = await band($, 160, 'desktop')
@@ -225,15 +225,15 @@ describe('naechste-schritte', () => {
         return gefuellt
     }
 
-    test('ein Knopf holt den Vorschlag ins leere Feld', async ($, on) => {
+    test('ein Button holt den Vorschlag ins leere Feld', async ($, on) => {
         expect(await druecke($, on, '')).toEqual([{ text: 'Mach dasselbe fuer die Einstellungen', mode: 'replace' }])
     })
 
-    test('ein Knopf haengt an, was schon getippt ist', async ($, on) => {
+    test('ein Button haengt an, was schon getippt ist', async ($, on) => {
         expect(await druecke($, on, 'fix das ')).toEqual([{ text: 'Mach dasselbe fuer die Einstellungen', mode: 'append' }])
     })
 
-    test('ein Knopf setzt ein Leerzeichen zwischen Entwurf und Vorschlag', async ($, on) => {
+    test('ein Button setzt ein Leerzeichen zwischen Entwurf und Vorschlag', async ($, on) => {
         expect(await druecke($, on, 'fix das')).toEqual([{ text: ' Mach dasselbe fuer die Einstellungen', mode: 'append' }])
     })
 
@@ -251,7 +251,7 @@ describe('naechste-schritte', () => {
         expect(gesendet).toEqual([])
     })
 
-    test('in der App einzeilig, wenn das Band niedrig ist, auch mit Knoepfen', async ($, on) => {
+    test('in der App einzeilig, wenn das Band niedrig ist, auch mit Buttons', async ($, on) => {
         engine(on, () => MODELL)
         await rundeFertig($)
         const ui = await $.ui.mount({
@@ -367,7 +367,7 @@ describe('naechste-schritte: Befehle', () => {
             for (const arg of ['hilfe', '?', ' Hilfe ']) {
                 const t = await befehl($, b.name, arg)
                 expect(t).toBe(hilfeText(b))
-                for (const teil of [`/${b.name}: `, 'Knopf: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
+                for (const teil of [`/${b.name}: `, 'Button: ', 'Gilt: ', 'Argumente: ', 'Beispiel: /']) {
                     expect(t).toContain(teil)
                 }
             }

@@ -9,7 +9,7 @@ Alle Befehle der Mods aus bjoern-mods, je Mod. Die Grundbefehle ohne Doppelpunkt
 
 ## Leitstand
 
-Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teambericht, dazu die Schalter in der Knopfzeile und die Einstellungen. Seit 2026-10-26 gehören Selbstkritik und Regeln (früher der Mod Reflect), Dateien (früher Filetree) und der Autopilot dazu. Bis auf `an`, `aus`, `hilfe` und `vermenschlichen` geht jeder Befehl auch ohne `leitstand:` davor, etwa `/pause`, `/selbstkritik` oder `/autopilot-an`.
+Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teambericht, dazu die Schalter in der Button-Zeile und die Einstellungen. Seit 2026-10-26 gehören Selbstkritik und Regeln (früher der Mod Reflect), Dateien (früher Filetree) und der Autopilot dazu. Bis auf `an`, `aus`, `hilfe` und `vermenschlichen` geht jeder Befehl auch ohne `leitstand:` davor, etwa `/pause`, `/selbstkritik` oder `/autopilot-an`.
 
 | Befehl | Was er tut |
 |---|---|
@@ -26,7 +26,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:an` | Leitstand einschalten |
 | `/leitstand:aus` | Leitstand ausschalten |
 | `/leitstand:tour` | Die Begrüßung noch mal zeigen |
-| `/leitstand:knoepfe-zeigen` | Die Knöpfe des Leitstands erklären |
+| `/leitstand:buttons-zeigen` | Die Buttons des Leitstands erklären |
 
 ### Ansicht
 
@@ -245,7 +245,7 @@ Schlägt einmal je Aufgabe Modell und Aufwand vor. Am Rechner gilt der Vorschlag
 
 ## kurzfassen
 
-Kurzfassen als Skill, die deutsche Fassung von i-have-adhd: zuerst die nächste Handlung, dann nummerierte Schritte. Er bringt nur einen Skill mit, keine Befehle. Ein- und ausgeschaltet wird er im Leitstand mit `/kurzantworten-an` und `/kurzantworten-aus` oder dem Knopf 📖/📝, oder direkt mit `/kurzfassen:kurzfassen` und "Kurzfassen aus".
+Kurzfassen als Skill, die deutsche Fassung von i-have-adhd: zuerst die nächste Handlung, dann nummerierte Schritte. Er bringt nur einen Skill mit, keine Befehle. Ein- und ausgeschaltet wird er im Leitstand mit `/kurzantworten-an` und `/kurzantworten-aus` oder dem Button 📖/📝, oder direkt mit `/kurzfassen:kurzfassen` und "Kurzfassen aus".
 
 ## i-have-adhd
 

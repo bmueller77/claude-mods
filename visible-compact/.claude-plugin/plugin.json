@@ -1,7 +1,7 @@
 {
   "name": "visible-compact",
   "displayName": "Visible Compact",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Zeigt den Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf Wunsch ins Deutsche übersetzt; /show-last-compact öffnet es wieder. Deutsche Fassung von visible-compact (MIT, Sravan).",
   "author": {
     "name": "Sravan",
@@ -23,7 +23,7 @@
     "uebersetzen": {
       "type": "boolean",
       "title": "Übersetzen",
-      "description": "Zeigt englische Abschnitte im Fenster auf Deutsch. Standard für neue Chats; der Knopf Übersetzen schaltet nur im Chat um.",
+      "description": "Zeigt englische Abschnitte im Fenster auf Deutsch. Standard für neue Chats; der Button Übersetzen schaltet nur im Chat um.",
       "default": false
     },
     "storage": {

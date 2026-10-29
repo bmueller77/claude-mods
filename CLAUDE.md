@@ -82,7 +82,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Desktop-App: Denkblöcke, die in der Ansicht Normal offen bleiben und sich auch mit ▾ nicht zuklappen
   lassen (gesehen 2026-10-28 in einigen Chats, etwa mit Fable), sind ein Fehler der App. Kein Mod fasst
   Denkblöcke an.
-- Jeder Knopf hat einen Befehl. `hilfe` hinter jedem Befehl erklärt ihn, größere Aktionen wollen `ja`.
+- Jeder Button hat einen Befehl. `hilfe` hinter jedem Befehl erklärt ihn, größere Aktionen wollen `ja`.
   Leitstand seit 0.56.0 (Björns Wunsch, Anthropics Schreibweise): Langform `/leitstand:<funktion>`
   als Markdown-Datei in `leitstand/commands/` (die App setzt `leitstand:` davor; ein Name mit
   Doppelpunkt lässt sich nicht registrieren), beantwortet vom `command.run`-Hook, der `e.command`
@@ -92,10 +92,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   (`/leitstand-pause`, `/adhs-an`) nennen nur den neuen (`ALTE_BEFEHLE`). Die Skill-Suche
   (`lookUpCommand`) übergeht `leitstand:…`, sonst fände `:vermenschlichen` den eigenen Befehl.
   Ungeprüft: ob `/leitstand:pause` mitten in einer Runde sofort wirkt (Markdown-Befehle haben kein
-  `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten, Knopf 📖 (aus) und 📝 (an), seit 0.56.1.
-  Seit 0.61.0 startet der Knopf den Skill `kurzfassen:kurzfassen` (Rückfall `i-have-adhd`), aus mit
+  `immediate`); die Kurzform tut es. Der ADHS-Modus heißt im Leitstand Kurzantworten, Button 📖 (aus) und 📝 (an), seit 0.56.1.
+  Seit 0.61.0 startet der Button den Skill `kurzfassen:kurzfassen` (Rückfall `i-have-adhd`), aus mit
   "Kurzfassen aus" oder "normal antworten"; die Ansicht Ausführlich heißt Detailliert.
-- Terminal-Band seit leitstand 0.61.0 (Björns Wunsch): dieselben Knöpfe an denselben Plätzen wie in der App.
+- Terminal-Band seit leitstand 0.61.0 (Björns Wunsch): dieselben Buttons an denselben Plätzen wie in der App.
   Zeichen im Terminal nur einzellige Nicht-Emoji oder ein Codepoint mit Emoji_Presentation, nie U+FE0F oder
   U+200D; deshalb dort 👤/👥, 🤖, 🔥, 🔐, 🔧, 📡 statt der App-Zeichen. Ein nacktes ⚙ (U+2699) zeichnet
   Windows Terminal zwei Zellen breit, die Lücke dahinter verschwindet.
@@ -112,7 +112,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Die Hooks eines Mods liegen in der Reihenfolge ihrer Anmeldung, die erste außen: Der Leitstand
   meldet sich vor seinen Teilen an und holt so die Zeile des Autopiloten nach oben.
 - Ein `$.command.run` eines Mods erreicht dessen eigene `command.run`-Hooks nicht, auch nicht die seiner
-  Teile (Re-entry-Regel, im Test-Kit geprüft 2026-10-26). Ein Knopf des Leitstands, der etwas eines Teils
+  Teile (Re-entry-Regel, im Test-Kit geprüft 2026-10-26). Ein Button des Leitstands, der etwas eines Teils
   auslöst, läuft deshalb über einen `ui.press`-Hook im Teil (`{ plugin: 'leitstand', element: '<Key>' }`,
   so bei 🪞 und 🅰️; sofort, auch mitten in einer Runde), oder der Leitstand tut es selbst (📂 öffnet das
   Fenster `leitstand-dateien` direkt). Je Ereignis darf ein Mod nur einen Hook ohne Matcher haben, die Hooks
@@ -149,22 +149,22 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Engine setzt den Mod-Ordner davor, Test-Attrappen müssen das abschneiden.
 - Oberflächen: Das Band über der Eingabe (`AbovePrompt`) zeichnen laut API nur Terminal und
   Desktop-App, ein Fenster (`Pane`) jede Oberfläche.
-- Desktop-App: Jeder Mod-Knopf bekommt denselben Innenabstand (`padding: 0 pad.md`, Höhe `h.control`),
+- Desktop-App: Jeder Mod-Button bekommt denselben Innenabstand (`padding: 0 pad.md`, Höhe `h.control`),
   `plain` auch. Kein Prop macht ihn schmaler oder quadratisch, eine schmale Box drumherum auch nicht.
   Die App rechnet Box-Breiten in `ch`, Höhen in `lh` und Lücken in `ch`, Bruchteile gehen (gelesen
   im Oberflächen-Skript der App, 2026-10-27). Platz schaffen deshalb nur Lücken: Der Leitstand setzt
-  seine Knöpfe seit 0.57.1 eine halbe Zelle auseinander.
+  seine Buttons seit 0.57.1 eine halbe Zelle auseinander.
 - Desktop-App, Band: Senkrechte Zahlen (`marginTop`, `rowGap`, …) zählen halbe Zeilen (10 px), Tokens
-  wie `'xs'` gehen auch. Ein Knopf zählt eine Zeile (20 px), ist aber 28 px hoch und ragt 4 px darüber
-  und darunter (negativer `margin-block`). Zwei Knopfzeilen direkt untereinander berühren sich, eine
-  7-px-Trennlinie daneben verschwindet unter dem Knopf. Seit leitstand 0.57.2, statistik 0.18.2,
+  wie `'xs'` gehen auch. Ein Button zählt eine Zeile (20 px), ist aber 28 px hoch und ragt 4 px darüber
+  und darunter (negativer `margin-block`). Zwei Button-Zeilen direkt untereinander berühren sich, eine
+  7-px-Trennlinie daneben verschwindet unter dem Button. Seit leitstand 0.57.2, statistik 0.18.2,
   zusammenfassung 0.7.1 und naechste-schritte 0.4.1: Trennlinien 15 px (Linie in der Mitte), zwischen
-  Knopfzeilen 1.2 halbe Zeilen (4 px frei).
+  Button-Zeilen 1.2 halbe Zeilen (4 px frei).
 - Am PC kommt bjoern-mods seit 2026-10-19 von GitHub (Klon unter
   `~/.claude/plugins/marketplaces/bjoern-mods`). Der alte Ordner `~/.claude/mods` bleibt liegen,
   wird aber nicht mehr gelesen. Vorher stand der GitHub-Eintrag in `settings.json` eine Ebene zu tief,
   und das `add` hatte nicht gegriffen. Nach jedem Umstellen `claude plugin marketplace list` ansehen.
-- Desktop-App: Solange sie am Rundenende das Feld "nächster Schritt" mit einer Frage und Knöpfen
+- Desktop-App: Solange sie am Rundenende das Feld "nächster Schritt" mit einer Frage und Buttons
   zeigt, ist das ganze Band über der Eingabe ausgeblendet. Mit der nächsten Runde ist es wieder da.
   Das ist kein Mod-Fehler (Live-Test 2026-10-19). Soll Björn das Band sehen, die Runde ohne Frage
   abschließen.
@@ -193,7 +193,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 
 ## Offen (Stand 2026-10-26, nach dem Live-Test am PC)
 
-1. Live-Test am PC (2026-10-19). Es klappen: Knopf-Befehle (`/leitstand-hilfe`, Verdecken an/aus,
+1. Live-Test am PC (2026-10-19). Es klappen: Button-Befehle (`/leitstand-hilfe`, Verdecken an/aus,
    `hilfe`, `ja`-Abfrage), automatische Modellwahl im neuen Chat samt Statuszeile,
    Prompt-Upgrade-Automatik (App-Nachricht wird angehalten, Fenster mit Rückfragen, `>` geht direkt
    raus), Reflect-Band nach einer Korrektur, Berliner Zeit in Statistik (WL "So 02:00") und Verlauf.
@@ -228,7 +228,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 7. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.
 8. Live-Test ausstehend: leitstand 0.61.0 im echten Terminal (Breite der Zeichen, ob ❓ zwei Zellen zählt,
-   Umbruch der Knopfzeile, Leuchten auf `suggestion`) und Kurzfassen per 📖/📝.
+   Umbruch der Button-Zeile, Leuchten auf `suggestion`) und Kurzfassen per 📖/📝.
 9. Leitstand (gesehen 2026-10-28): Endet eine Runde, während Helfer im Hintergrund laufen, hakt er den Plan
    als Fertig ab, und der Rest braucht eine neue Freigabe. Der Passwortschutz hielt am selben Tag
    vermutlich zweimal den Bericht eines Helfers als Eingabe zurück; der Bericht kam nicht an, und Björn

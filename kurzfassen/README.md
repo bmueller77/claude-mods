@@ -11,7 +11,7 @@ Ein Skill für kurze, handlungsnahe Antworten. Das tut er, solange er an ist:
 
 ## Einschalten
 
-`/kurzfassen:kurzfassen`, oder im Leitstand der Knopf 📖/📝 "Kurzantworten".
+`/kurzfassen:kurzfassen`, oder im Leitstand der Button 📖/📝 "Kurzantworten".
 
 ## Ausschalten
 

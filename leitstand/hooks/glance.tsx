@@ -165,11 +165,11 @@ const APPROVE_ALWAYS = 'An (in der Gruppenarbeit immer)'
 /** The welcome, three short cards the first time: what the checklist is, what Needs you means, where the rest lives. */
 const TOUR_FIRST = 'Hier erscheint eine Checkliste, wenn du Claude um etwas mit mehreren Schritten bittest: jeder Schritt, wie weit er ist und wie lange es noch etwa dauert.'
 const TOUR_LAST =
-  'Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Schraubenschlüssel findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
+  'Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR = [TOUR_FIRST, tourNeeds('in Gelb'), TOUR_LAST]
 /** Elsewhere than the terminal the words keep the text colour and the yellow is the question mark beside them. */
 const TOUR_LAST_VECTOR =
-  'Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
+  'Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Zahnrad findest du alle Optionen. Der Verlauf unten zeigt deine früheren Aufträge und Deine Woche. Um diese Begrüßung noch mal zu sehen, schreib /tour.'
 const TOUR_VECTOR = [TOUR_FIRST, tourNeeds('neben einem gelben Fragezeichen'), TOUR_LAST_VECTOR]
 /** The settings button beside the view elsewhere than the terminal: a gear, drawn as an emoji (U+FE0F), as wide as the other sign buttons. */
 const GEAR = '\u2699\uFE0F'
@@ -231,7 +231,7 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
     place: 'Oben rechts',
     buttons: [
       { sign: '\u25BE', name: 'Ansicht', does: 'Einfach zeigt Schritte und Fortschritt, Detailliert dazu Zeit und Tokens, Minimal nur eine Zeile.', command: '/leitstand:ansicht-einfach' },
-      { sign: HELP, name: 'Kn\u00F6pfe', does: 'Dieses Fenster: was jeder Knopf tut.', command: '/leitstand:knoepfe-zeigen' },
+      { sign: HELP, name: 'Buttons', does: 'Dieses Fenster: was jeder Button tut.', command: '/leitstand:buttons-zeigen' },
       { sign: GEAR, name: 'Einstellungen', does: '\u00D6ffnet die Einstellungen des Leitstands.', command: '/leitstand:einstellungen-zeigen' },
     ],
   },
@@ -278,7 +278,7 @@ export function buttonHelpText(): string {
   const places = BUTTON_HELP.map(({ place, buttons }) =>
     [place, ...buttons.map(one => `${one.sign ? `${one.sign} ` : ''}${one.name}: ${one.does}${one.command ? ` (${one.command})` : ''}`)].join('\n'),
   )
-  return ['Die Kn\u00F6pfe des Leitstands:', ...places].join('\n\n')
+  return ['Die Buttons des Leitstands:', ...places].join('\n\n')
 }
 const HANDOFF_KEY = 'lastHandoff'
 // Below METER_MIN_COLUMNS the bars go, so step names keep their room.
@@ -2188,7 +2188,7 @@ const resetSettings = async ($: $) => {
 }
 
 const showSettings = ($: $) => $.ui.open({ id: SETTINGS_PANE, title: 'Leitstand-Einstellungen', closeOnEscape: true })
-const showButtonHelp = ($: $) => $.ui.open({ id: HELP_PANE, title: 'Leitstand-Knöpfe', closeOnEscape: true })
+const showButtonHelp = ($: $) => $.ui.open({ id: HELP_PANE, title: 'Leitstand-Buttons', closeOnEscape: true })
 
 /** The one button: Simple → Detailliert → Minimal → Simple; from Off back to Simple. Off is in Settings and /leitstand off. */
 const cycleMode = async ($: $, isEnabled: boolean, detail: 'simple' | 'detailed' | 'minimal') => {
@@ -2305,7 +2305,7 @@ function answerOf(text: string): string {
 // zu sehen sind, sagt die Antwort das oder bringt den Inhalt selbst mit.
 
 const NUR_HIER = '(nur in diesem Chat)'
-const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Knopf im Leitstand.'
+const BEFEHL_FEHLER = 'Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Button im Leitstand.'
 const COMPACTING_WORDS = 'Der Chat wird gerade aufgeräumt. Versuch es gleich noch einmal.'
 // The skill behind 📖/📝 (Kurzantworten) is ADHD_NAMES, beside its toggle.
 const ANSICHT_WORTE = { simple: 'Einfach', detailed: 'Detailliert', minimal: 'Minimal' } as const
@@ -2598,9 +2598,9 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
     case 'leitstand:nachricht-verwerfen':
       return (await discardHeld($, false)) ? 'Die zurückgehaltene Nachricht ist verworfen.' : NICHTS_ZURUECKGEHALTEN
 
-    case 'leitstand:knoepfe-zeigen':
+    case 'leitstand:buttons-zeigen':
       imHintergrund(() => showButtonHelp($))
-      return isPhone ? buttonHelpText() : 'Die Erklärung der Knöpfe ist in der Seitenleiste.'
+      return isPhone ? buttonHelpText() : 'Die Erklärung der Buttons ist in der Seitenleiste.'
 
     case 'leitstand:einstellungen-zeigen':
       imHintergrund(() => showSettings($))
@@ -2945,7 +2945,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         await setShipOnGithub($, isOn)
         return {
           text: isOn
-            ? 'Ein fertiger Auftrag bietet jetzt den Knopf Push an: Commit, Pull Request und Merge, sobald du freigibst.'
+            ? 'Ein fertiger Auftrag bietet jetzt den Button Push an: Commit, Pull Request und Merge, sobald du freigibst.'
             : 'Auf GitHub abschließen ist aus. Fertige Aufträge bleiben auf ihrem Branch.',
         }
       }
@@ -3996,8 +3996,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           ships ? 'An' : 'Aus',
           choice('ship', [['off', 'Aus'], ['on', 'An']], ships ? 'on' : 'off', value => setShipOnGithub($, value === 'on')),
           ships
-            ? 'Ein fertiger Auftrag bietet den Knopf Push an: Claude räumt die Änderungen auf, öffnet einen Pull Request und mergt, sobald du freigibst.'
-            : 'Fertige Aufträge bleiben auf ihrem Branch. Schalte das ein, um in GitHub-Projekten den Knopf Push zu bekommen.',
+            ? 'Ein fertiger Auftrag bietet den Button Push an: Claude räumt die Änderungen auf, öffnet einen Pull Request und mergt, sobald du freigibst.'
+            : 'Fertige Aufträge bleiben auf ihrem Branch. Schalte das ein, um in GitHub-Projekten den Button Push zu bekommen.',
         )}
         {group(
           'guard',

@@ -470,7 +470,7 @@ test('/modellwahl nein, /modellwahl:ablehnen und /modellwahl:uebernehmen', async
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
 })
 
-test('Band in der App: Vorschlag mit Countdown, Übernehmen per Knopf', async ($, on) => {
+test('Band in der App: Vorschlag mit Countdown, Übernehmen per Klick', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { antworten: [wahlJson('opus', 'high')] })
@@ -497,7 +497,7 @@ test('Band in der App: Vorschlag mit Countdown, Übernehmen per Knopf', async ($
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
 })
 
-test('Band: Nein verwirft, das Modell aus dem Menü bleibt; im Terminal schlichte Knöpfe', async ($, on) => {
+test('Band: Nein verwirft, das Modell aus dem Menü bleibt; im Terminal schlichte Buttons', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { antworten: [wahlJson('opus', 'high')] })

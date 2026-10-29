@@ -4945,7 +4945,7 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
     expect((await texts($, 'terminal', 120)).join('\n')).toContain(card)
   }
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('✓ Verstanden')
-  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Oben rechts erklärt das Fragezeichen die Knöpfe, hinter dem Schraubenschlüssel findest du alle Optionen.')
+  expect((await texts($, 'terminal', 120)).join('\n')).toContain('Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du alle Optionen.')
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Unten unter Einstellungen')
   const last = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await last.press({ key: 'tour-next' })
@@ -6192,7 +6192,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(row?.props.marginTop).toBeUndefined()
   })
 
-  test('❓ steht links neben dem Zahnrad und öffnet das Fenster Leitstand-Knöpfe, in der App und im Terminal', async ($, on) => {
+  test('❓ steht links neben dem Zahnrad und öffnet das Fenster Leitstand-Buttons, in der App und im Terminal', async ($, on) => {
     const opened: string[] = []
     on('ui.open', (_, e) => {
       opened.push(e.id)
@@ -6216,7 +6216,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await terminalHeaderRight($)).toEqual(['toggle', 'help', 'settings'])
   })
 
-  test('das Fenster Leitstand-Knöpfe nennt jeden Knopf, den das Band zeigt, in beiden Arbeitsweisen', async ($, on) => {
+  test('das Fenster Leitstand-Buttons nennt jeden Button, den das Band zeigt, in beiden Arbeitsweisen', async ($, on) => {
     await skillWorld($, on)
     const labels = async () => {
       const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -6236,13 +6236,13 @@ describe('Arbeitsweise und Grill mich', () => {
       component: 'Pane',
       requestId: 'leitstand-knoepfe',
       surface: 'desktop',
-      props: { title: 'Leitstand-Knöpfe', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} },
+      props: { title: 'Leitstand-Buttons', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} },
     })
     const text = (await pane.findAll({ type: 'Text' })).map(one => one.text).join('\n')
     await pane.unmount()
     expect(shown.length).toBeGreaterThan(20)
     for (const label of new Set(shown)) expect(text).toContain(label)
-    expect(text).toContain('/leitstand:knoepfe-zeigen')
+    expect(text).toContain('/leitstand:buttons-zeigen')
   })
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
@@ -7229,7 +7229,7 @@ describe('Arbeitsweise und Grill mich', () => {
     ])
   })
 
-  test('das Fenster Leitstand-Knöpfe nennt im Terminal die Zeichen des Terminals, in der App die der App', async ($, on) => {
+  test('das Fenster Leitstand-Buttons nennt im Terminal die Zeichen des Terminals, in der App die der App', async ($, on) => {
     world(on)
     const paneOn = async (surface: (typeof SURFACES)[number]) => {
       const pane = await $.ui.mount({
@@ -7237,7 +7237,7 @@ describe('Arbeitsweise und Grill mich', () => {
         component: 'Pane',
         requestId: 'leitstand-knoepfe',
         surface,
-        props: { title: 'Leitstand-Knöpfe', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} },
+        props: { title: 'Leitstand-Buttons', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 80 }, view: {} },
       })
       const text = (await pane.findAll({ type: 'Text' })).map(one => one.text).join('\n')
       await pane.unmount()
@@ -9201,7 +9201,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       for (const ask of ['hilfe', '?', ' Hilfe ']) {
         const help = await run($, one.name, ask)
         expect(help.startsWith(`/${one.name}: ${one.description}\n`)).toBe(true)
-        for (const part of ['\nWas: ', '\nKnopf: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:']) expect(help).toContain(part)
+        for (const part of ['\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: ', '\nBeispiel: /leitstand:']) expect(help).toContain(part)
         if (one.gilt !== 'einmal') expect(help).toContain('nur in diesem Chat')
       }
     }
@@ -9234,8 +9234,13 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(await run($, 'ansicht-ausfuehrlich')).toBe(detailliert)
     expect(await run($, 'leitstand-ansicht-ausfuehrlich')).toBe(detailliert)
     expect(await run($, 'leitstand:ansicht-ausfuehrlich')).toBe(detailliert)
+    // Knöpfe became Buttons: the same for knoepfe-zeigen.
+    const buttons = 'Der Befehl heißt jetzt /leitstand:buttons-zeigen, kurz /buttons-zeigen.'
+    expect(await run($, 'knoepfe-zeigen')).toBe(buttons)
+    expect(await run($, 'leitstand-knoepfe-zeigen')).toBe(buttons)
+    expect(await run($, 'leitstand:knoepfe-zeigen')).toBe(buttons)
     expect(await stateOf($, 'detailLevel')).not.toBe('detailed')
-    expect(registered.find(one => one.name.startsWith('leitstand-') || one.name.startsWith('adhs-') || one.name.endsWith('-ausfuehrlich'))).toBeUndefined()
+    expect(registered.find(one => one.name.startsWith('leitstand-') || one.name.startsWith('adhs-') || one.name.endsWith('-ausfuehrlich') || one.name.startsWith('knoepfe-'))).toBeUndefined()
     // Asking for help changes nothing.
     expect(await stateOf($, 'glanceEnabled')).toBe(true)
     expect(await stateOf($, 'masksPrivate')).toBe(true)
@@ -9450,19 +9455,19 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(opened.at(-1)).toBe('leitstand-settings')
   })
 
-  test('/leitstand:knoepfe-zeigen öffnet am Computer das Fenster, vom Handy kommt die Erklärung als Text; jeder genannte Befehl gibt es', async ($, on) => {
+  test('/leitstand:buttons-zeigen öffnet am Computer das Fenster, vom Handy kommt die Erklärung als Text; jeder genannte Befehl gibt es', async ($, on) => {
     world(on)
     const opened: string[] = []
     on('ui.open', (_, e) => {
       opened.push(String((e as { id?: string }).id))
       return { value: { isPlaced: true } } as never
     })
-    expect(await run($, 'leitstand:knoepfe-zeigen')).toBe('Die Erklärung der Knöpfe ist in der Seitenleiste.')
+    expect(await run($, 'leitstand:buttons-zeigen')).toBe('Die Erklärung der Buttons ist in der Seitenleiste.')
     await settle()
     expect(opened).toEqual(['leitstand-knoepfe'])
-    const phone = await run($, 'leitstand:knoepfe-zeigen', '', 'bridge')
-    expect(phone.startsWith('Die Knöpfe des Leitstands:\n\nOben rechts\n')).toBe(true)
-    expect(phone).toContain('\u2753 Knöpfe: Dieses Fenster')
+    const phone = await run($, 'leitstand:buttons-zeigen', '', 'bridge')
+    expect(phone.startsWith('Die Buttons des Leitstands:\n\nOben rechts\n')).toBe(true)
+    expect(phone).toContain('\u2753 Buttons: Dieses Fenster')
     expect(phone).toContain('\u{1F468}\u200D\u{1F4BC} Auto-Modus: ')
     expect(phone).toContain('Neuer Chat: ')
     const named = [...phone.matchAll(/\((\/leitstand:[a-z-]+)\)/g)].map(one => one[1]?.slice(1))
@@ -9507,7 +9512,7 @@ describe('Eigene Befehle /leitstand-…', () => {
     })
     expect(await run($, 'leitstand:plan-starten')).toBe('Gerade wartet kein Plan auf Start.')
     expect(await run($, 'leitstand:pause')).toBe('Gerade läuft nichts, das sich anhalten ließe.')
-    expect(await run($, 'leitstand:verlauf-zeigen')).toBe('Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Knopf im Leitstand.')
+    expect(await run($, 'leitstand:verlauf-zeigen')).toBe('Das hat gerade nicht geklappt. Versuch es gleich noch einmal oder nimm den Button im Leitstand.')
   })
 
   test('der Vorsatz-Hook hängt die Herkunft auch an die Antwort eines neuen Befehls', async ($, on) => {

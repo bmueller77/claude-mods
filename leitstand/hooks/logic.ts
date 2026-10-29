@@ -1686,18 +1686,18 @@ const ja = (name: string) => ({ ...JA, beispiel: `/${name} ja` })
 
 /** Die Befehle des Leitstands selbst, in der Reihenfolge der Übersicht. /leitstand bleibt daneben als Kurzform. */
 const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
-  befehl('Allgemein', 'leitstand:hilfe', 'Alle Leitstand-Befehle im Überblick', 'Listet alle Leitstand-Befehle auf, nach Gruppen, je mit einer Zeile.', 'Keiner; die Knöpfe stehen im Leitstand über dem Eingabefeld.', 'einmal'),
+  befehl('Allgemein', 'leitstand:hilfe', 'Alle Leitstand-Befehle im Überblick', 'Listet alle Leitstand-Befehle auf, nach Gruppen, je mit einer Zeile.', 'Keiner; die Buttons stehen im Leitstand über dem Eingabefeld.', 'einmal'),
   befehl('Allgemein', 'leitstand:an', 'Leitstand einschalten', 'Schaltet den Leitstand über dem Eingabefeld ein.', 'Einstellungen › Ansicht (Einfach, Detailliert oder Minimal)', 'einstellung'),
   befehl('Allgemein', 'leitstand:aus', 'Leitstand ausschalten', 'Schaltet den Leitstand aus; alle Werkzeug-Details sind dann wieder zu sehen.', 'Einstellungen › Ansicht › Aus', 'einstellung'),
   befehl('Allgemein', 'leitstand:tour', 'Die Begrüßung noch mal zeigen', 'Zeigt die Begrüßung über dem Eingabefeld noch einmal; mit Weiter gehst du sie durch.', 'Keiner; die Begrüßung erscheint beim ersten Start von selbst.', 'einmal'),
-  befehl('Allgemein', 'leitstand:knoepfe-zeigen', 'Die Knöpfe des Leitstands erklären', 'Öffnet ein Fenster, das jeden Knopf des Leitstands mit seinem Zeichen und seinem Befehl erklärt; auf dem Handy als Text.', '❓ links neben dem Zahnrad', 'einmal'),
+  befehl('Allgemein', 'leitstand:buttons-zeigen', 'Die Buttons des Leitstands erklären', 'Öffnet ein Fenster, das jeden Button des Leitstands mit seinem Zeichen und seinem Befehl erklärt; auf dem Handy als Text.', '❓ links neben dem Zahnrad', 'einmal'),
 
   befehl('Ansicht', 'leitstand:ansicht-einfach', 'Ansicht Einfach: Schritte und Fortschritt', 'Der Leitstand zeigt die Schritte und den Fortschritt.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Einfach', 'einstellung'),
   befehl('Ansicht', 'leitstand:ansicht-detailliert', 'Ansicht Detailliert: dazu Zeit und Tokens', 'Der Leitstand zeigt dazu Zeit, Tokens und Cache.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Detailliert', 'einstellung'),
   befehl('Ansicht', 'leitstand:ansicht-minimal', 'Ansicht Minimal: eine Zeile', 'Der Leitstand zeigt eine Zeile mit Stand, Fortschritt, Restzeit und Tokens.', 'Ansichts-Menü im Leitstand oder Einstellungen › Ansicht › Minimal', 'einstellung'),
 
-  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-auto', 'Auto-Modus: Claude entscheidet selbst über Helfer', 'Claude entscheidet selbst, ob und welche Helfer es einsetzt.', 'Modus-Menü in der Knopfzeile oder Einstellungen › Arbeitsweise › Auto-Modus', 'einstellung'),
-  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-gruppenarbeit', 'Gruppenarbeit: Claude leitet, Arbeiter setzen um', 'Claude plant und prüft, Arbeiter in sechs Stufen setzen um. Jeder Plan wartet auf deine Freigabe.', 'Modus-Menü in der Knopfzeile oder Einstellungen › Arbeitsweise › Gruppenarbeit', 'einstellung'),
+  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-auto', 'Auto-Modus: Claude entscheidet selbst über Helfer', 'Claude entscheidet selbst, ob und welche Helfer es einsetzt.', 'Modus-Menü in der Button-Zeile oder Einstellungen › Arbeitsweise › Auto-Modus', 'einstellung'),
+  befehl('Arbeitsweise', 'leitstand:arbeitsmodus-gruppenarbeit', 'Gruppenarbeit: Claude leitet, Arbeiter setzen um', 'Claude plant und prüft, Arbeiter in sechs Stufen setzen um. Jeder Plan wartet auf deine Freigabe.', 'Modus-Menü in der Button-Zeile oder Einstellungen › Arbeitsweise › Gruppenarbeit', 'einstellung'),
 
   befehl('Auftrag', 'leitstand:plan-starten', 'Den wartenden Plan starten', 'Startet den Plan, der auf deine Freigabe wartet. Wartet keiner, sagt der Befehl das.', 'Start', 'einmal'),
   befehl('Auftrag', 'leitstand:pause', 'Claude anhalten', 'Hält Claude mitten im Auftrag an; mit /leitstand:weiter geht es dort weiter.', 'Pause', 'einmal'),
@@ -1748,7 +1748,7 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Einstellungen', 'leitstand:ruhemodus-aus', 'Ruhemodus ausschalten', 'Balken und Kreisel bewegen sich wieder, während Claude arbeitet.', 'Einstellungen › Ruhemodus', 'einstellung'),
   befehl('Einstellungen', 'leitstand:plan-freigeben-an', 'Plan zuerst freigeben: an', 'Claude zeigt erst seinen Plan und wartet auf Start oder eine Änderung. In der Gruppenarbeit gilt das immer.', 'Einstellungen › Plan zuerst freigeben', 'einstellung'),
   befehl('Einstellungen', 'leitstand:plan-freigeben-aus', 'Plan zuerst freigeben: aus', 'Claude legt direkt los, sobald der Plan steht. In der Gruppenarbeit geht das nicht.', 'Einstellungen › Plan zuerst freigeben', 'einstellung'),
-  befehl('Einstellungen', 'leitstand:github-abschluss-an', 'Auf GitHub abschließen: an', 'Ein fertiger Auftrag in einem GitHub-Projekt bietet den Knopf Push an.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
+  befehl('Einstellungen', 'leitstand:github-abschluss-an', 'Auf GitHub abschließen: an', 'Ein fertiger Auftrag in einem GitHub-Projekt bietet den Button Push an.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
   befehl('Einstellungen', 'leitstand:github-abschluss-aus', 'Auf GitHub abschließen: aus', 'Fertige Aufträge bleiben auf ihrem Branch.', 'Einstellungen › Auf GitHub abschließen', 'einstellung'),
   befehl('Einstellungen', 'leitstand:zuruecksetzen', 'Einstellungen auf den Standard zurücksetzen', 'Setzt alle Leitstand-Einstellungen dieses Chats auf den Standard aus dem Einstellungsmenü zurück.', 'Einstellungen › Auf Standard zurücksetzen', 'chat'),
 ]
@@ -1800,15 +1800,19 @@ const UMGEZOGEN: Readonly<Record<string, string>> = {
   'letzter-stand-zeigen': 'statistik:letzter-stand-zeigen',
 }
 
-/** Umbenannt am 2026-10-26: der ADHS-Modus heißt Kurzantworten; am 2026-10-28: die Ansicht Ausführlich heißt Detailliert. */
+/**
+ * Umbenannt am 2026-10-26: der ADHS-Modus heißt Kurzantworten; am 2026-10-28: die Ansicht Ausführlich heißt Detailliert;
+ * am 2026-10-29: die Knöpfe heißen Buttons.
+ */
 const UMBENANNT: Readonly<Record<string, string>> = {
   'adhs-an': 'kurzantworten-an',
   'adhs-aus': 'kurzantworten-aus',
   'ansicht-ausfuehrlich': 'ansicht-detailliert',
+  'knoepfe-zeigen': 'buttons-zeigen',
 }
 
 /** Umbenannte, die es schon als /leitstand:… gab: Auch die Langform aus alter Gewohnheit nennt den neuen Namen. */
-const UMBENANNT_LANG: readonly string[] = ['ansicht-ausfuehrlich']
+const UMBENANNT_LANG: readonly string[] = ['ansicht-ausfuehrlich', 'knoepfe-zeigen']
 
 /**
  * Die alten Namen bis leitstand 0.55: /leitstand-pause und /adhs-an, dazu die der Teile aus ihrer Zeit als eigene
@@ -1850,7 +1854,7 @@ export function befehlsHilfe(one: LeitstandBefehl): string {
   return [
     `/${one.name}: ${one.description}`,
     `Was: ${one.tut}`,
-    `Knopf: ${one.knopf}`,
+    `Button: ${one.knopf}`,
     `Gilt: ${GILT[one.gilt]}`,
     `Argumente: ${one.argumente === '' ? 'keine' : one.argumente} Mit hilfe (oder ?) zeigt er diese Hilfe.`,
     `Beispiel: ${one.beispiel}`,

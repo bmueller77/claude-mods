@@ -57,7 +57,7 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
    (install.sh im Repo tut dasselbe.)
 5. Nur in der Claude-Desktop-App: In ~/.claude/settings.json unter permissions.allow den Eintrag
    "mcp__ccd_session_mgmt__set_remote_control" ergänzen, vorhandene Einträge behalten. Sonst
-   lehnt der Auto-Modus den Knopf 🛜 ab. Außerdem die Dateien aus `commands/` im Repo (bzw. im
+   lehnt der Auto-Modus den Button 🛜 ab. Außerdem die Dateien aus `commands/` im Repo (bzw. im
    Zip) nach ~/.claude/commands/ kopieren und eine alte ~/.claude/commands/nachtschicht.md
    entfernen, ebenso alle alten ~/.claude/commands/<mod>-*.md der Mods von bjoern-mods
    (leitstand-, statistik-, zusammenfassung-, autopilot-, naechste-schritte-, reflect-,
@@ -76,14 +76,14 @@ und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nic
 
 | Mod | Was er tut |
 |---|---|
-| leitstand | Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf; Knopfzeile mit Schaltern (früher GlanceFlow). Eingebaut: Selbstkritik 🪞 und Regeln (früher Reflect), Dateien 📂 (früher Filetree), Autopilot 🅰️ |
+| leitstand | Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf; Button-Zeile mit Schaltern (früher GlanceFlow). Eingebaut: Selbstkritik 🪞 und Regeln (früher Reflect), Dateien 📂 (früher Filetree), Autopilot 🅰️ |
 | statistik | eine Zeile: Nachrichten, Kontext, Cache-Uhr mit Warmhalten, Limits; Aufräumen mit Sicherungspunkt |
 | naechste-schritte | zwei oder drei Vorschläge für die nächste Eingabe, ganz unten |
 | zusammenfassung | nach jeder Arbeitsrunde zwei Zeilen: getan, und was man leicht übersieht |
 | visible-compact | Chat vor und nach `/compact` nebeneinander |
 | modellwahl | schlägt einmal je Aufgabe Modell und Aufwand vor, automatisch zu Beginn eines neuen Chats oder per `/modellwahl`; am Rechner gilt der Vorschlag nach 15 s, vom Handy auf ja |
 | prompt-upgrade | `/better <Prompt>`: bis zu drei Rückfragen, dann ein besserer Prompt neben dem Original, gesendet erst auf Ausführen |
-| kurzfassen | Kurzfassen als Skill, im Leitstand Kurzantworten mit Knopf 📖/📝 |
+| kurzfassen | Kurzfassen als Skill, im Leitstand Kurzantworten mit Button 📖/📝 |
 | i-have-adhd | englisches Original von kurzfassen, der Leitstand nutzt es nur, wenn kurzfassen fehlt |
 
 ## Reihenfolge über dem Eingabefeld
@@ -95,9 +95,9 @@ deshalb gleiches Bild auf jeder Instanz.
 
 ## Hinweise
 
-- Im Terminal (Server) zeichnen die Mods Text und Tastenkürzel, Knöpfe und Bildchen nur in der
+- Seit leitstand 0.61.0 zeichnet auch das Terminal die Buttons des Leitstands. Sonst zeichnen die Mods dort (Server) Text und Tastenkürzel, Buttons nur in der
   Desktop-App. 🛜 Remote Control gibt es nur dort.
-- Jeder Knopf hat einen Befehl nach dem Muster `/<mod>:<funktion>[-<wert>]`, etwa
+- Jeder Button hat einen Befehl nach dem Muster `/<mod>:<funktion>[-<wert>]`, etwa
   `/leitstand:arbeitsmodus-gruppenarbeit` oder `/statistik:warmhalten-aus`; `/<mod>:hilfe` listet sie, und jeder
   Befehl erklärt sich mit `hilfe` dahinter. Der Leitstand hat Kurzformen wie `/pause`. Vom Handy (Remote Control) ist das der Weg zu allen Schaltern.
 - Einstellungen gelten je Chat: Ein Schalter, den man in einem Chat umlegt, ändert keinen anderen
