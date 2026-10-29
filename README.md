@@ -25,14 +25,37 @@ Neu eingerichtete Instanzen tragen den Katalog gleich als `bm-mods` ein. `instal
 
 ## So sieht es aus
 
-Die Bilder stammen aus einer Übersichtsseite, gebaut mit [Archify](https://archify.si/):
-[docs/praesentation/bjoern-mods.html](docs/praesentation/bjoern-mods.html). GitHub zeigt davon nur den Quelltext,
+Der Leitstand über der Eingabe der Desktop-App: Plan und Fortschritt, darunter die Buttons, ganz unten die Zeile der
+Statistik mit Nutzungslimits, Kontext und Cache-Uhr.
+
+![Leitstand mit laufendem Plan, Buttons und Statistik-Zeile](docs/bilder/leitstand-band.png)
+
+Nach jeder Arbeitsrunde sagt die Zusammenfassung in zwei Zeilen, was getan wurde und was man leicht übersieht:
+
+![Zusammenfassung nach einer Arbeitsrunde](docs/bilder/zusammenfassung.png)
+
+Nächste Schritte schlägt nach jeder Antwort Eingaben vor, per Ziffer oder Klick ins Feld:
+
+![Drei Vorschläge von Nächste Schritte](docs/bilder/naechste-schritte.png)
+
+Was jeder Button des Leitstands tut und welcher Befehl dasselbe auslöst. Das Fenster ❓ ist für einen Screenshot zu
+groß, deshalb als Grafik aus [docs/praesentation/buttons.html](docs/praesentation/buttons.html):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/buttons-dunkel.png">
+  <img alt="Alle Buttons des Leitstands mit Zeichen, Erklärung und Befehl, nach Platz im Band geordnet" src="docs/bilder/buttons-hell.png">
+</picture>
+
+### Übersicht mit Diagrammen
+
+Die folgenden Bilder stammen aus einer Übersichtsseite, gebaut mit [Archify](https://archify.si/):
+[docs/praesentation/bm-mods.html](docs/praesentation/bm-mods.html). GitHub zeigt davon nur den Quelltext,
 also herunterladen und im Browser öffnen; dort lassen sich die Diagramme anklicken und Schritt für Schritt
 durchgehen. Die englischen Buttons in den Bildern ("Ask", "Open interactive view") gehören zu Archify.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/bilder/uebersicht-dunkel.png">
-  <img alt="Was können Björns Mods für Claude Code? Fazit und vier Gründe" src="docs/bilder/uebersicht-hell.png">
+  <img alt="Was können die BM-Mods für Claude Code? Fazit und vier Gründe" src="docs/bilder/uebersicht-hell.png">
 </picture>
 
 Was mit einer Nachricht passiert, vom Passwortschutz bis zur Statistik:

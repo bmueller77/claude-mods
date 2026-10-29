@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leitstand-Buttons</title>
+<!-- Quelle der README-Grafik docs/bilder/buttons-hell.png und -dunkel.png.
+     Inhalt wie BUTTON_HELP in leitstand/hooks/glance.tsx (Stand leitstand 0.63.1); bei Änderungen dort nachziehen. -->
+<style>
+  :root {
+    --bg: #faf9f5; --card: #ffffff; --line: #e6e2d8; --text: #1f1e1b; --muted: #6b6760;
+    --chip: #f3f1ea; --chip-line: #d9d4c7; --accent: #b4532f; --code: #f1eee6;
+  }
+  :root[data-theme="dark"] {
+    --bg: #1f1e1d; --card: #262624; --line: #3a3835; --text: #ece9e1; --muted: #a5a097;
+    --chip: #30302d; --chip-line: #4a4844; --accent: #e3906f; --code: #30302d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1f1e1d; --card: #262624; --line: #3a3835; --text: #ece9e1; --muted: #a5a097;
+      --chip: #30302d; --chip-line: #4a4844; --accent: #e3906f; --code: #30302d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 "Segoe UI", system-ui, sans-serif, "Segoe UI Emoji", "Noto Color Emoji";
+  }
+  main { width: 1200px; padding: 32px 36px 36px; }
+  h1 { margin: 0 0 4px; font-size: 28px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { margin: 0 0 24px; color: var(--muted); }
+  h2 {
+    margin: 22px 0 10px; font-size: 13px; font-weight: 650; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted);
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .eintrag {
+    display: grid; grid-template-columns: 132px 1fr; gap: 14px; align-items: start;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  }
+  .chip {
+    justify-self: start; display: inline-flex; align-items: center; justify-content: center;
+    min-width: 40px; height: 32px; padding: 0 12px; border-radius: 8px;
+    background: var(--chip); border: 1px solid var(--chip-line);
+    font-size: 18px; white-space: nowrap;
+  }
+  .chip.wort { font-size: 14px; font-weight: 600; }
+  .name { font-weight: 650; }
+  .tut { color: var(--text); }
+  code {
+    display: inline-block; margin-top: 4px; padding: 1px 6px; border-radius: 5px;
+    background: var(--code); color: var(--accent);
+    font: 13px/1.5 "Cascadia Mono", Consolas, monospace;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Die Buttons des Leitstands</h1>
+  <p class="sub">Was jeder Button tut und welcher Befehl dasselbe auslöst, etwa vom Handy aus. Stand: leitstand 0.63.1.</p>
+
+  <h2>Oben rechts</h2>
+  <div class="grid">
+    <div class="eintrag"><span class="chip wort">Detailliert ▾</span><div><div class="name">Ansicht</div><div class="tut">Einfach zeigt Schritte und Fortschritt, Detailliert dazu Zeit und Tokens, Minimal nur eine Zeile.</div><code>/leitstand:ansicht-einfach</code></div></div>
+    <div class="eintrag"><span class="chip">❓</span><div><div class="name">Buttons</div><div class="tut">Das Fenster, das jeden Button erklärt.</div><code>/leitstand:buttons-zeigen</code></div></div>
+    <div class="eintrag"><span class="chip">⚙️</span><div><div class="name">Einstellungen</div><div class="tut">Öffnet die Einstellungen des Leitstands.</div><code>/leitstand:einstellungen-zeigen</code></div></div>
+  </div>
+
+  <h2>Unten links</h2>
+  <div class="grid">
+    <div class="eintrag"><span class="chip">👨‍💼</span><div><div class="name">Auto-Modus</div><div class="tut">Claude entscheidet selbst, ob es Helfer einsetzt. Ein Druck schaltet auf Gruppenarbeit.</div><code>/leitstand:arbeitsmodus-auto</code></div></div>
+    <div class="eintrag"><span class="chip">👨‍👨‍👧‍👦</span><div><div class="name">Gruppenarbeit</div><div class="tut">Claude plant und prüft, Arbeiter setzen um, und jeder Plan wartet auf deine Freigabe. Ein Druck schaltet auf Auto-Modus.</div><code>/leitstand:arbeitsmodus-gruppenarbeit</code></div></div>
+    <div class="eintrag"><span class="chip">🅰️</span><div><div class="name">Autopilot</div><div class="tut">Claude macht ohne Rückfragen weiter, bis alles erledigt ist, und schreibt am Ende eine Übergabe. Leuchtet, solange er läuft.</div><code>/leitstand:autopilot-an</code></div></div>
+    <div class="eintrag"><span class="chip">📖</span><div><div class="name">Kurzantworten aus</div><div class="tut">Claude antwortet wie gewohnt. Ein Druck schaltet Kurzantworten ein.</div><code>/leitstand:kurzantworten-aus</code></div></div>
+    <div class="eintrag"><span class="chip">📝</span><div><div class="name">Kurzantworten an</div><div class="tut">Claude nennt zuerst den nächsten Schritt und antwortet in nummerierten Schritten. Ein Druck schaltet sie aus.</div><code>/leitstand:kurzantworten-an</code></div></div>
+    <div class="eintrag"><span class="chip">🧍</span><div><div class="name">Vermenschlichen</div><div class="tut">Claude schreibt seine letzte Antwort um, damit sie nicht nach KI klingt.</div><code>/leitstand:vermenschlichen</code></div></div>
+    <div class="eintrag"><span class="chip">♨️</span><div><div class="name">Grill mich</div><div class="tut">Claude löchert dich mit Fragen, bis ein Plan oder eine Idee steht.</div><code>/leitstand:ausfragen</code></div></div>
+    <div class="eintrag"><span class="chip">🪞</span><div><div class="name">Selbstkritik</div><div class="tut">Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint in einem eigenen Fenster.</div><code>/leitstand:selbstkritik</code></div></div>
+    <div class="eintrag"><span class="chip">🧹</span><div><div class="name">Sauberer Code</div><div class="tut">Der Skill clean-code prüft Funktionen, Namen, Verschachtelung und Fehlerbehandlung.</div><code>/leitstand:sauberer-code</code></div></div>
+    <div class="eintrag"><span class="chip">📂</span><div><div class="name">Dateien</div><div class="tut">Zeigt die Dateien des Projekts als Baum in einem Fenster.</div><code>/leitstand:dateien</code></div></div>
+    <div class="eintrag"><span class="chip">🛜</span><div><div class="name">Remote Control</div><div class="tut">Damit steuerst du den Chat vom Handy aus. Leuchtet, solange es verbunden ist, und fehlt, wenn der Chat es nicht kann.</div><code>/leitstand:fernsteuerung-an</code></div></div>
+    <div class="eintrag"><span class="chip">🔒</span><div><div class="name">Verdecken an</div><div class="tut">Passwörter, Schlüssel und persönliche Daten stehen auf dem Bildschirm als Punkte. Claude liest alles unverändert.</div><code>/leitstand:verdecken-an</code></div></div>
+    <div class="eintrag"><span class="chip">🔓</span><div><div class="name">Verdecken aus</div><div class="tut">Alles erscheint so, wie es im Chat steht.</div><code>/leitstand:verdecken-aus</code></div></div>
+    <div class="eintrag"><span class="chip">🛡️</span><div><div class="name">Geheimnisse sichern</div><div class="tut">Verschiebt Passwörter und Schlüssel aus dem Chat in die .env im Projektordner. Zweimal drücken.</div><code>/leitstand:geheimnisse-sichern</code></div></div>
+    <div class="eintrag"><span class="chip wort">Plan</span><div><div class="name">Plan</div><div class="tut">Zeigt den ganzen Plan in einem Fenster, sobald es einen gibt.</div><code>/leitstand:plan-zeigen</code></div></div>
+    <div class="eintrag"><span class="chip wort">Verlauf</span><div><div class="name">Verlauf</div><div class="tut">Deine Aufträge von heute und früheren Tagen, mit Tages- und Wochenbericht.</div><code>/leitstand:verlauf-zeigen</code></div></div>
+  </div>
+
+  <h2>Unten rechts</h2>
+  <div class="grid">
+    <div class="eintrag"><span class="chip wort">Neuer Chat</span><div><div class="name">Neuer Chat</div><div class="tut">Claude schreibt eine Übergabenotiz und beginnt damit einen neuen Chat. Zweimal drücken.</div><code>/leitstand:neuer-chat</code></div></div>
+    <div class="eintrag"><span class="chip wort">Push</span><div><div class="name">Push</div><div class="tut">Nach einem fertigen Auftrag in einem GitHub-Projekt: Commit, Pull Request und Merge. Zweimal drücken.</div><code>/leitstand:abschliessen</code></div></div>
+    <div class="eintrag"><span class="chip wort">Start</span><div><div class="name">Start</div><div class="tut">Startet den Plan, der auf deine Freigabe wartet.</div><code>/leitstand:plan-starten</code></div></div>
+    <div class="eintrag"><span class="chip wort">Pause</span><div><div class="name">Pause</div><div class="tut">Hält Claude mitten im Auftrag an.</div><code>/leitstand:pause</code></div></div>
+    <div class="eintrag"><span class="chip wort">Weiter</span><div><div class="name">Weiter</div><div class="tut">Claude macht dort weiter, wo es aufgehört hat.</div><code>/leitstand:weiter</code></div></div>
+  </div>
+</main>
+</body>
+</html>

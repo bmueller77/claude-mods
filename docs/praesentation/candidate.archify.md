@@ -1,15 +1,15 @@
-# Was können Björns Mods für Claude Code? {#bjoern-mods}
+# Was können die BM-Mods für Claude Code? {#bm-mods}
 
-Der Katalog bjoern-mods macht Claude Code sichtbar und steuerbar: **acht eigene Mods**, dazu ein fremder, mit dem Leitstand als Schaltzentrale über der Eingabe.
+Der Katalog BM-Mods macht Claude Code sichtbar und steuerbar: **acht eigene Mods**, dazu ein fremder, mit dem Leitstand als Schaltzentrale über der Eingabe.
 
 - Der Leitstand zeigt Plan, Fortschritt und Helfer über der Eingabe und schaltet die Arbeitsweise um.[](source:readme)
 - Modellwahl und Prompt Upgrade setzen an, bevor Claude arbeitet: passendes Modell, besserer Prompt.
 - Zusammenfassung, Nächste Schritte und Statistik melden nach jeder Runde, was passiert ist und was als Nächstes kommt.
-- Jeder Knopf hat einen Befehl, deshalb geht alles auch vom Handy aus.[](source:befehle)
+- Jeder Button hat einen Befehl, deshalb geht alles auch vom Handy aus.[](source:befehle)
 
-@answer scope="Stand 29.10.2026 · leitstand 0.62.0 · Desktop-App und Terminal · Reihenfolge vor der Arbeit vereinfacht"
+@answer scope="Stand 29.10.2026 · leitstand 0.63.1 · Desktop-App und Terminal · Reihenfolge vor der Arbeit vereinfacht"
 @meta locale=en style=editorial
-@source readme title="README des Katalogs bjoern-mods" url=https://github.com/bmueller77/claude-mods
+@source readme title="README des Katalogs BM-Mods" url=https://github.com/bmueller77/claude-mods
 @source befehle title="BEFEHLE.md: alle Befehle je Mod" url=https://github.com/bmueller77/claude-mods/blob/main/BEFEHLE.md
 
 ## Was passiert mit einer Nachricht? {#nachricht}
@@ -42,12 +42,12 @@ Der Katalog bjoern-mods macht Claude Code sichtbar und steuerbar: **acht eigene 
 | s-wahl | Modellwahl | Schlägt einmal je Aufgabe Modell und Aufwand vor. Am Rechner gilt der Vorschlag nach 15 Sekunden. | runde | wahl |
 | s-plan | Plan im Band | Der Leitstand zeigt Plan, Fortschritt und Helfer über der Eingabe. In der Gruppenarbeit wartet der Plan auf Start. | runde | plan |
 | s-summe | Zusammenfassung | Zwei Zeilen nach jeder Arbeitsrunde: was getan wurde und was man leicht übersieht. | runde | summe |
-| s-vorschlag | Nächste Schritte | Zwei oder drei Vorschläge für die nächste Eingabe, per Ziffer oder Knopf ins Feld. | runde | vorschlag |
+| s-vorschlag | Nächste Schritte | Zwei oder drei Vorschläge für die nächste Eingabe, per Ziffer oder Button ins Feld. | runde | vorschlag |
 | s-stat | Statistik | Eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr. | runde | stat |
 
 ## Was steckt im Leitstand? {#leitstand}
 
-@tree id=leitstand-knoepfe title="Die Knöpfe des Leitstands"
+@tree id=leitstand-buttons title="Die Buttons des Leitstands"
 | root | Leitstand | - |
 | arbeitsweise | Arbeitsweise | root |
 | auto | Auto-Modus | arbeitsweise |
@@ -116,9 +116,9 @@ git clone https://github.com/bmueller77/claude-mods && claude-mods/install.sh
 ```
 
 ```bash title="Auf den neuesten Stand bringen"
-claude plugin marketplace update bjoern-mods
+claude plugin marketplace update bm-mods
 ```
 
 @callout level=note title="Alles auch per Befehl"
-Jeder Knopf hat einen Befehl der Form `/<mod>:<funktion>`, etwa `/leitstand:pause` oder `/statistik:warmhalten-aus`.
+Jeder Button hat einen Befehl der Form `/<mod>:<funktion>`, etwa `/leitstand:pause` oder `/statistik:warmhalten-aus`.
 Das Wort `hilfe` dahinter erklärt den Befehl, `/<mod>:hilfe` listet alle.
