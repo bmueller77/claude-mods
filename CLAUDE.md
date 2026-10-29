@@ -249,3 +249,12 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Der Teil zum Passwortschutz ist behoben in leitstand 0.62.0: Berichte von Helfern gehen durch, eine
    zurückgehaltene Nachricht steht im Band mit Trotzdem senden und Verwerfen (`/trotzdem-senden`,
    `/nachricht-verwerfen`). Ungeprüft: ob die Desktop-App ein `$.prompt.submit` mit `asUser` annimmt.
+10. Hilfe und Einstellungen (2026-10-29, Commit 56d3892): Zwei Runden mit Prüfern ohne Vorwissen
+   (Explore-Helfer, die einzigen ohne CLAUDE.md; `claude -p` aus der App heraus ist nicht angemeldet).
+   Leitfaden: gleiche Abschnitte je `/<mod>:hilfe`, Standard für neue Chats per "Sag Claude" oder
+   `claude plugin configure <mod>@bm-mods --values-stdin`, `hilfe` an jedem Befehl ändert nichts.
+   Noten zuletzt 2 bis 3,5. Offen, weil Feature statt Text: vom Handy erfährt man "Claude braucht dich"
+   nicht (nur Leiste am Rechner); Statistik-Leiste, Nächste Schritte und das Fenster von Visible
+   Compact lassen sich je Chat nicht abschalten; `/leitstand handoff note` ist noch ein alter
+   englischer Befehl. Live-Test ausstehend: die neuen Texte und 2 px Luft unter den Buttons der
+   Zusammenfassung (`marginTop={0.2}`).
