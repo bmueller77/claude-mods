@@ -5873,12 +5873,12 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   const skill = (name: string) => ({ name, description: name, source: 'plugin' })
 
-  test('hinter Grill mich stehen Vermenschlichen, Kurzantworten, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
+  test('hinter dem Autopiloten stehen Kurzantworten, Vermenschlichen, Grill mich, Selbstkritik, Sauberer Code, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
     await skillWorld($, on)
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
-    const order = ['workmode', 'nightshift', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
+    const order = ['workmode', 'nightshift', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4D6}', '\u{1F4C2}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
@@ -5905,9 +5905,9 @@ describe('Arbeitsweise und Grill mich', () => {
     return left.map(kid => (kid.type === 'Text' ? `${kid.props.dimColor === true ? 'dim' : ''}${(kid.children ?? []).join('')}` : String(kid.props.key)))
   }
 
-  test('Striche trennen die Gruppen unten links: hinter dem Autopiloten, hinter Kurzantworten, hinter Dateien und vor Plan, auch im Terminal', async ($, on) => {
+  test('Striche trennen die Gruppen unten links: hinter dem Autopiloten, hinter Sauberer Code, hinter Dateien und vor Plan, auch im Terminal', async ($, on) => {
     await skillWorld($, on)
-    const groups = ['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history']
+    const groups = ['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history']
     expect(await leftRow($)).toEqual(groups)
     // In a wide terminal on one line, as in the app; narrower, the groups wrap at a bar, which then goes.
     expect((await terminalRow($, 140)).flat()).toEqual(groups)
@@ -6007,22 +6007,25 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
   })
 
-  test('Kurzantworten (📖) steht direkt hinter Vermenschlichen und vor dem Strich vor Dateien', async ($, on) => {
+  test('Kurzantworten (📖) steht direkt hinter dem Strich hinter dem Autopiloten und vor Vermenschlichen', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
-    expect(row.indexOf('adhd')).toBe(row.indexOf('humanize') + 1)
-    expect(row[row.indexOf('adhd') + 1]).toBe('dim|')
-    expect(row[row.indexOf('adhd') + 2]).toBe('filetree')
+    const chain = ['adhd', 'humanize', 'grill', 'reflect', 'cleancode']
+    for (let i = 1; i < chain.length; i++) expect(row.indexOf(chain[i]!)).toBe(row.indexOf(chain[i - 1]!) + 1)
+    expect(row[row.indexOf('adhd') - 1]).toBe('dim|')
+    expect(row[row.indexOf('nightshift') + 1]).toBe('dim|')
+    expect(row[row.indexOf('cleancode') + 1]).toBe('dim|')
+    expect(row[row.indexOf('cleancode') + 2]).toBe('filetree')
   })
 
   test('in der App steht genau ein Strich zwischen 🅰️ und dem Knopf dahinter; keiner am Rand, nie zwei nebeneinander', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     const at = row.indexOf('nightshift')
-    expect(row.slice(at - 1, at + 3)).toEqual(['workmode', 'nightshift', 'dim|', 'grill'])
+    expect(row.slice(at - 1, at + 3)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd'])
     // Nothing before 🅰️ is a bar: the first one stands right behind it.
     expect(row.slice(0, at + 1).filter(one => one === 'dim|')).toEqual([])
     expect(row[0]).not.toBe('dim|')
@@ -6037,11 +6040,11 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(off.at(-1)).not.toBe('dim|')
   })
 
-  test('Dateien (📂) steht hinter 📖 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
+  test('Dateien (📂) steht hinter 🧹 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     const at = row.indexOf('filetree')
-    expect(row.slice(at - 2, at + 2)).toEqual(['adhd', 'dim|', 'filetree', 'dim|'])
+    expect(row.slice(at - 2, at + 2)).toEqual(['cleancode', 'dim|', 'filetree', 'dim|'])
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'filetree')
     await ui.unmount()
@@ -6049,7 +6052,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(button?.props.variant).toBe('secondary')
   })
 
-  test('ein Druck auf 🧹 hinter ♨️ startet den Skill clean-code; fehlt er, sagt der Leitstand das', async ($, on) => {
+  test('ein Druck auf 🧹 hinter 🪞 startet den Skill clean-code; fehlt er, sagt der Leitstand das', async ($, on) => {
     const { state, press } = await skillWorld($, on)
     state.commands = [skill('clean-code')]
     await press('cleancode')
@@ -6061,7 +6064,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(state.toasts).toContain('clean-code ist in dieser Sitzung nicht verfügbar.')
   })
 
-  test('ein Druck auf 🪞 direkt hinter 🧹 startet die Selbstkritik sofort, ohne Befehl und ohne Prompt', async ($, on) => {
+  test('ein Druck auf 🪞 direkt hinter ♨️ startet die Selbstkritik sofort, ohne Befehl und ohne Prompt', async ($, on) => {
     // Beneath the plugins, before the test first calls $.
     const opened: string[] = []
     on('ui.open', (_, e) => {
@@ -6075,7 +6078,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(button?.props.label).toBe('\u{1FA9E}')
     expect(button?.props.variant).toBe('secondary')
     const row = await leftRow($)
-    expect(row.indexOf('reflect')).toBe(row.indexOf('cleancode') + 1)
+    expect(row.indexOf('reflect')).toBe(row.indexOf('grill') + 1)
 
     // The Selbstkritik part (once the Reflect mod) answers the press itself: no command, nothing in the prompt.
     state.runHangs = true
@@ -6521,7 +6524,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'remote'])
+    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'remote'])
     expect(row.filter(one => one === 'dim|')).toHaveLength(4)
   })
 
@@ -6543,7 +6546,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'grill', 'cleancode', 'reflect', 'humanize', 'adhd', 'dim|', 'filetree', 'dim|', 'privacy'])
+    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'privacy'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)

@@ -1715,15 +1715,15 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Verlauf und Berichte', 'leitstand:wochenbericht', 'Teambericht für diese Woche als Text', 'Schreibt den Teambericht für diese Woche in die Antwort und kopiert ihn.', 'Verlauf › Wochenbericht', 'einmal'),
   befehl('Verlauf und Berichte', 'leitstand:meine-woche', 'Deine Woche über alle Projekte', 'Fasst deine letzten sieben Tage über alle Projekte zusammen und kopiert das.', 'Verlauf › Deine Woche', 'einmal'),
 
+  befehl('Helfer', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Claude antwortet mit dem nächsten Schritt zuerst, in nummerierten Schritten und ohne Umwege.', '📖 (steht dann auf 📝)', 'chat'),
+  befehl('Helfer', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt.', '📝 (steht dann auf 📖)', 'chat'),
+  befehl('Helfer', 'leitstand:vermenschlichen', 'Letzte Antwort natürlicher umschreiben', 'Claude überarbeitet seine letzte Antwort, damit sie nicht nach KI klingt.', '🧍', 'einmal'),
   befehl('Helfer', 'leitstand:ausfragen', 'Grill mich: Claude löchert dich mit Fragen', 'Startet den Skill grill-me: Claude fragt dich so lange aus, bis ein Plan oder eine Idee steht.', '♨️ Grill mich', 'einmal', {
     argumentHint: '[Thema]',
     argumente: 'Ein Thema (frei). Ohne Thema geht es um den aktuellen Plan; gibt es keinen, fragt der Befehl nach einem Thema.',
     beispiel: '/leitstand:ausfragen Umzug der Datenbank',
   }),
   befehl('Helfer', 'leitstand:sauberer-code', 'Code prüfen mit clean-code', 'Startet den Skill clean-code: Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', '🧹', 'einmal'),
-  befehl('Helfer', 'leitstand:vermenschlichen', 'Letzte Antwort natürlicher umschreiben', 'Claude überarbeitet seine letzte Antwort, damit sie nicht nach KI klingt.', '🧍', 'einmal'),
-  befehl('Helfer', 'leitstand:kurzantworten-an', 'Kurzantworten einschalten', 'Claude antwortet mit dem nächsten Schritt zuerst, in nummerierten Schritten und ohne Umwege.', '📖 (steht dann auf 📝)', 'chat'),
-  befehl('Helfer', 'leitstand:kurzantworten-aus', 'Kurzantworten ausschalten', 'Claude antwortet wieder wie gewohnt.', '📝 (steht dann auf 📖)', 'chat'),
   befehl('Helfer', 'leitstand:fernsteuerung-an', 'Remote Control einschalten', 'Schaltet Remote Control ein, damit du den Chat vom Handy aus steuern kannst.', '🛜', 'chat'),
   befehl('Helfer', 'leitstand:fernsteuerung-aus', 'Remote Control ausschalten', 'Schaltet Remote Control aus.', '🛜', 'chat'),
 

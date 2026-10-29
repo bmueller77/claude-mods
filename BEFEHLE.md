@@ -67,11 +67,11 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 
 | Befehl | Was er tut |
 |---|---|
-| `/leitstand:ausfragen [Thema]` | Grill mich: Claude löchert dich mit Fragen |
-| `/leitstand:sauberer-code` | Code prüfen mit clean-code |
-| `/leitstand:vermenschlichen` | Letzte Antwort natürlicher umschreiben |
 | `/leitstand:kurzantworten-an` | Kurzantworten einschalten |
 | `/leitstand:kurzantworten-aus` | Kurzantworten ausschalten |
+| `/leitstand:vermenschlichen` | Letzte Antwort natürlicher umschreiben |
+| `/leitstand:ausfragen [Thema]` | Grill mich: Claude löchert dich mit Fragen |
+| `/leitstand:sauberer-code` | Code prüfen mit clean-code |
 | `/leitstand:fernsteuerung-an` | Remote Control einschalten |
 | `/leitstand:fernsteuerung-aus` | Remote Control ausschalten |
 

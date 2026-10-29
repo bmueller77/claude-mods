@@ -177,17 +177,17 @@ const GEAR = '\u2699\uFE0F'
 const HELP = '\u2753'
 /** Grill mich elsewhere than the terminal: steam rising, as an emoji. */
 const GRILL = '\u2668\uFE0F'
-/** The skill buttons beside Grill mich elsewhere than the terminal, as emoji. */
+/** Vermenschlichen elsewhere than the terminal, right behind Kurzantworten, as emoji. */
 const HUMANIZE = '\u{1F9CD}'
 /** Kurzantworten (the Kurzfassen skill, i-have-adhd as fallback) on and off: a memo for short answers, a book for the usual long ones. */
 const SHORT_ANSWERS = '\u{1F4DD}'
 const LONG_ANSWERS = '\u{1F4D6}'
 const NIGHTSHIFT = '\u{1F170}\uFE0F'
-/** The opener for the Dateien side pane (once the Filetree mod), after Kurzantworten: an open folder. */
+/** The opener for the Dateien side pane (once the Filetree mod), after Sauberer Code: an open folder. */
 const FILETREE = '\u{1F4C2}'
-/** The clean-code skill, right behind Grill mich: a broom. */
+/** The clean-code skill, right behind Selbstkritik: a broom. */
 const CLEAN_CODE = '\u{1F9F9}'
-/** Selbstkritik (once the Reflect mod), right behind the broom: a mirror. */
+/** Selbstkritik (once the Reflect mod), right behind Grill mich: a mirror. */
 const REFLECT = '\u{1FA9E}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
 const MASK_ON = '\u{1F512}'
@@ -246,12 +246,12 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
         command: '/leitstand:arbeitsmodus-gruppenarbeit',
       },
       { sign: NIGHTSHIFT, name: 'Autopilot', does: 'Claude macht ohne R\u00FCckfragen weiter, bis alles erledigt ist, und schreibt am Ende eine \u00DCbergabe. Leuchtet, solange er l\u00E4uft.', command: '/leitstand:autopilot-an' },
-      { sign: GRILL, name: 'Grill mich', does: 'Claude l\u00F6chert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
-      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code pr\u00FCft Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', command: '/leitstand:sauberer-code' },
-      { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint in einem eigenen Fenster.', command: '/leitstand:selbstkritik' },
-      { sign: HUMANIZE, name: 'Vermenschlichen', does: 'Claude schreibt seine letzte Antwort um, damit sie nicht nach KI klingt.', command: '/leitstand:vermenschlichen' },
       { sign: LONG_ANSWERS, name: 'Kurzantworten aus', does: 'Claude antwortet wie gewohnt. Ein Druck schaltet Kurzantworten ein.', command: '/leitstand:kurzantworten-aus' },
       { sign: SHORT_ANSWERS, name: 'Kurzantworten an', does: 'Claude nennt zuerst den n\u00E4chsten Schritt und antwortet in nummerierten Schritten. Ein Druck schaltet sie aus.', command: '/leitstand:kurzantworten-an' },
+      { sign: HUMANIZE, name: 'Vermenschlichen', does: 'Claude schreibt seine letzte Antwort um, damit sie nicht nach KI klingt.', command: '/leitstand:vermenschlichen' },
+      { sign: GRILL, name: 'Grill mich', does: 'Claude l\u00F6chert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
+      { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint in einem eigenen Fenster.', command: '/leitstand:selbstkritik' },
+      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code pr\u00FCft Funktionen, Namen, Verschachtelung und Fehlerbehandlung.', command: '/leitstand:sauberer-code' },
       { sign: FILETREE, name: 'Dateien', does: 'Zeigt die Dateien des Projekts als Baum in einem Fenster.', command: '/leitstand:dateien' },
       { sign: REMOTE, name: 'Remote Control', does: 'Damit steuerst du den Chat vom Handy aus. Leuchtet, solange es verbunden ist, und fehlt, wenn der Chat es nicht kann.', command: '/leitstand:fernsteuerung-an' },
       { sign: MASK_ON, name: 'Verdecken an', does: 'Passw\u00F6rter, Schl\u00FCssel und pers\u00F6nliche Daten stehen auf dem Bildschirm als Punkte. Claude liest alles unver\u00E4ndert.', command: '/leitstand:verdecken-an' },
@@ -4801,29 +4801,29 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       : vector
         ? <Button key="nightshift" variant={nightShift ? 'primary' : 'secondary'} label={NIGHTSHIFT} onPress={() => toggleNightShift($)} />
         : terminalSign('nightshift', TERMINAL_NIGHTSHIFT, () => toggleNightShift($), nightShift)
-    // Grill mich behind it, as the steam sign (the flame on the terminal).
+    // Grill mich right behind Vermenschlichen, as the steam sign (the flame on the terminal).
     const grillItem = !isEnabled
       ? null
       : vector
         ? <Button key="grill" variant="secondary" label={GRILL} onPress={() => grillMe($)} />
         : terminalSign('grill', TERMINAL_GRILL, () => grillMe($))
-    // The broom right behind it: the clean-code skill. The press does not wait for the command, which runs once the
-    // session is idle; waiting would run the press past its budget while Claude works.
+    // The broom right behind Selbstkritik, last of the group: the clean-code skill. The press does not wait for the
+    // command, which runs once the session is idle; waiting would run the press past its budget while Claude works.
     const cleanItem =
       !isEnabled ? null : vector ? (
         <Button key="cleancode" variant="secondary" label={CLEAN_CODE} onPress={() => void runCleanCode($).catch(() => undefined)} />
       ) : (
         terminalSign('cleancode', CLEAN_CODE, () => void runCleanCode($).catch(() => undefined))
       )
-    // The mirror right behind the broom: the reflect mod's command, likewise not waited for.
+    // The mirror right behind Grill mich: the reflect mod's command, likewise not waited for.
     const reflectItem =
       !isEnabled ? null : vector ? (
         <Button key="reflect" variant="secondary" label={REFLECT} onPress={() => runReflect($)} />
       ) : (
         terminalSign('reflect', REFLECT, () => runReflect($))
       )
-    // Then the skill buttons: humanize the last answer and ADHD mode beside Grill mich; past a bar the opener for
-    // Filetree's side pane, alone; past the next bar Remote Control (only while the session has it),
+    // Then the skill buttons: ADHD mode and humanize the last answer lead the group, before Grill mich; past a bar the
+    // opener for Filetree's side pane, alone; past the next bar Remote Control (only while the session has it),
     // masking on screen and the shield that moves the chat's secrets into the .env (a closed lock with a key on the
     // terminal).
     const pressVault = () => pressTwice($, 'vault', () => vaultSecrets($))
@@ -4832,9 +4832,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       : vector
         ? {
             beside: [
-              <Button key="humanize" variant="secondary" label={HUMANIZE} onPress={() => humanizeLast($)} />,
               // A switch whose sign says the state: never drawn as pressed (Björn's wish).
               <Button key="adhd" variant="secondary" label={adhd ? SHORT_ANSWERS : LONG_ANSWERS} onPress={() => toggleAdhd($)} />,
+              <Button key="humanize" variant="secondary" label={HUMANIZE} onPress={() => humanizeLast($)} />,
             ],
             // An opener, not a switch: Filetree keeps its pane to itself, so the button never shows it as on.
             files: [<Button key="filetree" variant="secondary" label={FILETREE} onPress={() => openFiletree($)} />],
@@ -4853,8 +4853,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           }
         : {
             beside: [
-              terminalSign('humanize', HUMANIZE, () => humanizeLast($)),
               terminalSign('adhd', adhd ? SHORT_ANSWERS : LONG_ANSWERS, () => toggleAdhd($)),
+              terminalSign('humanize', HUMANIZE, () => humanizeLast($)),
             ],
             files: [terminalSign('filetree', FILETREE, pressFiles)],
             past: [
@@ -4863,13 +4863,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
               terminalSign('vault', armed === 'vault' ? `${TERMINAL_VAULT} Noch mal drücken` : TERMINAL_VAULT, pressVault),
             ],
           }
-    // A dim bar parts the groups at the bottom left: after the Autopilot, after ADHD mode, after Filetree, and before
+    // A dim bar parts the groups at the bottom left: after the Autopilot, after Sauberer Code, after Filetree, and before
     // the plan and the history. One stands only between two groups that show a button, so never at an end or two side
     // by side. On the terminal the signs stand a cell apart, the plan and the history as far as the actions.
     const textGap = columns < 44 ? 1 : 2
     const leftGroups = [
       { bar: '', gap: 1, items: [workModeItem, nightShiftItem] },
-      { bar: 'sep-autopilot', gap: 1, items: [grillItem, cleanItem, reflectItem, ...(skillItems?.beside ?? [])] },
+      { bar: 'sep-autopilot', gap: 1, items: [...(skillItems?.beside ?? []), grillItem, reflectItem, cleanItem] },
       { bar: 'sep-files', gap: 1, items: skillItems?.files ?? [] },
       { bar: 'sep-skills', gap: 1, items: skillItems?.past ?? [] },
       { bar: 'sep-places', gap: textGap, items: places },
