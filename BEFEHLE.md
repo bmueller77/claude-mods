@@ -128,6 +128,8 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:verdecken-aus` | Verdecken ausschalten |
 | `/leitstand:passwortschutz-an` | Passwortschutz einschalten |
 | `/leitstand:passwortschutz-aus` | Passwortschutz ausschalten |
+| `/leitstand:trotzdem-senden` | Zurückgehaltene Nachricht trotzdem senden |
+| `/leitstand:nachricht-verwerfen` | Zurückgehaltene Nachricht verwerfen |
 | `/leitstand:geheimnisse-sichern [ja]` | Passwörter aus dem Chat in die .env verschieben (mit ja) |
 
 ### Einstellungen

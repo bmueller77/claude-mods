@@ -576,7 +576,7 @@ test('vom Handy (Remote Control) geht eine Nachricht mit Passwort gleich durch, 
   // unchanged when sent again.
   const typed = { text: 'Mein Passwort ist anders456, bitte damit einloggen', wait: false, origin: { kind: 'composer' } } as never
   const first = await $.prompt.submit(typed)
-  expect((first as { drop?: string }).drop).toContain('zurückgehalten')
+  expect((first as { drop?: string }).drop).toContain('zwei Minuten zurück')
   expect(entered).toHaveLength(1)
   await clock.advance(100)
   expect(toasts).toHaveLength(1)
@@ -590,17 +590,18 @@ test('vom Handy (Remote Control) geht eine Nachricht mit Passwort gleich durch, 
   expect(entered[2]).toEqual({ text: 'Baue die Preisseite', context: [] })
 })
 
-test('nur vom Handy geht eine Nachricht mit Passwort ohne Zurückhalten durch; vom SDK hält der Passwortschutz sie wie bisher zurück', async ($, on) => {
+test('vom Handy geht eine Nachricht mit Passwort ohne Zurückhalten durch; vom SDK mit einer Oberfläche (Desktop-App) hält der Passwortschutz sie wie bisher zurück', async ($, on) => {
   world(on)
+  on('session.surfaces', () => ({ value: ['desktop'] }) as never)
   const entered: string[] = []
   on('prompt.submit', (_, e) => {
     entered.push(e.text)
     return { text: e.text }
   })
   const text = `log in with password: ${SAMPLE_PASSWORD}`
-  // The SDK host is held back as typed at the computer.
+  // The SDK host with a surface (the desktop app) is held back as typed at the computer.
   const sdk = await $.prompt.submit({ text, wait: false, origin: { kind: 'sdk' } } as never)
-  expect((sdk as { drop?: string }).drop).toContain('zurückgehalten')
+  expect((sdk as { drop?: string }).drop).toContain('zwei Minuten zurück')
   expect(entered).toEqual([])
   const phone = await $.prompt.submit({ text, wait: false, origin: { kind: 'bridge' } } as never)
   expect((phone as { drop?: string }).drop).toBeUndefined()
@@ -636,7 +637,7 @@ test('ein Slash-Befehl vom Handy mit Passwort läuft, aber ohne das Passwort; vo
 
   // Typed at the computer it is held back as before, and runs as typed.
   const computer = await $.prompt.submit(typed('composer'))
-  expect((computer as { drop?: string }).drop).toContain('zurückgehalten')
+  expect((computer as { drop?: string }).drop).toContain('zwei Minuten zurück')
   expect(entered).toHaveLength(1)
   await $.command.run({ command: 'deploy', args, origin: { kind: 'composer' } } as never)
   expect(ran[1]).toEqual({ command: 'deploy', args })
@@ -645,6 +646,245 @@ test('ein Slash-Befehl vom Handy mit Passwort läuft, aber ohne das Passwort; vo
   const plain = await $.command.run({ command: 'deploy', args: 'staging', origin: { kind: 'bridge' } } as never)
   expect(ran[2]).toEqual({ command: 'deploy', args: 'staging' })
   expect(plain.context ?? []).toEqual([])
+})
+
+describe('Passwortschutz nach Herkunft und Freigabe einer zurückgehaltenen Nachricht', () => {
+  const SECRET_TEXT = `log in with password: ${SAMPLE_PASSWORD}`
+  const CLEANED = 'log in with password: [Passwort entfernt]'
+  const KINDS = findSecrets(SECRET_TEXT).join(' und ')
+  const HELD_LINE = `🔒 Zurückgehalten: Deine Nachricht enthält offenbar ${KINDS}.`
+  const ELSEWHERE_SENTENCE = 'Beginne deine Antwort mit genau diesem einen Satz: "Der Passwortschutz hat ein Passwort aus dieser Nachricht entfernt; ich habe es nicht gesehen."'
+
+  /** As world(), with the toasts, the prompt box, the surfaces and every prompt that entered kept. */
+  function guarded(on: On, surfaces: string[] = ['desktop']) {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on)
+    on('model.complete', () => ({ value: { isAnswered: true, text: 'Build my landing page', usage: {} } as never }))
+    on('tool.call', () => ({ result: {} }) as never)
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', () => ({ text: '' }))
+    on('classic.Notification', () => ({}) as never)
+    on('session.surfaces', () => ({ value: surfaces }) as never)
+    const seen = {
+      toasts: [] as string[],
+      filled: [] as string[],
+      entered: [] as { text: string; context: readonly string[]; origin: unknown }[],
+      /** Set, what a plugin sends is refused with it, as a hook beneath might. */
+      refusal: null as string | null,
+    }
+    on('ui.toast', (_, e) => {
+      seen.toasts.push(String((e as unknown as { text: string }).text))
+      return { value: undefined } as never
+    })
+    on('prompt.fill', (_, e) => {
+      seen.filled.push(String((e as unknown as { text: string }).text))
+      return { isFilled: true } as never
+    })
+    on('prompt.submit', (_, e) => {
+      if (seen.refusal !== null && e.origin.kind === 'plugin') return { drop: seen.refusal }
+      seen.entered.push({ text: e.text, context: e.context ?? [], origin: e.origin })
+      return { text: e.text }
+    })
+    return { clock, seen }
+  }
+  const submit = ($: Engine, kind: string, text = SECRET_TEXT) => $.prompt.submit({ text, wait: false, origin: { kind } } as never) as Promise<{ drop?: string }>
+  /** The band as drawn on one surface: its tree as JSON, and whether the held line shows. */
+  const band = async ($: Engine, surface: (typeof SURFACES)[number]) => {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    const drawn = JSON.stringify(await ui.drawn())
+    await ui.unmount()
+    return { drawn, isHeld: drawn.includes('Zurückgehalten') }
+  }
+  const press = async ($: Engine, key: string, surface: (typeof SURFACES)[number] = 'desktop') => {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    await ui.press({ key })
+    await ui.unmount()
+  }
+  const run = async ($: Engine, command: string, args = '') => String((await $.command.run({ command, args, origin: { kind: 'composer' } } as never)).text)
+
+  test('Berichte von Helfern und Nachrichten anderer Sitzungen gehen mit Passwort unverändert durch', async ($, on) => {
+    const { seen } = guarded(on)
+    const kinds = ['peer', 'task-notification', 'peer-send-message', 'coordinator', 'projects-relay', 'observer', 'observer-activity']
+    for (const kind of kinds) {
+      const sent = await submit($, kind)
+      expect(sent.drop).toBeUndefined()
+    }
+    expect(seen.entered.map(one => one.text)).toEqual(kinds.map(() => SECRET_TEXT))
+    expect(seen.entered.map(one => one.context)).toEqual(kinds.map(() => []))
+    // Nothing is held, nothing waits in the band.
+    expect(seen.toasts).toEqual([])
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(false)
+  })
+
+  test('aus einem Zeitplan, von Slack und ohne bekannte Herkunft geht die Nachricht ohne Passwort und mit Hinweis durch', async ($, on) => {
+    const { seen } = guarded(on)
+    const ran: string[] = []
+    on('command.run', (_, e) => {
+      ran.push(e.args)
+      return { text: 'ok' }
+    })
+    const kinds = ['scheduled-trigger', 'unclassified', 'slack-ping', 'auto-continuation', 'eine-neue-art']
+    for (const kind of kinds) {
+      const sent = await submit($, kind)
+      expect(sent.drop).toBeUndefined()
+    }
+    expect(seen.entered.map(one => one.text)).toEqual(kinds.map(() => CLEANED))
+    for (const one of seen.entered) {
+      const note = one.context.join('\n')
+      expect(note).toContain('Diese Nachricht konnte der Passwortschutz hier nicht zurückhalten.')
+      expect(note).toContain(ELSEWHERE_SENTENCE)
+      expect(note).not.toContain('Remote Control')
+      expect(note).not.toContain(SAMPLE_PASSWORD)
+    }
+    expect(seen.toasts).toEqual([])
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(false)
+
+    // A slash command from a schedule runs without the password in its arguments, with the same note.
+    const command = await submit($, 'scheduled-trigger', `/deploy ${SECRET_TEXT}`)
+    expect(command.drop).toBeUndefined()
+    const result = await $.command.run({ command: 'deploy', args: SECRET_TEXT, origin: { kind: 'scheduled-trigger' } } as never)
+    expect(ran).toEqual([CLEANED])
+    expect((result.context ?? []).join('\n')).toContain(ELSEWHERE_SENTENCE)
+  })
+
+  test('ohne Oberfläche (claude -p, Cloud) geht eine Nachricht vom SDK oder aus dem Eingabefeld ohne Passwort und mit Hinweis durch', async ($, on) => {
+    const { seen } = guarded(on, [])
+    for (const kind of ['sdk', 'composer']) {
+      const sent = await submit($, kind)
+      expect(sent.drop).toBeUndefined()
+    }
+    expect(seen.entered.map(one => one.text)).toEqual([CLEANED, CLEANED])
+    expect(seen.entered.every(one => one.context.join('\n').includes(ELSEWHERE_SENTENCE))).toBe(true)
+    expect(seen.toasts).toEqual([])
+  })
+
+  test('vom SDK mit Oberfläche wird sie zurückgehalten: die Zeile steht im Band, auch mit dem Leitstand aus, das Passwort nirgends', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    const held = await submit($, 'sdk')
+    expect(held.drop).toBe(
+      'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel. Der Leitstand hält sie zwei Minuten zurück: Trotzdem senden im Band oder /trotzdem-senden schickt sie ab.',
+    )
+    expect(seen.entered).toEqual([])
+    await clock.advance(100)
+    expect(seen.toasts).toEqual([
+      `Diese Nachricht enthält offenbar ${KINDS}, deshalb hält der Leitstand sie zwei Minuten zurück. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, im Terminal geht auch noch mal Enter.`,
+    ])
+    for (const surface of SURFACES) {
+      const shown = await band($, surface)
+      expect(shown.drawn).toContain(HELD_LINE)
+      expect(shown.drawn).toContain('Trotzdem senden')
+      expect(shown.drawn).toContain('Verwerfen')
+      expect(shown.drawn).not.toContain(SAMPLE_PASSWORD)
+      // The line stands first, over everything else in the band.
+      expect((await texts($, surface))[0]).toBe(HELD_LINE)
+    }
+    // The terminal's buttons lead with their sign, as Plan and Verlauf do.
+    const terminal = await texts($, 'terminal')
+    expect(terminal).toContain('▶ Trotzdem senden')
+    expect(terminal).toContain('✗ Verwerfen')
+    // With the Leitstand off the line still stands.
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(true)
+    // Neither a toast nor a command's answer carries the password.
+    expect(JSON.stringify(seen.toasts)).not.toContain(SAMPLE_PASSWORD)
+    expect(await run($, 'leitstand:trotzdem-senden', 'hilfe')).not.toContain(SAMPLE_PASSWORD)
+  })
+
+  test('Trotzdem senden schickt genau den Text als eigene Worte der Person ab, danach ist die Zeile weg', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    await submit($, 'sdk')
+    await clock.advance(100)
+    seen.toasts.length = 0
+    await press($, 'held-send')
+    expect(seen.entered).toHaveLength(1)
+    expect(seen.entered[0]!.text).toBe(SECRET_TEXT)
+    expect(seen.entered[0]!.origin).toEqual({ kind: 'plugin', name: 'leitstand', asUser: true })
+    expect(seen.toasts).toEqual(['Die Nachricht geht an Claude, sobald es frei ist.'])
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(false)
+    expect(await run($, 'leitstand:trotzdem-senden')).toBe('Es wartet keine zurückgehaltene Nachricht.')
+    expect(seen.entered).toHaveLength(1)
+  })
+
+  test('scheitert das Senden, wartet die Nachricht wieder, und ein Hinweis sagt warum', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    await submit($, 'sdk')
+    await clock.advance(100)
+    seen.toasts.length = 0
+    // Beneath the Leitstand someone refuses what a plugin sends.
+    seen.refusal = 'Die Sitzung nimmt gerade nichts an.'
+    await press($, 'held-send')
+    expect(seen.toasts).toEqual(['Die Nachricht ließ sich nicht senden: Die Sitzung nimmt gerade nichts an.'])
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(true)
+  })
+
+  test('Verwerfen leert, ohne zu senden', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    await submit($, 'sdk')
+    await clock.advance(100)
+    seen.toasts.length = 0
+    await press($, 'held-drop', 'terminal')
+    expect(seen.entered).toEqual([])
+    expect(seen.toasts).toEqual(['Die Nachricht ist verworfen.'])
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(false)
+    // Sent again, it is held as a new message, not let through as a resend.
+    expect((await submit($, 'sdk')).drop).toContain('zwei Minuten zurück')
+    expect(seen.entered).toEqual([])
+  })
+
+  test('nach zwei Minuten ist die Zeile weg; ein älterer Zeitgeber lässt eine neuere Nachricht stehen', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    await submit($, 'sdk')
+    await clock.advance(60_000)
+    await submit($, 'sdk', `Mein Passwort ist anders456`)
+    // The first message's two minutes are over; the second one waits a minute more.
+    await clock.advance(61_000)
+    expect((await band($, 'desktop')).isHeld).toBe(true)
+    await clock.advance(60_000)
+    for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(false)
+    expect(await run($, 'leitstand:nachricht-verwerfen')).toBe('Es wartet keine zurückgehaltene Nachricht.')
+    expect(seen.entered).toEqual([])
+  })
+
+  test('der bisherige Weg bleibt: dieselbe Nachricht noch einmal gesendet geht durch, im Terminal liegt sie wieder im Feld', async ($, on) => {
+    const { clock, seen } = guarded(on, ['terminal'])
+    expect((await submit($, 'composer')).drop).toContain('zwei Minuten zurück')
+    await clock.advance(100)
+    expect(seen.filled).toEqual([SECRET_TEXT])
+    expect((await submit($, 'composer')).drop).toBeUndefined()
+    expect(seen.entered.map(one => one.text)).toEqual([SECRET_TEXT])
+    expect((await band($, 'terminal')).isHeld).toBe(false)
+  })
+
+  test('/leitstand:trotzdem-senden und /leitstand:nachricht-verwerfen, mit und ohne zurückgehaltene Nachricht', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    expect(await run($, 'leitstand:trotzdem-senden')).toBe('Es wartet keine zurückgehaltene Nachricht.')
+    expect(await run($, 'leitstand:nachricht-verwerfen')).toBe('Es wartet keine zurückgehaltene Nachricht.')
+
+    await submit($, 'sdk')
+    await clock.advance(100)
+    seen.toasts.length = 0
+    expect(await run($, 'leitstand:trotzdem-senden')).toBe('Die zurückgehaltene Nachricht geht jetzt an Claude.')
+    // It goes once the command has its answer.
+    await clock.advance(1)
+    expect(seen.entered.map(one => one.text)).toEqual([SECRET_TEXT])
+    expect(seen.toasts).toEqual([])
+    expect((await band($, 'desktop')).isHeld).toBe(false)
+
+    await submit($, 'sdk', 'Mein Passwort ist anders456')
+    expect(await run($, 'nachricht-verwerfen')).toBe('Die zurückgehaltene Nachricht ist verworfen.')
+    expect(await run($, 'nachricht-verwerfen')).toBe('Es wartet keine zurückgehaltene Nachricht.')
+    await clock.advance(1)
+    expect(seen.entered.map(one => one.text)).toEqual([SECRET_TEXT])
+    expect((await band($, 'desktop')).isHeld).toBe(false)
+
+    // hilfe explains each, as for the other commands.
+    for (const name of ['leitstand:trotzdem-senden', 'leitstand:nachricht-verwerfen']) {
+      const help = await run($, name, 'hilfe')
+      expect(help.startsWith(`/${name}: Zurückgehaltene Nachricht`)).toBe(true)
+      expect(help).toContain('Gilt: einmal, sofort')
+      expect(help.endsWith(`\nKurzform: /${name.slice('leitstand:'.length)}`)).toBe(true)
+    }
+  })
 })
 
 test('overall progress, time left and a grown plan show in the header and footer', async ($, on) => {
@@ -8949,7 +9189,7 @@ describe('Eigene Befehle /leitstand-…', () => {
 
     const names = LEITSTAND_BEFEHLE.map(one => one.name)
     // Die des Leitstands selbst und die seiner Teile (Selbstkritik und Regeln, Dateien, Autopilot), jeder mit Kurzform.
-    expect(names).toHaveLength(48 + TEIL_BEFEHLE.length)
+    expect(names).toHaveLength(50 + TEIL_BEFEHLE.length)
     expect(new Set(names).size).toBe(names.length)
     const short = registered.find(one => one.name === 'leitstand')
     expect(short).toBeDefined()
@@ -8966,7 +9206,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       }
     }
     // Short forms without leitstand: in front: the same command, the menu names the mod.
-    expect(LEITSTAND_KURZFORMEN.size).toBe(44 + TEIL_BEFEHLE.length)
+    expect(LEITSTAND_KURZFORMEN.size).toBe(46 + TEIL_BEFEHLE.length)
     for (const name of ['an', 'aus', 'hilfe', 'vermenschlichen']) expect(registered.find(one => one.name === name)).toBeUndefined()
     for (const [kurz, name] of LEITSTAND_KURZFORMEN) {
       const one = LEITSTAND_BEFEHLE.find(befehl => befehl.name === name)

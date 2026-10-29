@@ -122,6 +122,12 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Terminal `composer`. In einer Cloud-Sitzung (claude.ai/code, in der App angesehen) kommt Björns
   Nachricht als `composer` an, und `$.session.surfaces()` ist leer: Hooks, Tools und Befehle
   laufen, aber kein Band, kein Fenster und keine Statuszeile ist zu sehen (geprüft 2026-10-19).
+- Passwortschutz des Leitstands seit 0.62.0, nach Herkunft: Unverändert durch gehen `plugin`,
+  `task-notification`, `peer`, `peer-send-message`, `coordinator`, `projects-relay`, `observer` und
+  `observer-activity`. Zurückgehalten (zwei Minuten, Zeile im Band, Text nur im Speicher) werden `composer`
+  und `sdk`, solange eine Oberfläche das Band zeigt. Alles andere (`bridge`, Zeitplan, Slack, Kanal,
+  `unclassified`, unbekannte Arten, `composer`/`sdk` ohne Oberfläche) geht ohne das Passwort weiter, mit
+  Hinweis an Claude; ein Slash-Befehl läuft, seine Argumente verlieren das Passwort in `command.run`.
 - Android-Regel: Kein Mod hält etwas an, das auf dem Handy nicht zu sehen und per Text zu lösen ist.
 - Modell- und Aufwandswechsel verwerfen den Cache. Deshalb wählt Modellwahl nur einmal je Aufgabe
   und fragt mitten im Chat bei Opus oder Fable nach.
@@ -227,3 +233,6 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    als Fertig ab, und der Rest braucht eine neue Freigabe. Der Passwortschutz hielt am selben Tag
    vermutlich zweimal den Bericht eines Helfers als Eingabe zurück; der Bericht kam nicht an, und Björn
    bekam nur den Hinweis "Ein Hook hat deine Eingabe blockiert". Björn: mindestens eine Freigabe anbieten.
+   Der Teil zum Passwortschutz ist behoben in leitstand 0.62.0: Berichte von Helfern gehen durch, eine
+   zurückgehaltene Nachricht steht im Band mit Trotzdem senden und Verwerfen (`/trotzdem-senden`,
+   `/nachricht-verwerfen`). Ungeprüft: ob die Desktop-App ein `$.prompt.submit` mit `asUser` annimmt.

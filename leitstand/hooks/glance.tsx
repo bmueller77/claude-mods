@@ -309,6 +309,26 @@ const RESEND_WINDOW_MS = 2 * 60 * 1000
 const SECRET_REMOVED_NOTE =
   `Hinweis des Leitstands: Diese Nachricht kam per Remote Control. Der Passwortschutz hat darin, was wie ein Passwort oder Schlüssel aussah, durch „${REMOVED}“ ersetzt. ` +
   'Beginne deine Antwort mit genau diesem einen Satz: „Der Passwortschutz hat ein Passwort aus deiner Nachricht entfernt; ich habe es nicht gesehen.“'
+// The same beside a message from anywhere else the guard cleans (a schedule, Slack, a channel, an unknown source),
+// and beside one from the prompt box or the SDK where no surface shows the band (claude -p, the cloud): nobody there
+// would see a held message either.
+const SECRET_REMOVED_ELSEWHERE_NOTE =
+  `Hinweis des Leitstands: Diese Nachricht konnte der Passwortschutz hier nicht zurückhalten. Er hat darin, was wie ein Passwort oder Schlüssel aussah, durch "${REMOVED}" ersetzt. ` +
+  'Beginne deine Antwort mit genau diesem einen Satz: "Der Passwortschutz hat ein Passwort aus dieser Nachricht entfernt; ich habe es nicht gesehen."'
+/** The note beside a message the guard took a secret out of, by where it came from. */
+const secretRemovedNote = (kind: string) => (kind === 'bridge' ? SECRET_REMOVED_NOTE : SECRET_REMOVED_ELSEWHERE_NOTE)
+// Written by a model or a machine, not typed by the person: a message from there goes on with its secret untouched (a
+// helper's report, another session's message). Nobody could send it a second time, and holding it lost it.
+const SECRET_PASSES: ReadonlySet<string> = new Set([
+  'plugin',
+  'task-notification',
+  'peer',
+  'peer-send-message',
+  'coordinator',
+  'projects-relay',
+  'observer',
+  'observer-activity',
+])
 const LIMIT_WARN = 80
 const LIMIT_ALERT = 95
 // Up to 0.24 every chat's checklist sat under this one key; now each has its own (RESUME_PREFIX).
@@ -384,6 +404,9 @@ const remoteAtom = atom({ plugin: 'leitstand', key: 'remoteControl' } as const, 
 // Whether Kurzantworten (the Kurzfassen skill, i-have-adhd as fallback) is on: it stays on until the person says
 // "Kurzfassen aus" or "normal antworten" (the old "stop adhd mode" and "normal mode" still count).
 const adhdAtom = atom({ plugin: 'leitstand', key: 'adhdMode' } as const, false)
+// A message the password guard holds back: when, and what it seems to hold, for the band's line. Never its text, which
+// stays in heldMessage alone; without it (after a reload) the atom counts as empty.
+const heldSecretAtom = atom({ plugin: 'leitstand', key: 'heldSecret' } as const, null)
 // When 🅰️ was last pressed to end a running Autopilot, for Autopilot to read as a round ends (see toggleNightShift).
 const autopilotStopAtom = atom({ plugin: 'leitstand', key: 'autopilotStop' } as const, null)
 // Whether the person's latest request says "ultracode": the helpers started in its turn show Ultracode for their
@@ -460,7 +483,8 @@ let othersTimer: Timer | undefined
 let hasEnded = false
 let isRefreshing = false
 let failuresInARow = 0
-// A message held back for a password: memory only, never stored, and only to let the same one through on a resend.
+// A message held back for a password: memory only, never stored, for Trotzdem senden and to let the same one through on
+// a resend. heldSecretAtom says the band has a line for it, with the same `at`.
 let heldMessage: { text: string; at: number } | null = null
 // The secrets the shield just moved into the .env, until its tidy-up is over: a compaction of the main chat in that time
 // has their values replaced in what it leaves. Memory only; it lapses at `until` should the run never end.
@@ -1336,14 +1360,74 @@ const vaultSecrets = async ($: $) => {
   }
 }
 
+/**
+ * Holds a message back for two minutes: its text in memory alone, the band's line in heldSecretAtom. On the terminal it
+ * goes back in the prompt box too, so Enter sends it again; the desktop app's box takes no fill, there the band's
+ * Trotzdem senden (or /trotzdem-senden) is the way.
+ */
 const holdSecretMessage = async ($: $, text: string, kinds: string[]) => {
-  heldMessage = { text, at: await now($) }
-  // Put it back in the box so nothing is lost.
+  const at = await now($)
+  heldMessage = { text, at }
+  await update($, heldSecretAtom, () => ({ at, kinds }))
+  // A timer of an earlier hold leaves a later one alone: it only forgets what was held at its own `at`.
+  $.clock.after(RESEND_WINDOW_MS, () => void forgetHeld($, at).catch(() => undefined))
   $.clock.after(50, () => void $.prompt.fill({ text }).catch(() => undefined))
   $.ui.toast(
-    `Diese Nachricht enthält offenbar ${kinds.join(' und ')}, deshalb wurde sie nicht gesendet. ` +
-      'Drück noch mal Enter, um sie trotzdem zu senden, oder nimm es vorher heraus.',
+    `Diese Nachricht enthält offenbar ${kinds.join(' und ')}, deshalb hält der Leitstand sie zwei Minuten zurück. ` +
+      'Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, im Terminal geht auch noch mal Enter.',
   )
+}
+
+/** The message held back now, with what it seems to hold; null when none waits, or its text went with a reload. */
+const heldNow = async ($: $): Promise<{ text: string; at: number; kinds: string[] } | null> => {
+  const shown = await read($, heldSecretAtom)
+  const held = heldMessage
+  if (shown === null || held === null || shown.at !== held.at) return null
+  return { ...held, kinds: shown.kinds }
+}
+
+/** Nothing is held back any more: no text, no line. */
+const clearHeld = async ($: $) => {
+  heldMessage = null
+  await update($, heldSecretAtom, () => null)
+}
+
+/** Two minutes on: what was held at `at` is let go, unless a later message is held by then. */
+const forgetHeld = async ($: $, at: number) => {
+  if (heldMessage?.at === at) heldMessage = null
+  await update($, heldSecretAtom, shown => (shown?.at === at ? null : shown))
+}
+
+/**
+ * Trotzdem senden: the held message goes to Claude as the person's own words. Its origin is then the Leitstand's
+ * (`plugin`), which the guard lets through. A held slash command goes as the same text; whether the app then runs it
+ * as a command is untested. Should the send fail, the message is held again as it was, and a toast says why. False
+ * when nothing waits.
+ */
+const sendHeld = async ($: $, isPress: boolean): Promise<boolean> => {
+  const held = await heldNow($)
+  if (held === null) return false
+  await clearHeld($)
+  try {
+    const result = await $.prompt.submit({ text: held.text, asUser: true })
+    if (result.drop !== undefined) throw new Error(result.drop)
+    if (isPress) $.ui.toast('Die Nachricht geht an Claude, sobald es frei ist.')
+  } catch (error) {
+    heldMessage = { text: held.text, at: held.at }
+    await update($, heldSecretAtom, () => ({ at: held.at, kinds: held.kinds }))
+    // Whatever the error says, the secret stays out of it.
+    const reason = removeSecrets(error instanceof Error ? error.message : String(error))
+    $.ui.toast(`Die Nachricht ließ sich nicht senden: ${reason}`)
+  }
+  return true
+}
+
+/** Verwerfen: the held message is gone, unsent. False when nothing waits. */
+const discardHeld = async ($: $, isPress: boolean): Promise<boolean> => {
+  if ((await heldNow($)) === null) return false
+  await clearHeld($)
+  if (isPress) $.ui.toast('Die Nachricht ist verworfen.')
+  return true
 }
 
 const measureUsage = async ($: $, usage: GlanceUsage) => {
@@ -1571,6 +1655,18 @@ const isDynamic = async ($: $): Promise<boolean> => (await read($, enabledAtom))
 
 /** No terminal, app or phone draws this session (a plain claude -p run): nobody could press Start. */
 const hasNoSurface = async ($: $): Promise<boolean> => (await $.session.surfaces().catch(() => ['?'])).length === 0
+
+/**
+ * What the password guard does with a message that holds a secret, by where it came from: `pass` what a model or a
+ * machine wrote (a helper's report, another session); `hold` what the person typed at the computer, where the band
+ * shows the held message; `clean` the rest (the phone, a schedule, Slack, an unknown source, and the prompt box or the
+ * SDK with no surface), which goes on without the secret.
+ */
+const secretRoute = async ($: $, kind: string): Promise<'pass' | 'hold' | 'clean'> => {
+  if (SECRET_PASSES.has(kind)) return 'pass'
+  if ((kind === 'composer' || kind === 'sdk') && !(await hasNoSurface($))) return 'hold'
+  return 'clean'
+}
 
 /** Legt die Arbeiter der Arbeitsweise Dynamisch an; in Auto bietet agent.offer sie nicht an. */
 const registerTiers = async ($: $) => {
@@ -2378,6 +2474,8 @@ const verlaufZeigen = async ($: $, args: string, isPhone: boolean) => {
 const AUFRAEUMEN_UMGEZOGEN =
   'Aufräumen mit Sicherungspunkt gehört jetzt zur Statistik: /statistik:chat-aufraeumen räumt auf, /statistik:letzter-stand-zeigen zeigt den Sicherungspunkt.'
 
+const NICHTS_ZURUECKGEHALTEN = 'Es wartet keine zurückgehaltene Nachricht.'
+
 /** What one of the own commands does, as its button does it; its answer. */
 const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boolean): Promise<string> => {
   switch (name) {
@@ -2492,6 +2590,13 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
     }
     case 'leitstand:geheimnisse-sichern':
       return geheimnisseSichern($, args)
+    case 'leitstand:trotzdem-senden':
+      // Sent once the answer is given: a message sent from inside the command would wait for the session to be idle.
+      if ((await heldNow($)) === null) return NICHTS_ZURUECKGEHALTEN
+      danach($, () => sendHeld($, false))
+      return 'Die zurückgehaltene Nachricht geht jetzt an Claude.'
+    case 'leitstand:nachricht-verwerfen':
+      return (await discardHeld($, false)) ? 'Die zurückgehaltene Nachricht ist verworfen.' : NICHTS_ZURUECKGEHALTEN
 
     case 'leitstand:knoepfe-zeigen':
       imHintergrund(() => showButtonHelp($))
@@ -2791,7 +2896,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         await setGuard($, isOn)
         return {
           text: isOn
-            ? 'Der Passwortschutz ist an: Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten.'
+            ? 'Der Passwortschutz ist an: Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zwei Minuten zurückgehalten. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab. Berichte von Helfern gehen durch.'
             : 'Der Passwortschutz ist aus: Jede Nachricht wird so gesendet, wie du sie schreibst.',
         }
       }
@@ -2983,34 +3088,44 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     if (kinds.length === 0) {
       return send()
     }
-    // A slash command keeps its text whatever a hook rewrites: one from the phone goes on here, and its arguments lose
-    // the secret at command.run, before the command runs.
-    if (e.origin.kind === 'bridge') {
+    const route = await secretRoute($, e.origin.kind)
+    // A helper's report or another session's message goes on as it is: nobody could send it again.
+    if (route === 'pass') {
+      return send()
+    }
+    // A slash command keeps its text whatever a hook rewrites: one from the phone (or elsewhere the guard cleans) goes
+    // on here, and its arguments lose the secret at command.run, before the command runs.
+    if (route === 'clean') {
       if (e.command) return send()
-      return send({ ...e, text: removeSecrets(e.text), context: [...(e.context ?? []), SECRET_REMOVED_NOTE] })
+      return send({ ...e, text: removeSecrets(e.text), context: [...(e.context ?? []), secretRemovedNote(e.origin.kind)] })
     }
     const held = heldMessage
     if (held !== null && held.text === e.text && (await now($)) - held.at < RESEND_WINDOW_MS) {
-      heldMessage = null
+      await clearHeld($)
       return send()
     }
     await holdSecretMessage($, e.text, kinds)
 
-    return { drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel, deshalb hat der Leitstand sie zurückgehalten.' }
+    return {
+      drop: 'Die Nachricht sah aus, als enthielte sie ein Passwort oder einen Schlüssel. Der Leitstand hält sie zwei Minuten zurück: Trotzdem senden im Band oder /trotzdem-senden schickt sie ab.',
+    }
   })
 
-  // A slash command from the phone (Remote Control) runs without the password in its arguments, and Claude says so.
+  // A slash command from the phone (Remote Control), or from elsewhere the guard cleans, runs without the password in
+  // its arguments, and Claude says so. A command with no origin runs as typed, as before.
   on('command.run', async ($, e, next) => {
-    if (e.origin?.kind !== 'bridge' || findSecrets(e.args).length === 0 || !(await read($, guardAtom))) {
+    const kind = e.origin?.kind
+    if (kind === undefined || findSecrets(e.args).length === 0 || !(await read($, guardAtom)) || (await secretRoute($, kind)) !== 'clean') {
       return next(e)
     }
     const result = await next({ ...e, args: removeSecrets(e.args) })
-    return { ...result, context: [...(result.context ?? []), SECRET_REMOVED_NOTE] }
-  }).catch(($, e, next) => {
-    // Should the hook fail, a command from the phone still runs without the password.
-    if (e.origin?.kind !== 'bridge') return next(e)
+    return { ...result, context: [...(result.context ?? []), secretRemovedNote(kind)] }
+  }).catch(async ($, e, next) => {
+    // Should the hook fail, such a command still runs without the password.
+    const kind = e.origin?.kind
     let args: string
     try {
+      if (kind === undefined || (await secretRoute($, kind)) !== 'clean') return next(e)
       args = removeSecrets(e.args)
     } catch {
       return next(e)
@@ -3891,7 +4006,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           isGuarded ? 'An' : 'Aus',
           choice('guard', [['off', 'Aus'], ['on', 'An']], isGuarded ? 'on' : 'off', value => setGuard($, value === 'on')),
           isGuarded
-            ? 'Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zurückgehalten. Drück noch mal Enter, um sie trotzdem zu senden.'
+            ? 'Eine Nachricht, die nach Passwort oder Schlüssel aussieht, wird zwei Minuten zurückgehalten. Trotzdem senden im Band oder /trotzdem-senden schickt sie ab, im Terminal auch noch mal Enter. Berichte von Helfern gehen durch.'
             : masks
               ? 'Jede Nachricht wird so gesendet, wie du sie schreibst. Schlüssel und E-Mail-Adressen bleiben auf dem Bildschirm trotzdem verdeckt.'
               : 'Jede Nachricht wird so gesendet, wie du sie schreibst.',
@@ -4562,8 +4677,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // Over the band a thin line, as the other mods in it draw one over theirs.
     const rule = kit.rule(e.props.bodyColumns)
     // What is beneath may be the engine's own node, which can't sit under a Box with a width: wrap, don't nest.
+    // A message the password guard holds back stands over everything, Autopilot's line too, in every view and with the
+    // Leitstand off (heldLine, built with the actions further down).
     const withBeneath = (tree: RenderElement): RenderElement => (
       <Box flexDirection="column">
+        {heldLine}
         {autopilotLine as RenderElement | null}
         {modelChoiceLine as RenderElement | null}
         {rule}
@@ -4650,6 +4768,21 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       ) : (
         <Button key={key} plain label={short ?? `${GLYPH[icon]} ${label}`} onPress={onPress} />
       )
+    // The message the password guard holds back: what it seems to hold, never its text, and the two ways out. The
+    // desktop app puts nothing back in its prompt box, so without this line the message was lost there.
+    const held = await heldNow($)
+    const heldLine =
+      held === null
+        ? null
+        : line(
+            'held-secret',
+            null,
+            <Text wrap="wrap">{`🔒 Zurückgehalten: Deine Nachricht enthält offenbar ${held.kinds.join(' und ')}.`}</Text>,
+            <Box flexDirection="row" alignItems="center" columnGap={vector ? BUTTON_GAP : columns < 44 ? 1 : 2}>
+              {action('held-send', 'play', 'Trotzdem senden', () => sendHeld($, true).catch(() => undefined))}
+              {action('held-drop', 'close', 'Verwerfen', () => discardHeld($, true).catch(() => undefined))}
+            </Box>,
+          )
     const handoffLabel =
       armed === 'handoff' ? 'Noch mal drücken für neuen Chat' : handoff === 'working' ? 'Schreibe Übergabenotiz…' : 'Neuer Chat'
     // What steers the job (Pause, Start, Continue); elsewhere than the terminal it sits beside the job's status.

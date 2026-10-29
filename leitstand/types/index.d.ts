@@ -398,8 +398,16 @@ declare module 'claude-code' {
       isRecapShown: boolean
       /** Calm mode: nothing moves, and statuses read in bold. */
       isCalm: boolean
-      /** Password guard: a message that looks like it holds a password or key is held back until sent twice. */
+      /**
+       * Password guard: a message typed at the computer that looks like it holds a password or key is held back for two
+       * minutes, until Trotzdem senden or sent again; from elsewhere it goes on without it, a helper's report as it is.
+       */
       isGuarded: boolean
+      /**
+       * A message the password guard holds back: when it was held, in ms since the epoch, and what it seems to hold
+       * (`ein Passwort`, ...); null when none waits. Never the text, which stays in the module's memory alone.
+       */
+      heldSecret: { at: number; kinds: string[] } | null
       /** Masking: passwords, keys and personal details read as dots on screen, in messages, command and tool output. */
       masksPrivate: boolean
       /** Approve the plan first: Claude lays out its plan and waits for Start or a change. */
