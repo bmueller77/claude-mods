@@ -8794,10 +8794,10 @@ describe('Einstellungen je Chat', () => {
     kind: 'choice',
     value: 'ausfuehrlich',
     options: ['einfach', 'detailliert', 'minimal', 'aus'],
-    provider: { plugin: 'leitstand@bjoern-mods', tier: 'user' },
+    provider: { plugin: 'leitstand@bm-mods', tier: 'user' },
     isLocked: false,
   }
-  const stored = (view: string) => ({ pluginConfigs: { 'leitstand@bjoern-mods': { options: { ansicht: view } } } })
+  const stored = (view: string) => ({ pluginConfigs: { 'leitstand@bm-mods': { options: { ansicht: view } } } })
   /** Settings by source, the rows the config menu lists, and its answer to a write; the writes, as asked. */
   const configWorld = (
     on: On,

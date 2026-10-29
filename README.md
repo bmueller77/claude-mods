@@ -1,6 +1,6 @@
-# bjoern-mods
+# BM-Mods
 
-Claude-Code-Marktplatz mit Björns eigenen Mods, dazu i-have-adhd (das englische Original von kurzfassen).
+Claude-Code-Marktplatz `bm-mods` mit Björns eigenen Mods, dazu i-have-adhd (das englische Original von kurzfassen).
 Die eigenen Mods und die deutschen Fassungen liegen hier im Repo, i-have-adhd kommt direkt aus seinem Original-Repo.
 
 Einstellungen gelten je Chat: Ein Schalter, den du in einem Chat umlegst, ändert keinen anderen Chat. Neue Chats
@@ -14,6 +14,14 @@ Vorhandene Instanz umstellen (alte Mods raus, aktuelle rein): Prompt in [UMSTIEG
 Umgestellte Instanz auf den neuesten Stand bringen: Prompt in [UPDATE.md](UPDATE.md).
 
 In `commands/` liegen Befehlsdateien für die Desktop-App (`/autopilot`, `/statistik`, `/warmhalten`, `/zusammenfassung`, `/replay`, `/reflect`, `/better`). Nach `~/.claude/commands/` kopiert, kennt die App diese Befehle schon in der ersten Nachricht einer Sitzung.
+
+## Umbenannt am 2026-10-29
+
+Der Katalog hieß bis dahin `bjoern-mods` und heißt jetzt `bm-mods`, angezeigt als BM-Mods. Das Repo bleibt
+`bmueller77/claude-mods`. Bestehende Instanzen laufen unter dem alten Namen weiter und bekommen auch so Updates, bis
+sie einmal den Umzug am Anfang von [UPDATE.md](UPDATE.md) machen; er nimmt Einstellungen und gespeicherte Daten mit.
+Neu eingerichtete Instanzen tragen den Katalog gleich als `bm-mods` ein. `install.sh` bricht ab, solange noch
+`bjoern-mods` eingetragen ist.
 
 ## So sieht es aus
 
@@ -60,7 +68,7 @@ sich mit `hilfe` dahinter (`/statistik:warmhalten-aus hilfe`). Jeder Mod bringt 
 seinem Ordner `commands/` selbst mit. Der Leitstand hat dazu Kurzformen ohne `leitstand:`, etwa `/pause`,
 `/verdecken-an` oder `/kurzantworten-an`; ohne Kurzform bleiben `an`, `aus`, `hilfe` und `vermenschlichen`, weil die
 ersten drei allein nicht sagen, welcher Mod gemeint ist, und `/vermenschlichen` der Skill selbst ist. Ein alter Name
-wie `/leitstand-pause` oder `/statistik-zeigen` nennt nur noch den neuen. Befehle, die wie ein doppelter Klick
+wie `/leitstand-pause` oder `/statistik-zeigen` nennt nur noch den neuen. Befehle, die wie ein Doppelklick
 etwas Größeres auslösen (`/neuer-chat`, `/abschliessen`, `/geheimnisse-sichern`), wollen ein `ja` dahinter. Die
 Grundbefehle (`/leitstand …`, `/better`, `/reflect`, `/autopilot an|aus`, `/statistik`, `/warmhalten`,
 `/zusammenfassung`, `/replay`, `/modellwahl`, `/filetree`) gehen weiter. Für sie und die Kurzformen des Leitstands
@@ -88,7 +96,7 @@ ob die Langformen mit Doppelpunkt bis zum Rundenende warten, ist ungeprüft.
 Ein Mod ruft keinen anderen Mod auf, höchstens Skills. Deshalb sind Reflect, Filetree und Autopilot jetzt Teile des
 Leitstands, der ihre Buttons hat, und keine eigenen Mods mehr. Ihre Ordner liegen weiter im Repo, stehen aber nicht mehr
 im Katalog. Wo einer noch installiert ist, läuft er neben dem Leitstand doppelt: `claude plugin uninstall
-<mod>@bjoern-mods`. Das löscht seine Einstellungen und bei Reflect die offenen Regelvorschläge; Regeln, die schon in
+<mod>@bjoern-mods` (bzw. `@bm-mods`). Das löscht seine Einstellungen und bei Reflect die offenen Regelvorschläge; Regeln, die schon in
 einer CLAUDE.md stehen, bleiben.
 
 | Alter Mod | Jetzt im Leitstand |
@@ -128,6 +136,7 @@ Kein Mod läuft nur unter Windows.
 
 ## Updates
 
-    claude plugin marketplace update bjoern-mods
+    claude plugin marketplace update bm-mods
 
-Danach `claude plugin update <mod>@bjoern-mods` oder Claude Code neu starten.
+Danach `claude plugin update <mod>@bm-mods` oder Claude Code neu starten. Steht der Katalog noch als `bjoern-mods`
+da, gilt bis zum Umzug der alte Name.

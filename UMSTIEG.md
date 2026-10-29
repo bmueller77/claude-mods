@@ -1,65 +1,70 @@
-# Umstieg auf bjoern-mods (Stand 2026-10-19)
+# Umstieg auf bm-mods (Stand 2026-10-29)
 
 Für jede Claude-Code-Instanz, auf den Servern wie in der Desktop-App auf dem Laptop. Den Prompt
 unten in einer Sitzung der Instanz abschicken. Er entfernt die alten Mods und richtet die aktuellen
 für alle Chats ein (Scope user).
 
-Quelle ist dieses Repo (`bmueller77/claude-mods`, Katalog "bjoern-mods"). Seit 2026-10-27 haben
-alle Instanzen Zugang dazu; das Zip `bjoern-mods-2026-10-19.zip` braucht es nicht mehr. Eine schon
-umgestellte Instanz bringt der Prompt in `UPDATE.md` auf den neuesten Stand.
+Quelle ist dieses Repo (`bmueller77/claude-mods`, Katalog "bm-mods", angezeigt als BM-Mods; bis
+2026-10-29 hieß er "bjoern-mods"). Seit 2026-10-27 haben alle Instanzen Zugang dazu; das Zip
+`bjoern-mods-2026-10-19.zip` braucht es nicht mehr. Eine schon umgestellte Instanz bringt der Prompt
+in `UPDATE.md` auf den neuesten Stand, auch vom alten Namen auf den neuen.
 
 ## Prompt
 
 ```text
 Richte die Claude-Code-Mods auf diesem Rechner neu ein, für alle Chats (Scope user). Quelle ist der
-Katalog "bjoern-mods" aus dem privaten Repo bmueller77/claude-mods. Liegt dir statt Repo-Zugang das
-Zip bjoern-mods-2026-10-19.zip vor, entpacke es in ~/.claude/ (es enthält den Ordner bjoern-mods)
-und nimm ~/.claude/bjoern-mods als Katalog. Lösche keine Ordner, und rühre nichts an, was nicht hier steht.
+Katalog "bm-mods" aus dem privaten Repo bmueller77/claude-mods; bis 2026-10-29 hieß er "bjoern-mods".
+Liegt dir statt Repo-Zugang ein Zip bm-mods-<datum>.zip vor, entpacke es in ~/.claude/ (es enthält
+den Ordner bm-mods) und nimm ~/.claude/bm-mods als Katalog. Lösche keine Ordner, und rühre nichts
+an, was nicht hier steht.
 
 1. Bestand: `claude --version` (mindestens 2.1.296), `claude plugin list`,
    `claude plugin marketplace list`. Halte das Ergebnis fest.
 2. Alte Mods entfernen: Deinstalliere (`claude plugin uninstall <name>@<katalog>`) jedes Plugin aus
    den Katalogen claude-kit, claude-code-mods, catch-me-up, cache-tax, cache-tax-lokal,
    visible-compact, visible-compact-lokal, claude-code-playground, claude-code-playground-mods,
-   savvy-progress-lokal, claude-mods und nateherk-mods, dazu aus bjoern-mods die alten Einträge
+   savvy-progress-lokal, claude-mods und nateherk-mods, dazu aus bm-mods oder bjoern-mods die alten Einträge
    glanceflow, nachtschicht, savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius,
    antwortzeit, zweiter-blick und context-bar, wo vorhanden. Ebenso filetree aus dem Katalog
-   claude-code-filetree (die deutsche Fassung kommt jetzt aus bjoern-mods) und reflect-mod bzw.
+   claude-code-filetree (die deutsche Fassung kommt jetzt aus bm-mods) und reflect-mod bzw.
    claude-reflect aus claude-reflect-marketplace (sonst prüft der Leitstand jede Korrektur doppelt).
-   Aus bjoern-mods außerdem reflect, filetree und autopilot: Sie stecken seit 2026-10-26 im
+   Aus bm-mods oder bjoern-mods außerdem reflect, filetree und autopilot: Sie stecken seit 2026-10-26 im
    Leitstand und liefen sonst doppelt. Das löscht ihre Einstellungen und die offenen
    Regelvorschläge von reflect; Regeln, die schon in einer CLAUDE.md stehen, bleiben.
    Entferne danach diese Kataloge (`claude plugin marketplace remove <katalog>`, also auch
-   claude-code-filetree und claude-reflect-marketplace), aber nicht bjoern-mods. Plugins aus anderen
+   claude-code-filetree und claude-reflect-marketplace), aber nicht bm-mods und nicht bjoern-mods. Plugins aus anderen
    Katalogen (Skills, MCP-Server und Ähnliches für deine Arbeit) bleiben; nenne sie im Bericht.
-3. Katalog. Nicht `claude plugin marketplace remove bjoern-mods` nehmen: Das deinstalliert alle
-   Mods daraus und löscht ihre Einstellungen und Daten.
-   - Mit Repo-Zugang: Zeigt bjoern-mods schon auf bmueller77/claude-mods, dann
-     `claude plugin marketplace update bjoern-mods`. Zeigt es auf etwas anderes (etwa einen
+3. Katalog. `claude plugin marketplace remove` nie für einen Katalog nehmen, aus dem noch Mods
+   installiert sind: Das deinstalliert sie und löscht ihre Einstellungen und Daten.
+   - Steht in `claude plugin marketplace list` noch bjoern-mods, erst den Umzug aus UPDATE.md im
+     Repo machen, Schritte U1 bis U9; neu gestartet wird hier in Schritt 6. Danach weiter mit
+     Schritt 4.
+   - Mit Repo-Zugang: Zeigt bm-mods schon auf bmueller77/claude-mods, dann
+     `claude plugin marketplace update bm-mods`. Zeigt es auf etwas anderes (etwa einen
      lokalen Ordner), in ~/.claude/settings.json unter `extraKnownMarketplaces` den Eintrag
-     bjoern-mods genau so setzen, sonst nichts ändern:
-     `"bjoern-mods": { "source": { "source": "github", "repo": "bmueller77/claude-mods" } }`.
+     bm-mods genau so setzen, sonst nichts ändern:
+     `"bm-mods": { "source": { "source": "github", "repo": "bmueller77/claude-mods" } }`.
      Der neue Wert ersetzt den alten Inhalt von `source`, er kommt nicht als weitere Ebene
-     hinein. Dann `claude plugin marketplace add bmueller77/claude-mods`. Gibt es bjoern-mods
+     hinein. Dann `claude plugin marketplace add bmueller77/claude-mods`. Gibt es bm-mods
      noch nicht, nur das `add`.
    - Mit Zip: genauso, aber mit
-     `"bjoern-mods": { "source": { "source": "directory", "path": "<voller Pfad von ~/.claude/bjoern-mods>" } }`
-     und `claude plugin marketplace add ~/.claude/bjoern-mods`.
+     `"bm-mods": { "source": { "source": "directory", "path": "<voller Pfad von ~/.claude/bm-mods>" } }`
+     und `claude plugin marketplace add ~/.claude/bm-mods`.
    Installierte Mods bleiben dabei installiert und holen Updates ab jetzt aus der neuen Quelle.
-   Prüfen: `claude plugin marketplace list` zeigt bei bjoern-mods jetzt GitHub (bzw. den neuen
+   Prüfen: `claude plugin marketplace list` zeigt bei bm-mods jetzt GitHub (bzw. den neuen
    Ordner). Steht dort noch die alte Quelle, hat das `add` nicht gegriffen; dann den Eintrag in
    settings.json noch einmal ansehen.
-4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bjoern-mods --scope user`:
+4. Installieren, genau in dieser Reihenfolge, je mit `claude plugin install <name>@bm-mods --scope user`:
    leitstand, statistik, naechste-schritte, zusammenfassung, visible-compact, prompt-upgrade,
    modellwahl, kurzfassen, i-have-adhd. Meldet install "already installed",
-   holt `claude plugin update <name>@bjoern-mods` die neue Version (install allein tut das nicht).
-   Ist eines danach nicht "enabled", `claude plugin enable <name>@bjoern-mods`.
+   holt `claude plugin update <name>@bm-mods` die neue Version (install allein tut das nicht).
+   Ist eines danach nicht "enabled", `claude plugin enable <name>@bm-mods`.
    (install.sh im Repo tut dasselbe.)
 5. Nur in der Claude-Desktop-App: In ~/.claude/settings.json unter permissions.allow den Eintrag
    "mcp__ccd_session_mgmt__set_remote_control" ergänzen, vorhandene Einträge behalten. Sonst
    lehnt der Auto-Modus den Button 🛜 ab. Außerdem die Dateien aus `commands/` im Repo (bzw. im
    Zip) nach ~/.claude/commands/ kopieren und eine alte ~/.claude/commands/nachtschicht.md
-   entfernen, ebenso alle alten ~/.claude/commands/<mod>-*.md der Mods von bjoern-mods
+   entfernen, ebenso alle alten ~/.claude/commands/<mod>-*.md der Mods von bm-mods
    (leitstand-, statistik-, zusammenfassung-, autopilot-, naechste-schritte-, reflect-,
    prompt-upgrade-, modellwahl-, visible-compact-, filetree-) und adhs-an.md, adhs-aus.md,
    reflexion.md, dateibaum.md, jetzt-aufraeumen.md, letzter-stand-zeigen.md.
@@ -102,7 +107,7 @@ deshalb gleiches Bild auf jeder Instanz.
   Befehl erklärt sich mit `hilfe` dahinter. Der Leitstand hat Kurzformen wie `/pause`. Vom Handy (Remote Control) ist das der Weg zu allen Schaltern.
 - Einstellungen gelten je Chat: Ein Schalter, den man in einem Chat umlegt, ändert keinen anderen
   Chat. Neue Chats starten mit dem Standard aus dem Einstellungsmenü der App bzw.
-  `/plugin configure <mod>@bjoern-mods`. Standard des Leitstands: Auto-Modus, Verdecken und
+  `/plugin configure <mod>@bm-mods`. Standard des Leitstands: Auto-Modus, Verdecken und
   Passwortschutz an, Ansicht minimal, alles andere aus. Die Regelprüfung im Leitstand ist an,
   die Automatik von Prompt Upgrade ist aus.
 - Der Leitstand startet in der Arbeitsweise "Auto-Modus" ohne Plan-Freigabe. In der Gruppenarbeit

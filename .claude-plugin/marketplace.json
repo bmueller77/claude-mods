@@ -1,7 +1,7 @@
 {
-  "name": "bjoern-mods",
+  "name": "bm-mods",
   "owner": { "name": "Björn Müller" },
-  "metadata": { "description": "Björns eigene Claude-Code-Mods (Leitstand mit Selbstkritik, Dateien und Autopilot, Statistik, Nächste Schritte, Zusammenfassung, Visible Compact deutsch, Prompt Upgrade, Modellwahl, Kurzfassen) plus i-have-adhd. Reflect, Filetree und Autopilot sind seit 2026-10-26 Teile des Leitstands und keine eigenen Mods mehr. Die älteren Mods aus dem Video (savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; die eigenen Mods ersetzen sie." },
+  "metadata": { "description": "BM-Mods: Björns eigene Claude-Code-Mods (Leitstand mit Selbstkritik, Dateien und Autopilot, Statistik, Nächste Schritte, Zusammenfassung, Visible Compact deutsch, Prompt Upgrade, Modellwahl, Kurzfassen) plus i-have-adhd. Reflect, Filetree und Autopilot sind seit 2026-10-26 Teile des Leitstands und keine eigenen Mods mehr. Die älteren Mods aus dem Video (savvy-progress, next-steps, cache-meter, cache-tax, catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; die eigenen Mods ersetzen sie." },
   "plugins": [
     { "name": "leitstand", "source": "./leitstand", "description": "Der Leitstand über der Eingabe: Checkliste mit Plan, Fortschritt, Helfern, Verlauf und Teambericht; Arbeitsweisen Auto-Mode und Gruppenarbeit; Schalter für Kurzantworten, Remote Control, Autopilot und Verdecken; Selbstkritik und Regeln (früher Reflect), Dateien (früher Filetree) und Autopilot eingebaut. Hervorgegangen aus GlanceFlow (MIT, Antreas-Strb), mit Teilen von claude-reflect (MIT, BayramAnnakov) und claude-code-filetree (MIT, Kurt Buhler)" },
     { "name": "statistik", "source": "./statistik", "description": "Eine Zeile mit Nutzungslimits, Tokens, Kontext und Cache-Uhr, dazu Warmhalten, Aufräumen mit Sicherungspunkt, Compact und Kontext-Details über /context (Eigenbau)" },

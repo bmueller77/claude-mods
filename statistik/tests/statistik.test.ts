@@ -706,7 +706,7 @@ test('kein anderer Mod: auch mit Leitstand und GlanceFlow ruft der Schwamm weder
     mock.store(on, {})
     const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
     const befehl = (name: string) => ({ name, description: '', source: 'plugin' })
-    on('command.list', () => ({ value: [befehl('glanceflow'), befehl('leitstand'), befehl('bjoern-mods:leitstand')] }) as never)
+    on('command.list', () => ({ value: [befehl('glanceflow'), befehl('leitstand'), befehl('bm-mods:leitstand')] }) as never)
     await start($ as never)
     await runde($ as never)
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })

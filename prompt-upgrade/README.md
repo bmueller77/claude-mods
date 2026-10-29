@@ -73,10 +73,10 @@ und lässt Rollen-Tricks, „denk Schritt für Schritt“ und Extra-Prüfungen w
 
 ## Einschalten
 
-Der Mod liegt im lokalen Marktplatz `bjoern-mods` (`~/.claude/mods`). Sobald er
+Der Mod liegt im lokalen Marktplatz `bm-mods` (`~/.claude/mods`). Sobald er
 dort in `.claude-plugin/marketplace.json` eingetragen ist, im Terminal:
 
-    claude plugin install prompt-upgrade@bjoern-mods
+    claude plugin install prompt-upgrade@bm-mods
 
-oder in einer Sitzung `/plugin install prompt-upgrade@bjoern-mods`, danach `/reload-plugins`.
+oder in einer Sitzung `/plugin install prompt-upgrade@bm-mods`, danach `/reload-plugins`.
 Zum Ausprobieren ohne Installation: `claude --plugin-dir ~/.claude/mods/prompt-upgrade`.

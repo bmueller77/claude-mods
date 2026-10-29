@@ -1,6 +1,6 @@
 # Befehle der Mods
 
-Alle Befehle der Mods aus bjoern-mods, je Mod. Die Grundbefehle ohne Doppelpunkt stehen jeweils oben in der Tabelle. Sie wirken auch mitten in einer Runde sofort, ebenso die Kurzformen des Leitstands.
+Alle Befehle der Mods aus bm-mods, je Mod. Die Grundbefehle ohne Doppelpunkt stehen jeweils oben in der Tabelle. Sie wirken auch mitten in einer Runde sofort, ebenso die Kurzformen des Leitstands.
 
 - `/<mod>:hilfe` listet die Befehle eines Mods.
 - `hilfe` hinter einem Befehl erklärt ihn, etwa `/statistik:warmhalten-an hilfe`.

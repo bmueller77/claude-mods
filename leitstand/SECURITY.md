@@ -5,8 +5,8 @@
 Only the latest release of the Leitstand gets fixes. Update with:
 
 ```
-claude plugin marketplace update bjoern-mods
-claude plugin update leitstand@bjoern-mods
+claude plugin marketplace update bm-mods
+claude plugin update leitstand@bm-mods
 ```
 
 ## Reporting a vulnerability

@@ -1,7 +1,7 @@
 {
   "name": "visible-compact",
   "displayName": "Visible Compact",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Zeigt den Chat vor und nach /compact nebeneinander in einem Seitenfenster, auf Wunsch ins Deutsche übersetzt; /show-last-compact öffnet es wieder. Deutsche Fassung von visible-compact (MIT, Sravan).",
   "author": {
     "name": "Sravan",

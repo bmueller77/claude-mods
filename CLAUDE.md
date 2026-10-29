@@ -1,7 +1,8 @@
-# Björns Claude-Code-Mods (Katalog bjoern-mods)
+# BM-Mods: Björns Claude-Code-Mods (Katalog bm-mods)
 
-Dieses Repo ist der Katalog `bjoern-mods`. Seit 2026-10-19 pflegt Claude ihn hier auf GitHub, und
-`main` ist der Stand, den jede Instanz mit `claude plugin marketplace update bjoern-mods` bekommt.
+Dieses Repo ist der Katalog `bm-mods` (bis 2026-10-29 `bjoern-mods`). Seit 2026-10-19 pflegt Claude ihn
+hier auf GitHub, und `main` ist der Stand, den jede Instanz mit `claude plugin marketplace update bm-mods`
+bekommt.
 Die vollständige Übergabe vom PC steht in `docs/uebergabe-2026-10-19.md`.
 
 Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
@@ -54,7 +55,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   fertig"). Läuft der Autopilot, nicht auf `main`, sondern auf einen eigenen Zweig pushen und das
   in der Übergabe vermerken. Ein nur lokaler Commit ginge in der Cloud mit dem Container verloren.
 - Seit 2026-10-27 haben alle Instanzen Zugang zum Repo. Falls doch wieder eine ohne dazukommt, Zip:
-  `git archive --format=zip --prefix=bjoern-mods/ -o bjoern-mods-<datum>.zip HEAD`. Datum und
+  `git archive --format=zip --prefix=bm-mods/ -o bm-mods-<datum>.zip HEAD`. Datum und
   Zip-Name in `UMSTIEG.md` nachziehen. `.gitattributes` hält `CLAUDE.md` und `docs/` aus dem Zip.
 - In einer Cloud-Sitzung ausprobieren: Mods mit
   `git archive HEAD <mod> | tar -x -C <Mod-Ordner der Sitzung>` kopieren. Den Ordner nennt der
@@ -135,9 +136,15 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   zum Neustart; bis dahin `general-purpose` nehmen.
 - Einen Katalog nie mit `claude plugin marketplace remove` umstellen: Das deinstalliert seine Mods
   und löscht ihre Einstellungen und Daten. Stattdessen in `settings.json` die Quelle unter
-  `extraKnownMarketplaces.bjoern-mods.source` ändern, dann `claude plugin marketplace add <neue Quelle>`
+  `extraKnownMarketplaces.bm-mods.source` ändern, dann `claude plugin marketplace add <neue Quelle>`
   (in einer eigenen `CLAUDE_CONFIG_DIR` geprüft, 2.1.303). Solange der Eintrag nicht passt, lehnt
-  `add` die neue Quelle ab.
+  `add` die neue Quelle ab. Harmlos ist `remove` erst, wenn `claude plugin list` nichts mehr aus dem
+  Katalog zeigt; dann entfernt es nur Deklaration, Eintrag in known_marketplaces und Klon (2.1.309).
+- Umbenannt am 2026-10-29: `bjoern-mods` heißt `bm-mods` (angezeigt BM-Mods, Repo gleich; geprüft mit 2.1.309).
+  Alte Instanzen laufen unter `bjoern-mods` weiter, frische tragen `bm-mods` ein. Umzug in `UPDATE.md`: `marketplace
+  add bmueller77/claude-mods#main` (ohne `#main` nur "already on disk"), `uninstall <mod>@bjoern-mods --keep-data`
+  (löscht den `pluginConfigs`-Eintrag), `install <mod>@bm-mods`, `store/<mod>_<katalog>-<h>.json` (`<h>` = 12 Hex
+  von sha256("<mod>@<katalog>")) kopieren, wenn das Ziel fehlt, Werte per `configure --values-stdin`, neu starten.
 - Björn will Uhrzeiten immer in Berliner Zeit, auch auf UTC-Servern und in der Cloud. Alle Mods tun
   das über `Intl.DateTimeFormat` mit `timeZone: 'Europe/Berlin'` (im Sandkasten vorhanden), seit
   statistik 0.16.1, leitstand 0.53.1, reflect 0.2.2, filetree 0.4.1 und visible-compact 0.5.1. Im
