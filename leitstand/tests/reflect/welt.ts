@@ -19,6 +19,8 @@ export const START_ZEIT = Date.parse('2026-10-02T12:00:00Z')
 export const TAG = 24 * 60 * 60_000
 /** Das Fenster der Selbstkritik. */
 export const PANE = 'leitstand-selbstkritik'
+/** Das Fenster mit den wartenden Regeln. */
+export const REGELN_PANE = 'leitstand-regeln'
 
 export const REFLEXION = [
   '## Auftrag',
@@ -183,17 +185,24 @@ export const FENSTER = {
   props: { title: 'Selbstkritik', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: SCROLL, view: {} } as never,
 } as const
 
+export const REGELN_FENSTER = {
+  component: 'Pane',
+  requestId: REGELN_PANE,
+  props: { title: 'Regeln', isFocused: false, bodyColumns: 70, placement: 'dock', scroll: SCROLL, view: {} } as never,
+} as const
+
 export const band = ($: Engine, surface: (typeof FLAECHEN)[number]) => $.ui.mount({ plugin: 'leitstand', surface, ...BAND })
 export const fenster = ($: Engine, surface: (typeof FLAECHEN)[number]) => $.ui.mount({ plugin: 'leitstand', surface, ...FENSTER })
+export const regelfenster = ($: Engine, surface: (typeof FLAECHEN)[number]) => $.ui.mount({ plugin: 'leitstand', surface, ...REGELN_FENSTER })
 
-/** Die Knöpfe des Regel-Bands, ohne die des Leitstands darüber: ihre Schlüssel nennen Ziel oder Wirkung und die Regel. */
+/** Die Knöpfe einer Regel im Fenster Regeln, ohne Schließen: ihre Schlüssel nennen Ziel oder Wirkung und die Regel. */
 export const REGEL_KNOPF = /^(global|projekt|chat|bearbeiten|verwerfen):/
 
-/** Die Regelzeilen des Bands; auf beiden Oberflächen gleich. */
+/** Die Regelzeilen des Fensters Regeln; auf beiden Oberflächen gleich. */
 export async function zeilen($: Engine) {
   const je: string[][] = []
   for (const surface of FLAECHEN) {
-    const ui = await band($, surface)
+    const ui = await regelfenster($, surface)
     je.push((await ui.findAll({ type: 'Text', text: /^💡 / })).map(t => t.text))
     await ui.unmount()
   }
@@ -201,9 +210,9 @@ export async function zeilen($: Engine) {
   return je[0] ?? []
 }
 
-/** Drückt im Band den ersten Knopf, dessen Key so beginnt. */
+/** Drückt im Fenster Regeln den ersten Knopf, dessen Key so beginnt. */
 export async function druecke($: Engine, praefix: string, surface: (typeof FLAECHEN)[number] = 'terminal') {
-  const ui = await band($, surface)
+  const ui = await regelfenster($, surface)
   const key = (await ui.findAll({ type: 'Button' })).find(b => b.key?.startsWith(praefix))?.key ?? ''
   await ui.press({ key })
   await ui.unmount()

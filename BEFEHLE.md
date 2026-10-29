@@ -90,7 +90,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 
 | Befehl | Was er tut |
 |---|---|
-| `/leitstand:regeln` | Wartende Regeln mit Nummern zeigen |
+| `/leitstand:regeln` | Wartende Regeln mit Nummern zeigen, am Rechner auch im Fenster Regeln |
 | `/leitstand:regel-global <Nr>` | Eine wartende Regel für alle Projekte speichern |
 | `/leitstand:regel-projekt <Nr>` | Eine wartende Regel für dieses Projekt speichern |
 | `/leitstand:regel-chat <Nr>` | Eine wartende Regel nur für diesen Chat übernehmen |

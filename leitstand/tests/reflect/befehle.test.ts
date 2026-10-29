@@ -9,7 +9,7 @@ import { LEITSTAND_BEFEHLE, befehlsHilfe, kurzform } from '../../hooks/logic'
 import { REFLECT_ALTE, REFLECT_BEFEHLE } from '../../hooks/reflect/befehle'
 import { auftragAus } from '../../hooks/reflect/logik'
 import { BEFEHL_FEHLER } from '../../hooks/reflect/teil'
-import { PANE, REFLEXION, abschnittText, befehl, run, say, start, welt, zeilen } from './welt'
+import { PANE, REFLEXION, REGELN_PANE, abschnittText, befehl, run, say, start, welt, zeilen } from './welt'
 import type { Welt } from './welt'
 
 const SELBSTKRITIK = [
@@ -36,7 +36,7 @@ const MIT_NR = ['leitstand:regel-global', 'leitstand:regel-projekt', 'leitstand:
 const REGEL = 'Immer pnpm statt npm nutzen'
 const LAEUFT = 'Selbstkritik läuft … Das Ergebnis erscheint im Fenster „Selbstkritik“; /leitstand:selbstkritik-zeigen gibt es als Text aus.'
 
-/** Eine wartende Regel, per "merke:" ohne Modellaufruf. */
+/** Eine wartende Regel, per "merke:" ohne Modellaufruf; sie öffnet das Fenster Regeln. */
 async function mitRegel($: Engine, w: Welt) {
   await say($, w, `merke: ${REGEL}`)
   expect(await zeilen($)).toEqual([`💡 „${REGEL}“`])
@@ -82,7 +82,7 @@ test('ein alter Name wie /reflect-zeigen sagt nur, wie der Befehl jetzt heißt',
   }
   expect(await run($, 'reflect-starten')).toBe('Der Befehl heißt jetzt /leitstand:selbstkritik, kurz /selbstkritik.')
   expect(await run($, 'reflect-hilfe')).toBe('Der Befehl heißt jetzt /leitstand:hilfe.')
-  expect(w.opened).toEqual([])
+  expect(w.opened).toEqual([REGELN_PANE])
   expect(w.forks).toEqual([])
   expect(w.filled).toEqual([])
   expect(w.copied).toEqual([])
@@ -103,7 +103,7 @@ test('jeder Befehl erklärt sich mit hilfe und mit ?, lang und kurz, ohne etwas 
       }
     }
   }
-  expect(w.opened).toEqual([])
+  expect(w.opened).toEqual([REGELN_PANE])
   expect(w.forks).toEqual([])
   expect(w.filled).toEqual([])
   expect(await zeilen($)).toEqual([`💡 „${REGEL}“`])
@@ -150,7 +150,7 @@ test('der Knopf 🪞: $.command.run({ command: "selbstkritik" }) aus dem Leitsta
   expect(await run($, 'selbstkritik-zeigen')).toContain(REFLEXION)
 })
 
-test('regeln, regel-global: wie „Alle Projekte“ im Band', async ($, on) => {
+test('regeln, regel-global: wie „Alle Projekte“ im Fenster Regeln', async ($, on) => {
   const w = welt(on)
   await start($)
   await mitRegel($, w)
@@ -163,7 +163,21 @@ test('regeln, regel-global: wie „Alle Projekte“ im Band', async ($, on) => {
   expect(await run($, 'regeln')).toBe('Keine wartenden Regeln.')
 })
 
-test('regel-projekt: wie „Dieses Projekt“ im Band', async ($, on) => {
+test('regeln öffnet am Rechner das Fenster Regeln, lang, kurz und als /reflect regeln; vom Handy nicht', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  expect(await run($, 'leitstand:regeln')).toBe('Keine wartenden Regeln.')
+  expect(w.opened).toEqual([REGELN_PANE])
+  await run($, 'regeln')
+  await befehl($, 'regeln')
+  expect(w.opened).toEqual([REGELN_PANE, REGELN_PANE, REGELN_PANE])
+  expect(await run($, 'leitstand:regeln', '', 'bridge')).toBe('Keine wartenden Regeln.')
+  await run($, 'regeln', '', 'bridge')
+  expect(w.opened).toHaveLength(3)
+  expect(w.closed).toEqual([])
+})
+
+test('regel-projekt: wie „Dieses Projekt“ im Fenster Regeln', async ($, on) => {
   const w = welt(on)
   await start($)
   await mitRegel($, w)
@@ -171,7 +185,7 @@ test('regel-projekt: wie „Dieses Projekt“ im Band', async ($, on) => {
   expect(w.files['/repo/CLAUDE.md']).toContain(`- ${REGEL}`)
 })
 
-test('regel-chat: wie „Nur dieser Chat“ im Band, nur in diesem Chat', async ($, on) => {
+test('regel-chat: wie „Nur dieser Chat“ im Fenster Regeln, nur in diesem Chat', async ($, on) => {
   let sid = 'chat-a'
   const w = welt(on, { sid: () => sid })
   await start($)
@@ -183,7 +197,7 @@ test('regel-chat: wie „Nur dieser Chat“ im Band, nur in diesem Chat', async 
   expect(await abschnittText($, 'leitstand:regeln-chat')).toBeUndefined()
 })
 
-test('regel-bearbeiten: wie „Bearbeiten“ im Band', async ($, on) => {
+test('regel-bearbeiten: wie „Bearbeiten“ im Fenster Regeln', async ($, on) => {
   const w = welt(on)
   await start($)
   await mitRegel($, w)
@@ -201,7 +215,7 @@ test('regel-bearbeiten mit Text im Eingabefeld ändert nichts', async ($, on) =>
   expect(await zeilen($)).toEqual([`💡 „${REGEL}“`])
 })
 
-test('regel-verwerfen: wie „Verwerfen“ im Band; ohne oder mit falscher Nummer ein Satz', async ($, on) => {
+test('regel-verwerfen: wie „Verwerfen“ im Fenster Regeln; ohne oder mit falscher Nummer ein Satz', async ($, on) => {
   const w = welt(on)
   await start($)
   await mitRegel($, w)

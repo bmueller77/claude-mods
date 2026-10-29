@@ -40,6 +40,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Jede Änderung an einem Mod zählt dessen Version in `plugin.json` hoch. Commit-Titel wie bisher:
   `<mod> <version>: <was sich ändert>`; betrifft es mehrere Mods, eine Liste im Text. Autor ist
   Björn (`--author="Björn Müller <bjoern@mueller.family>"`), dazu die Zeile `Co-Authored-By`.
+  Versionen seit 2026-10-29 vierstellig x.x.x.x (Björns Regel): Eine Korrektur zählt die vierte
+  Stelle, ein Feature die dritte (aus 0.63.1 wird 0.63.1.1 bzw. 0.63.2.0). `claude plugin validate`
+  nimmt das an, und `plugin update` aktualisiert bei jeder anderen Nummer, auch rückwärts (geprüft 2.1.309).
 - Prüfen vor jedem Commit, je geändertem Mod: `claude plugin validate ./<mod>` und
   `claude plugin test ./<mod>`. Nach Änderungen am Katalog zusätzlich `claude plugin validate .`.
 - Typprüfung: `tsc -p <mod>`, sobald die Engine die Typen nach `<mod>/.claude-plugin/types/`
@@ -77,6 +80,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   der Plugins, dort wirft `$.config.set`. Ein `$.config.set` des eigenen Felds lädt den Mod neu (geprüft
   2026-10-28, 2.1.309). So schreibt leitstand 0.61.1 ein altes `ausfuehrlich` auf `detailliert` um; bis
   dahin gilt es bei jedem Start schon als Detailliert.
+- Regeln warten seit leitstand 0.63.2.0 im Fenster `leitstand-regeln` statt im Band (Björns Wunsch, die
+  Zeile klemmte unter der Button-Reihe). Es öffnet sich bei jeder neuen Regel und schließt nach der
+  letzten Entscheidung.
 - Statistik seit 0.19.0 (Björns Wunsch): Nach einem Compact steht im Verlauf nur eine Zeile, die
   Zusammenfassung zeigt `/statistik:zusammenfassung-zeigen` im Fenster (vom Handy und ohne Fenster als
   Text), verdeckt, wenn der Leitstand verdeckt. `$.ui.log`-Zeilen lassen sich nicht zuklappen.
@@ -226,8 +232,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
    und filetree (3). Die Zusammenfassung las das Argument von `/modellwahl <Aufgabe>` als Auftrag
    und meldete, er sei "nicht bearbeitet" worden.
-6. Live-Test ausstehend: leitstand 0.57.0 (🪞 Selbstkritik mit Fenster, Regel-Band nach einer Korrektur,
-   📂 Dateien, 🅰️ Autopilot, alles jetzt im Leitstand) und statistik 0.18.0 (Schwamm räumt mit
+6. Live-Test ausstehend: leitstand 0.57.0 (🪞 Selbstkritik mit Fenster, Regel-Fenster nach einer Korrektur
+   (seit 0.63.2.0), 📂 Dateien, 🅰️ Autopilot, alles jetzt im Leitstand) und statistik 0.18.0 (Schwamm räumt mit
    Sicherungspunkt auf, `/statistik:letzter-stand-zeigen`). Das Fenster Dateien öffnet sich, wie bei
    Filetree, bei jedem Sitzungsstart. Gesehen, nicht behoben: Der Leitstand setzt "Braucht dich" schon,
    bevor der Autopilot eine Rückfrage ablehnt (glance.tsx, Rückfrage-Werkzeug); es bleibt bis zum nächsten

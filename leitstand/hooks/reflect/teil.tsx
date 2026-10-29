@@ -8,7 +8,7 @@
  * Die Selbstkritik ist neu geschrieben.
  *
  * Nichts hält an oder wartet auf einen Knopf: Auf dem Handy (Remote Control) sind Band, Fenster und Toasts nicht zu
- * sehen. Gefundene Regeln warten, bis jemand entscheidet, im Band oder per /leitstand:regeln und den Befehlen dazu.
+ * sehen. Gefundene Regeln warten, bis jemand entscheidet, im Fenster Regeln oder per /leitstand:regeln und den Befehlen dazu.
  */
 import { atom, read, update } from 'claude-code'
 import type { CommandRunInput, EngineInterface, On, PluginOptions } from 'claude-code'
@@ -51,9 +51,9 @@ const nummern = atom({ plugin: 'leitstand', key: 'regelnNummern' } as const, [] 
 const MIN_CONFIDENCE = 0.7
 const MAX_ITEMS = 300
 const MAX_QUEUE = 20
-const BAND_ROWS = 2
-/** Der Schlüssel des Regel-Bands über dem Eingabefeld. */
-const BAND = 'regeln'
+/** Das Fenster mit den wartenden Regeln. */
+const REGELN_PANE = 'leitstand-regeln'
+const REGELN_TITEL = 'Regeln'
 /** Die eigenen Nachrichten der Person: im Terminal getippt (composer), in der Desktop-App (sdk) oder per Remote Control (bridge, Android-App). */
 const HUMAN = /^(composer|sdk|bridge)$/
 
@@ -84,7 +84,7 @@ let isDraining = false
 let writing: Promise<unknown> = Promise.resolve()
 const queue: string[] = []
 
-/** Die wartenden zuerst nach Häufigkeit, dann die jüngsten: so zeigt das Band, so nummeriert /leitstand:regeln. */
+/** Die wartenden zuerst nach Häufigkeit, dann die jüngsten: so zeigt das Fenster, so nummeriert /leitstand:regeln. */
 function reihenfolge(list: ReflectFund[]) {
   return [...list].sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
 }
@@ -111,9 +111,20 @@ async function offeneRegeln($: EngineInterface) {
   return reihenfolge((await funde($)).filter(l => l.status === 'pending' && (l.scope === 'global' || l.project === root)))
 }
 
-async function refreshBand($: EngineInterface) {
+/** Legt die wartenden Regeln in das Atom, aus dem das Fenster zeichnet; zurück kommen sie auch. */
+async function aktualisiereRegeln($: EngineInterface) {
   const mine = await offeneRegeln($)
   await update($, wartend, () => mine)
+  return mine
+}
+
+/** Öffnet das Fenster Regeln, ohne darauf zu warten und ohne den Fokus zu nehmen. */
+function oeffneRegeln($: EngineInterface) {
+  void $.ui.open({ id: REGELN_PANE, title: REGELN_TITEL, closeOnEscape: true }).catch(() => undefined)
+}
+
+function schliesseRegeln($: EngineInterface) {
+  void $.ui.close({ id: REGELN_PANE }).catch(() => undefined)
 }
 
 async function fileFor($: EngineInterface, scope: 'global' | 'project', root: string) {
@@ -139,7 +150,10 @@ async function chatRegeln($: EngineInterface, sid: string): Promise<string[]> {
   return istChatRegeln(v) ? v.regeln.filter((r): r is string => typeof r === 'string') : []
 }
 
-/** Fügt einen Fund hinzu, zählt eine Wiederholung, oder hält ein "merke:" getrennt von einem verworfenen Zwilling. */
+/**
+ * Fügt einen Fund hinzu, zählt eine Wiederholung, oder hält ein "merke:" getrennt von einem verworfenen Zwilling.
+ * Wartet danach eine Regel, die vorher nicht wartete, öffnet sich das Fenster Regeln.
+ */
 async function record($: EngineInterface, v: Verdict, root: string, isExplicit: boolean, sid: string) {
   const now = await $.clock.now()
   const list = await funde($)
@@ -155,6 +169,10 @@ async function record($: EngineInterface, v: Verdict, root: string, isExplicit: 
     // Nur für einen anderen Chat angenommen: hier wartet sie wieder auf eine Entscheidung.
     if (same.status === 'chat' && !(await chatRegeln($, sid)).some(r => similarity(r, same.rule) >= SAME)) {
       same.status = 'pending'
+      await saveFunde($, list)
+      await aktualisiereRegeln($)
+      oeffneRegeln($)
+      return
     }
     await saveFunde($, list)
     return
@@ -175,6 +193,10 @@ async function record($: EngineInterface, v: Verdict, root: string, isExplicit: 
     confidence: v.confidence,
   })
   await saveFunde($, list)
+  if (isKnown) return
+  // Erst das Atom, dann das Fenster: so zeichnet es gleich mit der neuen Regel.
+  await aktualisiereRegeln($)
+  oeffneRegeln($)
 }
 
 /** Der Text der letzten Antwort, als Kontext für die Prüfung. */
@@ -227,7 +249,7 @@ async function drain($: EngineInterface) {
       } catch {
         // Ein gesperrtes Modell, ein Store- oder Dateifehler: diese Nachricht ist verloren, der Rest läuft.
       }
-      await refreshBand($).catch(() => undefined)
+      await aktualisiereRegeln($).catch(() => undefined)
     }
   } finally {
     isDraining = false
@@ -243,7 +265,8 @@ async function decide($: EngineInterface, id: string, status: ReflectFund['statu
     if (project !== undefined) one.project = project
   }
   await saveFunde($, list)
-  await refreshBand($)
+  // Die letzte Entscheidung schließt das Fenster, für Knöpfe und Befehle gleich.
+  if ((await aktualisiereRegeln($)).length === 0) schliesseRegeln($)
 }
 
 /** Hängt eine Arbeit an die Kette dieser Sitzung: Speichern und Entscheiden laufen nacheinander. */
@@ -593,7 +616,8 @@ async function befehlZeigen($: EngineInterface, v: Verweise, mitFenster: boolean
   return `${kopfzeile(r)}\n\n${r.text}`
 }
 
-async function befehlRegeln($: EngineInterface, v: Verweise) {
+/** Die wartenden Regeln als Text; am Rechner öffnet sich dazu das Fenster Regeln, vom Handy nicht. */
+async function befehlRegeln($: EngineInterface, v: Verweise, e: Pick<CommandRunInput, 'origin'>) {
   const offen = await offeneRegeln($)
   await update($, nummern, () => offen.map(l => l.id))
   const chat = await chatRegeln($, await $.session.id())
@@ -607,6 +631,7 @@ async function befehlRegeln($: EngineInterface, v: Verweise) {
     zeilen.push(v.speichern)
   }
   if (chat.length > 0) zeilen.push('', 'Nur in diesem Chat gilt:', ...chat.map(r => `- ${r}`))
+  if (!vomHandy(e)) oeffneRegeln($)
   return zeilen.join('\n')
 }
 
@@ -654,7 +679,7 @@ async function befehlAuto($: EngineInterface, wort: string | undefined, v: Verwe
 }
 
 /** Verteilt /reflect auf seine Unterbefehle; alles Übrige ist der Schwerpunkt einer Selbstkritik. */
-async function reflectBefehl($: EngineInterface, args: string): Promise<string> {
+async function reflectBefehl($: EngineInterface, args: string, e: CommandRunInput): Promise<string> {
   const woerter = args.trim().split(/\s+/).filter(Boolean)
   const [erstes = '', ...rest] = woerter
   switch (erstes.toLowerCase()) {
@@ -663,7 +688,7 @@ async function reflectBefehl($: EngineInterface, args: string): Promise<string> 
     case 'zeigen':
       return befehlZeigen($, REFLECT, true)
     case 'regeln':
-      return befehlRegeln($, REFLECT)
+      return befehlRegeln($, REFLECT, e)
     case 'speichern':
       return befehlSpeichern($, rest)
     case 'verwerfen':
@@ -732,7 +757,7 @@ async function befehlAus($: EngineInterface, name: string, args: string, e: Comm
     case 'leitstand:selbstkritik-auto-aus':
       return befehlAuto($, 'aus', NEU)
     case 'leitstand:regeln':
-      return befehlRegeln($, NEU)
+      return befehlRegeln($, NEU, e)
     case 'leitstand:regel-global':
       return befehlRegelNr($, args, 'global')
     case 'leitstand:regel-projekt':
@@ -817,7 +842,7 @@ export function registerReflect(on: On, options: PluginOptions): void {
         )
       }
       await raeumeAuf($, await $.session.id(), await $.clock.now())
-      await refreshBand($)
+      await aktualisiereRegeln($)
     } catch {
       // Aufräumen darf den Start nie aufhalten.
     }
@@ -859,7 +884,7 @@ export function registerReflect(on: On, options: PluginOptions): void {
     geaendert = false
     try {
       // Eine andere Sitzung kann Regeln gefunden oder entschieden haben: zeigen, was der Store jetzt hält.
-      await refreshBand($)
+      await aktualisiereRegeln($)
       await raeumeVerwaiste($)
       if (warGeaendert && !e.isAborted && e.reason === 'answer' && (await einstellungen($, await $.session.id())).selbstkritikAuto) {
         if ((await starteReflexion($, '', 'auto')) !== undefined) oeffneFenster($)
@@ -901,7 +926,7 @@ export function registerReflect(on: On, options: PluginOptions): void {
   on('command.run', { command: 'reflect' }, async ($, e) => {
     let text: string
     try {
-      text = await reflectBefehl($, e.args ?? '')
+      text = await reflectBefehl($, e.args ?? '', e)
     } catch {
       text = REFLECT_FEHLER
     }
@@ -932,41 +957,44 @@ export function registerReflect(on: On, options: PluginOptions): void {
     return { element: e.element }
   }).catch(($, e, next) => next(e))
 
-  // Das Band „Regeln“: die ersten zwei wartenden Regeln, je mit den drei Zielen, Bearbeiten und Verwerfen.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
-    const list = await read($, wartend)
-    if (list.length === 0) return next(e)
+  // Das Fenster „Regeln“: alle wartenden Regeln, je mit den drei Zielen, Bearbeiten und Verwerfen.
+  on('ui.render', { component: 'Pane', requestId: REGELN_PANE }, async ($, e) => {
     const { Box, Button, Text } = $.ui.resolve(e)
-    const below = await next(e)
-    return (
-      <Box flexDirection="column">
-        <Box key={BAND} flexDirection="column">
-          {list.slice(0, BAND_ROWS).map(l => (
-            <Box key={`zeile:${l.id}`} flexDirection="column">
-              <Text color="green" wrap="wrap">
-                {`💡 „${l.rule}“${l.count > 1 ? ` ×${l.count}` : ''}`}
-              </Text>
-              <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-                {ZIELE.map(z => (
-                  <Button
-                    key={`${z.key}:${l.id}`}
-                    label={z.label}
-                    {...(z.ziel === l.scope ? { variant: 'primary' as const } : {})}
-                    onPress={() => speichere($, l.id, z.ziel).then(satz => $.ui.toast(satz))}
-                  />
-                ))}
-                <Button key={`bearbeiten:${l.id}`} label="Bearbeiten" onPress={() => bearbeite($, l.id)} />
-                <Button key={`verwerfen:${l.id}`} label="Verwerfen" onPress={() => verwerfe($, l.id)} />
-              </Box>
-            </Box>
-          ))}
-          {list.length > BAND_ROWS && <Text dimColor>{`+${list.length - BAND_ROWS} weitere · /leitstand:regeln`}</Text>}
+    const list = await read($, wartend)
+    const schliessen = <Button key="schliessen" label="Schließen" onPress={() => $.ui.close({ id: REGELN_PANE })} />
+    if (list.length === 0) {
+      return (
+        <Box flexDirection="column" rowGap={1}>
+          <Text dimColor>Keine wartenden Regeln.</Text>
+          <Box flexDirection="row">{schliessen}</Box>
         </Box>
-        {below}
+      )
+    }
+    return (
+      <Box flexDirection="column" rowGap={1}>
+        {list.map(l => (
+          <Box key={`zeile:${l.id}`} flexDirection="column">
+            <Text color="green" wrap="wrap">
+              {`💡 „${l.rule}“${l.count > 1 ? ` ×${l.count}` : ''}`}
+            </Text>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+              {ZIELE.map(z => (
+                <Button
+                  key={`${z.key}:${l.id}`}
+                  label={z.label}
+                  {...(z.ziel === l.scope ? { variant: 'primary' as const } : {})}
+                  onPress={() => speichere($, l.id, z.ziel).then(satz => $.ui.toast(satz))}
+                />
+              ))}
+              <Button key={`bearbeiten:${l.id}`} label="Bearbeiten" onPress={() => bearbeite($, l.id)} />
+              <Button key={`verwerfen:${l.id}`} label="Verwerfen" onPress={() => verwerfe($, l.id)} />
+            </Box>
+          </Box>
+        ))}
+        <Box flexDirection="row">{schliessen}</Box>
       </Box>
     )
-  }).catch(($, e, next) => next(e))
+  })
 
   // Das Fenster „Selbstkritik“: die neueste (oder die gewählte), mit Beheben, Kopieren und Blättern.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {

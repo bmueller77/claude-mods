@@ -5,7 +5,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { cleanRule, explizit, globaleDatei, isTrivial, looksSecret, parseVerdict, similarity, uhrzeit, withRule } from '../../hooks/reflect/logik'
-import { FLAECHEN, REGEL_KNOPF, START_ZEIT, TAG, abschnittText, band, befehl, druecke, eigeneSchluessel, say, start, welt, zeilen } from './welt'
+import { FLAECHEN, REGELN_PANE, REGEL_KNOPF, START_ZEIT, TAG, abschnittText, band, befehl, druecke, eigeneSchluessel, regelfenster, say, start, welt, zeilen } from './welt'
 
 const PNPM = { is_rule: true, rule: 'Nutze pnpm statt npm in diesem Repo', scope: 'project', confidence: 0.92 }
 const DEUTSCH = { is_rule: true, rule: 'Antworte immer auf Deutsch', scope: 'global', confidence: 0.9 }
@@ -58,7 +58,7 @@ test('Helfer: triviale Nachrichten, Geheimnisse, Regelprüfung, Urteile, Ähnlic
   expect(globaleDatei(undefined, undefined)).toBeUndefined()
 })
 
-test('eine deutsche Korrektur wird eine Bandzeile, und "Dieses Projekt" schreibt die CLAUDE.md des Projekts und den Systemprompt', async ($, on) => {
+test('eine deutsche Korrektur wird eine Zeile im Fenster Regeln, und "Dieses Projekt" schreibt die CLAUDE.md des Projekts und den Systemprompt', async ($, on) => {
   const w = welt(on, { verdicts: { 'nein, nimm pnpm': PNPM }, files: { '/repo/CLAUDE.md': '# Repo\n' } })
   await start($)
   await say($, w, 'nein, nimm pnpm')
@@ -127,7 +127,7 @@ test('merke: und remember: gehen ohne Modell; Bearbeiten füllt ein leeres Feld,
   expect(w.asked).toEqual([])
   expect(await zeilen($)).toEqual(['💡 „antworte mir auf Deutsch“', '💡 „keep commits small“'])
   // "merke:" schlägt global vor: der helle Knopf ist "Alle Projekte".
-  const ui = await band($, 'desktop')
+  const ui = await regelfenster($, 'desktop')
   const hell = (await ui.findAll({ type: 'Button' })).filter(b => REGEL_KNOPF.test(b.key ?? '') && b.props.variant === 'primary').map(b => b.props.label)
   expect(hell).toEqual(['Alle Projekte', 'Alle Projekte'])
   await ui.unmount()
@@ -210,11 +210,11 @@ test('drei Ziele auf beiden Oberflächen: global unter USERPROFILE ohne HOME, Pr
   for (const surface of FLAECHEN) {
     const je = JE[surface]
     await say($, w, je.global[0])
-    const ui = await band($, surface)
+    const ui = await regelfenster($, surface)
     const knoepfe = (await ui.findAll({ type: 'Button' })).filter(b => REGEL_KNOPF.test(b.key ?? ''))
     expect(knoepfe.map(b => b.props.label)).toEqual(['Alle Projekte', 'Dieses Projekt', 'Nur dieser Chat', 'Bearbeiten', 'Verwerfen'])
     expect(knoepfe.filter(b => b.props.variant === 'primary').map(b => b.props.label)).toEqual(['Alle Projekte'])
-    expect(await ui.find({ type: 'Box', key: 'regeln' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'schliessen' })).toBeDefined()
     await ui.unmount()
     await druecke($, 'global:', surface)
     expect(w.toasts.at(-1)).toBe(`Gespeichert in C:\\Users\\bjoern/.claude/CLAUDE.md: „${je.global[1]}“`)
@@ -222,7 +222,7 @@ test('drei Ziele auf beiden Oberflächen: global unter USERPROFILE ohne HOME, Pr
     expect(Object.keys(w.files).filter(k => k.endsWith('.claude/CLAUDE.md'))).toEqual([GLOBAL])
 
     await say($, w, je.projekt[0])
-    const ui2 = await band($, surface)
+    const ui2 = await regelfenster($, surface)
     const hell = (await ui2.findAll({ type: 'Button' })).filter(b => REGEL_KNOPF.test(b.key ?? '') && b.props.variant === 'primary')
     expect(hell.map(b => b.props.label)).toEqual(['Dieses Projekt'])
     await ui2.unmount()
@@ -297,7 +297,7 @@ test('fremde Chat-Schlüssel fliegen nach 30 Tagen raus, höchstens einmal am Ta
   expect(speicher.has('reflect.einstellungen:spaeter')).toBe(false)
 })
 
-test('Textweg: /reflect regeln nummeriert, speichern und verwerfen per Nummer, ohne Band', async ($, on) => {
+test('Textweg: /reflect regeln nummeriert, speichern und verwerfen per Nummer, ohne Knöpfe', async ($, on) => {
   const w = welt(on, {
     verdicts: { 'nein, nimm pnpm': PNPM, 'immer deutsch': DEUTSCH, 'commits englisch': { is_rule: true, rule: 'Schreibe Commits auf Englisch', scope: 'global', confidence: 0.9 } },
   })
@@ -406,16 +406,121 @@ test('eine in der Desktop-App getippte Nachricht (sdk) wird geprüft, eine Einre
   expect(await zeilen($)).toEqual(['💡 „Nutze pnpm statt npm in diesem Repo“'])
 })
 
-test('mehr als zwei wartende Regeln: zwei Zeilen und ein Hinweis auf /leitstand:regeln', async ($, on) => {
+test('mehr als zwei wartende Regeln: das Fenster zeigt alle, in der Reihenfolge von /leitstand:regeln, ohne Hinweis', async ($, on) => {
   const w = welt(on)
   await start($)
   for (const r of ['Regel eins hier', 'Regel zwei dort', 'Regel drei sonstwo']) await say($, w, `merke: ${r}`)
+  await say($, w, 'merke: Regel zwei dort')
+  expect(await zeilen($)).toEqual(['💡 „Regel zwei dort“ ×2', '💡 „Regel eins hier“', '💡 „Regel drei sonstwo“'])
+  expect(await befehl($, 'regeln')).toContain('1. „Regel zwei dort“ ×2 · Vorschlag: Alle Projekte\n2. „Regel eins hier“')
   for (const surface of FLAECHEN) {
-    const ui = await band($, surface)
-    expect((await ui.findAll({ type: 'Text', text: /^💡 / })).length).toBe(2)
-    expect(await ui.find({ type: 'Text', text: '+1 weitere · /leitstand:regeln' })).toBeDefined()
+    const ui = await regelfenster($, surface)
+    expect(await ui.findAll({ type: 'Text', text: /weitere/ })).toEqual([])
+    expect(await ui.find({ type: 'Button', key: 'schliessen' })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('das Band über der Eingabe zeigt keine wartende Regel mehr', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  await say($, w, 'merke: Antworten kurz halten')
+  expect(await zeilen($)).toEqual(['💡 „Antworten kurz halten“'])
+  for (const surface of FLAECHEN) {
+    const ui = await band($, surface)
+    expect(await ui.findAll({ type: 'Text', text: /^💡 / })).toEqual([])
+    expect((await ui.findAll({ type: 'Button' })).filter(b => REGEL_KNOPF.test(b.key ?? ''))).toEqual([])
+    await ui.unmount()
+  }
+})
+
+test('eine neue Regel öffnet das Fenster Regeln, eine Wiederholung derselben wartenden nicht noch einmal', async ($, on) => {
+  const again = { ...PNPM, rule: 'nutze pnpm statt npm in diesem repo' }
+  const w = welt(on, { verdicts: { 'nein, nimm pnpm': PNPM, 'ich sagte pnpm': again } })
+  await start($)
+  expect(w.opened).toEqual([])
+  await say($, w, 'nein, nimm pnpm')
+  expect(w.opened).toEqual([REGELN_PANE])
+  await say($, w, 'ich sagte pnpm')
+  await say($, w, 'merke: Nutze pnpm statt npm in diesem Repo')
+  expect(w.opened).toEqual([REGELN_PANE])
+  expect(await zeilen($)).toEqual(['💡 „Nutze pnpm statt npm in diesem Repo“ ×3'])
+  // Eine schon bekannte Regel (steht in der CLAUDE.md) wartet nicht und öffnet nichts.
+  w.files['/home/u/.claude/CLAUDE.md'] = '# Global\n- Antworte immer auf Deutsch\n'
+  await say($, w, 'merke: Antworte immer auf Deutsch')
+  expect(w.opened).toEqual([REGELN_PANE])
+})
+
+test('das Fenster Regeln hat beim Öffnen schon die neue Regel im Atom, aus dem es zeichnet', async ($, on) => {
+  // Merkt sich, was der Teil zuletzt in das Atom geschrieben hat, und liest es in dem Moment, in dem das Fenster aufgeht.
+  let atom: { rule: string; count: number }[] = []
+  on('state.set', { key: 'regelnWartend' }, async (_$, e, next) => {
+    atom = (e as { value: typeof atom }).value
+    return next(e)
+  })
+  const beimOeffnen: string[][] = []
+  on('ui.open', { id: REGELN_PANE }, async (_$, e, next) => {
+    beimOeffnen.push(atom.map(l => `${l.rule} ×${l.count}`))
+    return next(e)
+  })
+  let sid = 'chat-a'
+  const w = welt(on, { sid: () => sid })
+  await start($)
+  await say($, w, 'merke: Schreibe heute keine neuen Tests')
+  expect(beimOeffnen).toEqual([['Schreibe heute keine neuen Tests ×1']])
+  await druecke($, 'chat:')
+  sid = 'chat-b'
+  await say($, w, 'merke: Schreibe heute keine neuen Tests')
+  expect(beimOeffnen).toEqual([['Schreibe heute keine neuen Tests ×1'], ['Schreibe heute keine neuen Tests ×2']])
+})
+
+test('eine Nur-Chat-Regel, die in einem anderen Chat wieder wartet, öffnet das Fenster wieder', async ($, on) => {
+  let sid = 'chat-a'
+  const w = welt(on, { sid: () => sid })
+  await start($)
+  await say($, w, 'merke: Schreibe heute keine neuen Tests')
+  await druecke($, 'chat:')
+  expect(w.opened).toEqual([REGELN_PANE])
+  sid = 'chat-b'
+  await say($, w, 'merke: Schreibe heute keine neuen Tests')
+  expect(w.opened).toEqual([REGELN_PANE, REGELN_PANE])
+})
+
+test('die letzte Entscheidung schließt das Fenster, eine frühere nicht; Befehle wie Knöpfe, Schließen auch', async ($, on) => {
+  const w = welt(on)
+  await start($)
+  await say($, w, 'merke: Regel eins hier')
+  await say($, w, 'merke: Regel zwei dort')
+  await druecke($, 'verwerfen:')
+  expect(w.closed).toEqual([])
+  expect((await zeilen($)).length).toBe(1)
+  await druecke($, 'global:')
+  expect(w.closed).toEqual([REGELN_PANE])
+  for (const surface of FLAECHEN) {
+    const ui = await regelfenster($, surface)
+    expect(await ui.find({ type: 'Text', text: 'Keine wartenden Regeln.' })).toBeDefined()
+    await ui.unmount()
+  }
+
+  // Per Befehl: erst bei der letzten.
+  await say($, w, 'merke: Regel drei sonstwo')
+  await say($, w, 'merke: Regel vier woanders')
+  expect(await befehl($, 'regeln')).toContain('Wartende Regeln (2):')
+  expect(await befehl($, 'verwerfen 1')).toContain('Verworfen:')
+  expect(w.closed).toEqual([REGELN_PANE])
+  expect(await befehl($, 'speichern 2 chat')).toContain('Gilt jetzt nur in diesem Chat')
+  expect(w.closed).toEqual([REGELN_PANE, REGELN_PANE])
+
+  // Bearbeiten verwirft die alte: auch das ist eine Entscheidung.
+  await say($, w, 'merke: Regel fünf irgendwo')
+  await druecke($, 'bearbeiten:')
+  expect(w.closed).toEqual([REGELN_PANE, REGELN_PANE, REGELN_PANE])
+
+  // Schließen schließt, ohne etwas zu entscheiden.
+  await say($, w, 'merke: Regel sechs hier')
+  await druecke($, 'schliessen')
+  expect(w.closed).toHaveLength(4)
+  expect(await zeilen($)).toEqual(['💡 „Regel sechs hier“'])
 })
 
 test('Uhrzeiten in Berliner Zeit, auch unter UTC, mit Sommer- und Winterzeit', () => {
