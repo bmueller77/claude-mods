@@ -173,9 +173,12 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   7-px-Trennlinie daneben verschwindet unter dem Button. Seit leitstand 0.57.2, statistik 0.18.2,
   zusammenfassung 0.7.1 und naechste-schritte 0.4.1: Trennlinien 15 px (Linie in der Mitte), zwischen
   Button-Zeilen 1.2 halbe Zeilen (4 px frei).
-- Am PC kommt bjoern-mods seit 2026-10-19 von GitHub (Klon unter
-  `~/.claude/plugins/marketplaces/bjoern-mods`). Der alte Ordner `~/.claude/mods` bleibt liegen,
-  wird aber nicht mehr gelesen. Vorher stand der GitHub-Eintrag in `settings.json` eine Ebene zu tief,
+- Am PC kommt der Katalog seit 2026-10-19 von GitHub, seit dem Umzug am 2026-10-30 als bm-mods (Klon
+  unter `~/.claude/plugins/marketplaces/bm-mods`, Quelle `bmueller77/claude-mods@main`). Beim Umzug
+  waren keine `pluginConfigs` gesetzt; sechs Store-Dateien wurden kopiert, die alten
+  `<mod>_bjoern-mods-*.json` und die Sicherung `~/.claude/plugins/store-2026-10-30/` liegen noch da.
+  i-have-adhd kommt hier weiter aus dem eigenen Katalog `i-have-adhd`, nicht als `@bm-mods`. Der alte
+  Ordner `~/.claude/mods` bleibt liegen, wird aber nicht mehr gelesen. Vorher stand der GitHub-Eintrag in `settings.json` eine Ebene zu tief,
   und das `add` hatte nicht gegriffen. Nach jedem Umstellen `claude plugin marketplace list` ansehen.
 - Desktop-App: Solange sie am Rundenende das Feld "nächster Schritt" mit einer Frage und Buttons
   zeigt, ist das ganze Band über der Eingabe ausgeblendet. Mit der nächsten Runde ist es wieder da.
