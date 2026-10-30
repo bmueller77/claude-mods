@@ -133,14 +133,20 @@ const PREISE: Array<[string, number, number, number]> = [
 ]
 
 /**
- * Die Zeichen auf den Knoepfen: Flamme oder Schneeflocke, ob der Cache warm ist,
- * zugleich der Warmhalten-Schalter; ein Schwamm fuers Aufraeumen mit Sicherungspunkt,
+ * Die Zeichen auf den Knoepfen: die Flamme fuer den Warmhalten-Schalter (ob der Cache
+ * kalt oder leer ist, zeigt die Schneeflocke an der Uhr); ein Schwamm fuers Aufraeumen mit Sicherungspunkt,
  * ein Pfeil nach unten fuers schlichte Verdichten, Sanduhr, solange eins davon wartet.
  * Jeder Knopf traegt ein Emoji, kein einfaches Textzeichen: Knoepfe mit Emoji macht
  * die App gleich breit, Knoepfe mit Textzeichen schmaler.
  */
 const SYMBOL_WARM = '🔥'
-const SYMBOL_KALT = '❄️'
+/** Kalter oder leerer Cache im Terminal: U+2744 ohne U+FE0F, damit es eine Zelle bleibt. */
+const FLOCKE_TERMINAL = '❄'
+/** Was ein Druck auf 🔥 meldet, wenn Warmhalten aus und der Cache kalt oder leer ist. */
+export const WARM_GEHT_NICHT_KALT =
+    'Warmhalten des Cache ist nicht möglich, da dieser bereits kalt ist.'
+export const WARM_GEHT_NICHT_LEER =
+    'Warmhalten des Cache ist nicht möglich, da dieser noch leer ist.'
 const SYMBOL_WISCHEN = '🧽'
 const SYMBOL_COMPACT = '🔻'
 const SYMBOL_EINGEREIHT = '⏳'
@@ -178,6 +184,7 @@ const GRUEN = '#3a9a5b'
 const GELB = '#d4a017'
 const ROT = '#d64545'
 const GRAU = '#8a8a8a'
+const BLAU = '#4a9fd8'
 
 const cache = atom({ plugin: 'statistik', key: 'cache' } as const, null as CacheSample | null)
 const context = atom({ plugin: 'statistik', key: 'context' } as const, null as ContextSample | null)
@@ -612,6 +619,33 @@ function ringSvg(anteil: number | null, farbe: string, titel: string): string {
               `stroke-dasharray="${laenge.toFixed(2)} ${RING_UMFANG.toFixed(2)}" transform="rotate(-90 7 7)"/>`
             : ''
     return svg(titel, spur + bogen)
+}
+
+/**
+ * Kalter oder leerer Cache: eine Schneeflocke, drei Linien durch die Mitte (sechs
+ * Arme), an jedem Arm ein kleines V, das nach aussen zeigt.
+ */
+export function flockeSvg(titel: string): string {
+    const p = (n: number) => n.toFixed(2)
+    const punkt = (w: number, r: number) => `${p(7 + r * Math.cos(w))} ${p(7 + r * Math.sin(w))}`
+    const teile: string[] = []
+    for (let i = 0; i < 6; i++) {
+        const w = (i * Math.PI) / 3 - Math.PI / 2
+        if (i < 3) {
+            teile.push(`M${punkt(w, 5.6)}L${punkt(w + Math.PI, 5.6)}`)
+        }
+        // Das V: vom Arm bei 3 aus zwei kurze Striche schraeg nach aussen.
+        const fuss = punkt(w, 3)
+        for (const seite of [-1, 1]) {
+            const x = 7 + 3 * Math.cos(w) + 1.9 * Math.cos(w + (seite * Math.PI) / 4)
+            const y = 7 + 3 * Math.sin(w) + 1.9 * Math.sin(w + (seite * Math.PI) / 4)
+            teile.push(`M${fuss}L${p(x)} ${p(y)}`)
+        }
+    }
+    return svg(
+        titel,
+        `<path d="${teile.join('')}" fill="none" stroke="${BLAU}" stroke-width="1.2" stroke-linecap="round"/>`,
+    )
 }
 
 /**
@@ -1103,6 +1137,16 @@ async function schalteWarmhalten($: EngineInterface): Promise<void> {
         return
     }
     if (z.warmBis <= jetzt) {
+        // Aus, und der Cache ist leer oder kalt: nichts warm zu halten, nur eine Meldung.
+        // /warmhalten schaltet trotzdem vorab ein.
+        if (z.letzteAnfrage <= 0 || z.kompaktiert) {
+            $.ui.toast(WARM_GEHT_NICHT_LEER)
+            return
+        }
+        if (istKalt(jetzt)) {
+            $.ui.toast(WARM_GEHT_NICHT_KALT)
+            return
+        }
         await starteFenster($, SCHRITT_MS)
         return
     }
@@ -1802,7 +1846,7 @@ export const KURZFORMEN: readonly Befehl[] = [
         argumentHint: '[6h | 90m | immer | aus | status]',
         titel: 'Warmhalten (Kurzform)',
         was: 'Schaltet das Warmhalten des Caches: ohne Angabe für 6 Stunden, mit einer Dauer so lange, mit immer bis dieser Chat endet, mit aus sofort aus. status sagt nur, wie es steht. Jeder Ping kostet Tokens, siehe /statistik:hilfe unter Kosten.',
-        knopf: '🔥 oder ❄️ in der Leiste (je Druck 3 Stunden mehr), ✖️ schaltet aus.',
+        knopf: '🔥 in der Leiste (je Druck 3 Stunden mehr, nur bei warmem Cache), ✖️ schaltet aus.',
         gilt: GILT_CHAT,
         argumente: '[Dauer | immer | aus | status] (freiwillig): eine Dauer wie 90m, 2h oder 1h30m, oder immer, aus oder status. Ohne Angabe 6 Stunden.',
         beispiel: '/warmhalten 90m',
@@ -1848,7 +1892,7 @@ export const BEFEHLE: readonly Befehl[] = [
         argumentHint: '[Dauer, z. B. 3h oder 90m]',
         titel: 'Warmhalten mit Frist',
         was: 'Hält den Cache warm: Kurz vor jedem Ablauf liest ein Ping, eine winzige Anfrage, den Chat aus dem Cache. Jeder Ping kostet Tokens, siehe /statistik:hilfe unter Kosten.',
-        knopf: '🔥 oder ❄️ in der Leiste; der Button legt je Druck 3 Stunden drauf.',
+        knopf: '🔥 in der Leiste, solange der Cache warm ist; der Button legt je Druck 3 Stunden drauf.',
         gilt: GILT_CHAT,
         argumente: '[Dauer] (freiwillig): etwa 3h, 90m oder 1h30m. Ohne Angabe 6 Stunden.',
         beispiel: '/statistik:warmhalten-an 3h',
@@ -1858,7 +1902,7 @@ export const BEFEHLE: readonly Befehl[] = [
         description: 'Hält den Cache warm, bis dieser Chat endet',
         titel: 'Warmhalten ohne Ende',
         was: 'Hält den Cache ohne Frist warm, bis dieser Chat endet. Jeder Ping kostet Tokens, siehe /statistik:hilfe unter Kosten.',
-        knopf: '🔥 oder ❄️ in der Leiste, bei 12:00 noch einmal gedrückt; dann steht "immer" darauf.',
+        knopf: '🔥 in der Leiste, bei 12:00 noch einmal gedrückt; dann steht "immer" darauf.',
         gilt: 'nur in diesem Chat, bis er endet.',
         argumente: 'keine.',
     },
@@ -1951,25 +1995,27 @@ const HILFE = [
     'So arbeitest du damit',
     '- Schau auf die Leiste. In der App zeigt jeder Ring Einzelheiten, wenn du mit der Maus darüberfährst.',
     '- Wird der Kontext rot, drück 🧽 (Aufräumen): Claude schreibt erst einen Sicherungspunkt (Ziel, Erledigtes, Offenes, nächster Schritt), dann verdichtet er den Chat und behält den Sicherungspunkt. Verdichten (/compact) heißt: Claude fasst den Chat zusammen und arbeitet mit der Zusammenfassung weiter. 🔻 verdichtet ohne Sicherungspunkt. Beide Buttons warten erst 10 Sekunden (🔟 bis 1️⃣); "Abbrechen" daneben oder derselbe Button noch einmal stoppt das.',
-    '- Machst du eine Pause und willst danach im selben Chat weiter, drück 🔥 oder ❄️ (Warmhalten). ✖️ schaltet es wieder aus.',
+    '- Machst du eine Pause und willst danach im selben Chat weiter, drück 🔥 (Warmhalten), solange der Cache warm ist. ✖️ schaltet es wieder aus.',
     '- /statistik ohne Argument zeigt alles als Text, auch was ein kalter Cache und ein Ping gerade kosten. 📊 zeigt den Kontext im Detail (/context).',
     `- Nach dem Aufräumen zeigt /statistik:letzter-stand-zeigen den Sicherungspunkt, nach jedem Verdichten /statistik:zusammenfassung-zeigen die Zusammenfassung im Fenster "${TITEL_ZUSAMMENFASSUNG}". Im Chat steht dann nur eine Zeile.`,
     '',
     'Die Leiste, von links nach rechts',
     '- 💬 42 · 312k: die Chatlänge, also Nachrichten und geschätzte Tokens (die Einheit, in der Claude liest und schreibt; sie zählen gegen dein Nutzungslimit) seit Beginn dieses Chats. Ein ≥ davor heißt: Es sind mehr, als der Mod zählen konnte.',
     '- Ring mit 20 %: der Kontext, also was Claude vom Chat gerade liest, als Anteil dessen, was er auf einmal lesen kann. Nach dem Verdichten ist er viel kleiner als die Chatlänge. Der Ring ist grün, ab der Hälfte des Wegs zur Schwelle gelb, ab vier Fünfteln rot. An der Schwelle (meist 83 %) verdichtet Claude von selbst.',
-    '- Uhr mit 37 min: wie lange der Cache noch warm ist. Ein ? dahinter heißt: Die Laufzeit von 1 Stunde ist nur angenommen, weil Claude Code sie noch nicht gemeldet und der Mod sie noch nicht gemessen hat. "Cache leer" heißt: noch keine Antwort in diesem Chat, oder gerade verdichtet.',
-    '- 🔥 heißt Cache warm, ❄️ kalt. Derselbe Button schaltet das Warmhalten: Der erste Druck hält 3 Stunden warm, jeder weitere 3 Stunden mehr bis 12, dann "immer" (bis der Chat endet), dann wieder aus. Solange es an ist, steht die Restzeit in Stunden und Minuten darauf: 🔥 6:00 heißt noch 6 Stunden.',
+    '- Uhr mit 37 min: wie lange der Cache noch warm ist. Die Uhr steht nur da, solange er warm ist. Ein ? dahinter heißt: Die Laufzeit von 1 Stunde ist nur angenommen, weil Claude Code sie noch nicht gemeldet und der Mod sie noch nicht gemessen hat.',
+    '- ❄️ mit "Cache kalt": Die Laufzeit ist um. Die nächste Nachricht schreibt den ganzen Verlauf neu in den Cache, und das kostet; den Betrag zeigt der Tooltip der Schneeflocke.',
+    '- ❄️ mit "Cache leer": noch keine Antwort in diesem Chat, oder gerade verdichtet. Die nächste Nachricht legt den Cache neu an, das ist billig.',
+    '- 🔥 schaltet das Warmhalten: Der erste Druck hält 3 Stunden warm, jeder weitere 3 Stunden mehr bis 12, dann "immer" (bis der Chat endet), dann wieder aus. Solange es an ist, steht die Restzeit in Stunden und Minuten darauf: 🔥 6:00 heißt noch 6 Stunden. Ist der Cache leer oder kalt und Warmhalten aus, meldet der Button nur, dass Warmhalten nicht möglich ist; /warmhalten schaltet trotzdem vorab ein.',
     '- SL: 15% (02:59): das Sitzungslimit über 5 Stunden. 15% sind genutzt, und in 2 Stunden 59 Minuten wird es zurückgesetzt; die Zahl in Klammern ist eine Restzeit. WL: 42% (Fr 09:00): das Wochenlimit; in Klammern steht hier der Zeitpunkt des Zurücksetzens, Freitag um 9 Uhr. FL: das eigene Limit für Fable, nur wenn Fable antwortet. Die Prozente zeigen, was genutzt ist, nicht was übrig ist; ab 75 % wird der Ring gelb, ab 90 % rot.',
     '- Haiku, Sonnet, Opus und Fable sind Modelle von Claude, von klein und günstig bis groß.',
-    '- Im Terminal stehen statt der Ringe die Zeichen ○ ◔ ◑ ◕ ●.',
+    '- Im Terminal stehen statt der Ringe die Zeichen ○ ◔ ◑ ◕ ●, statt der Schneeflocke ❄.',
     '',
     'Cache und Warmhalten',
     'Bei jeder Nachricht liest Claude den ganzen bisherigen Chat. Aus dem Cache, einem Zwischenspeicher bei Anthropic, kostet das nur ein Zehntel. Kommt eine Weile keine Anfrage (meist 1 Stunde, manchmal 5 Minuten), wird der Cache kalt, und die nächste Nachricht schreibt den Chat neu hinein; das kostet bei den meisten Modellen zwanzigmal so viel wie das Lesen aus dem warmen Cache. Warmhalten schickt kurz vor dem Ablauf einen Ping: eine winzige Anfrage, die den Chat aus dem Cache liest und ihn so warm hält. /warmhalten ohne Argument hält 6 Stunden warm, der Button geht in Schritten zu 3 Stunden.',
     'Dollarbeträge in /statistik und in den Ringen rechnet der Mod nach der Preisliste der API von Anthropic. Im Abo zahlst du sie nicht so; dort zählen dieselben Tokens als Anteil an deinem Limit.',
     '',
     'Einstellen',
-    'Nur in diesem Chat: das Warmhalten, mit 🔥 oder ❄️ und ✖️ in der Leiste oder mit /warmhalten und /statistik:warmhalten-an, /statistik:warmhalten-immer, /statistik:warmhalten-aus. Jeder neue Chat beginnt mit Warmhalten aus; dafür gibt es keinen Standard.',
+    'Nur in diesem Chat: das Warmhalten, mit 🔥 und ✖️ in der Leiste oder mit /warmhalten und /statistik:warmhalten-an, /statistik:warmhalten-immer, /statistik:warmhalten-aus. Jeder neue Chat beginnt mit Warmhalten aus; dafür gibt es keinen Standard.',
     'Standard für neue Chats:',
     '- Cache-Laufzeit, im Chat nicht umstellbar: auto, 5m oder 1h. Sie gilt nur, solange Claude Code die Laufzeit nicht gemeldet und der Mod sie nicht gemessen hat; danach zählt das Gemeldete oder Gemessene. auto: 1 Stunde angenommen, an der Uhr mit ?. 5m: 5 Minuten. 1h: 1 Stunde. Eingebaut: auto.',
     'Sag Claude zum Beispiel: Stell bei Statistik den Standard für neue Chats: Cache-Laufzeit auf 1h. Claude macht das mit `claude plugin configure statistik@bm-mods`. Im Terminal geht es auch selbst: `claude plugin configure statistik@bm-mods` zeigt die Optionen. Setzen geht mit `--values-stdin`, etwa `echo \'{"cacheLaufzeit": "1h"}\' | claude plugin configure statistik@bm-mods --values-stdin`. Das gilt für Chats, die danach beginnen. "not set" heißt dort: Es gilt der eingebaute Standard.',
@@ -2507,18 +2553,34 @@ export const register: Register = (on, options) => {
         const verstrichen = hatUhr ? (jetzt - l.letzteAnfrage) / 60_000 : 0
         const restMinuten = hatUhr ? Math.max(0, laufzeit - verstrichen) : null
         const anteil = restMinuten == null ? null : laufzeit > 0 ? restMinuten / laufzeit : 0
-        const farbe = anteil == null ? 'subtle' : anteil <= 0.1 ? 'error' : anteil <= 0.25 ? 'warning' : 'success'
-        const restText =
-            restMinuten == null ? 'Cache leer' : `${Math.ceil(restMinuten)} min${c?.ttlSource === 'geraten' ? '?' : ''}`
         // Warm oder kalt: Ist die Laufzeit um, ist der Cache kalt. Ohne Anfrage ist er leer,
         // und die naechste Nachricht schreibt ihn ganz neu, wie bei kalt.
         const kalt = hatUhr && verstrichen >= laufzeit
+        // Kalt oder leer: statt der Uhr eine Schneeflocke, daneben nur das Wort.
+        const flocke = !hatUhr || kalt
+        const farbe = flocke || anteil == null ? 'subtle' : anteil <= 0.1 ? 'error' : anteil <= 0.25 ? 'warning' : 'success'
+        const restText =
+            restMinuten == null
+                ? 'Cache leer'
+                : kalt
+                  ? 'Cache kalt'
+                  : `${Math.ceil(restMinuten)} min${c?.ttlSource === 'geraten' ? '?' : ''}`
         // Der Tooltip der Uhr sagt auch, was warm oder kalt kostet und wie es ums
         // Warmhalten steht: Der Schalter daneben ist ein Knopf, und ein Knopf hat keinen.
         const tippC = hatUhr
             ? `${tippCache(c, l, restMinuten, verstrichen, laufzeit)}\n\n${tippZustand(l, kalt, jetzt)}`
             : tippCache(c, l, restMinuten, verstrichen, laufzeit)
-        const uhr = Svg ? bild('st-cache', uhrSvg(anteil, tippC), tippC) : <Text color={farbe}>{uhrZeichen(anteil)}</Text>
+        const uhr = flocke ? (
+            Svg ? (
+                bild('st-cache', flockeSvg(tippC), tippC)
+            ) : (
+                <Text color="subtle">{FLOCKE_TERMINAL}</Text>
+            )
+        ) : Svg ? (
+            bild('st-cache', uhrSvg(anteil, tippC), tippC)
+        ) : (
+            <Text color={farbe}>{uhrZeichen(anteil)}</Text>
+        )
 
         // --- Kontext als Ring: der Bogen ist der belegte Teil des Fensters, gefaerbt nach der Schwelle ---
         const stufe = k ? kontextStufe(k.tokens, k.threshold) : null
@@ -2533,17 +2595,23 @@ export const register: Register = (on, options) => {
         )
 
         // --- Warm oder kalt, zugleich der Warmhalten-Schalter ---
-        // Ein Knopf traegt nur Text, kein Bild: Flamme oder Schneeflocke als Zeichen.
+        // Ein Knopf traegt nur Text, kein Bild: die Flamme als Zeichen.
         // An oder aus zeigt die Art des Knopfs: gefuellt heisst an, dahinter die Restzeit
         // oder "immer". Jeder Klick legt drei Stunden drauf; rechts daneben schaltet ein
-        // Kreuz sofort aus, solange es laeuft.
+        // Kreuz sofort aus, solange es laeuft. Ist der Cache kalt oder leer und das
+        // Warmhalten aus, meldet ein Druck nur, dass es gerade nicht geht.
         const warm = l.warmImmer || l.warmBis > jetzt
-        const zeichen = hatUhr && !kalt ? SYMBOL_WARM : SYMBOL_KALT
         const schalter = (
             <Button
                 key="warmhalten"
                 variant={warm ? 'primary' : 'secondary'}
-                label={l.warmImmer ? `${zeichen} immer` : warm ? `${zeichen} ${warmRest(l.warmBis - jetzt)}` : zeichen}
+                label={
+                    l.warmImmer
+                        ? `${SYMBOL_WARM} immer`
+                        : warm
+                          ? `${SYMBOL_WARM} ${warmRest(l.warmBis - jetzt)}`
+                          : SYMBOL_WARM
+                }
                 onPress={() => void schalteWarmhalten($)}
             />
         )

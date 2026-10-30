@@ -303,7 +303,7 @@ test('Dauern und Zeichen', () => {
     expect(tokenMenge(2_400_000)).toBe('2,4 Mio.')
 })
 
-test('vor der ersten Antwort: leere Uhr, der Schalter als Schneeflocke, aus', async ($, on) => {
+test('vor der ersten Antwort: Schneeflocke mit Cache leer, der Schalter als Flamme, aus', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     boden(on, { tokens: 10_000, fenster: 200_000, schwelle: 166_000 })
@@ -311,15 +311,48 @@ test('vor der ersten Antwort: leere Uhr, der Schalter als Schneeflocke, aus', as
 
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
     const text = await leiste(ui as never)
-    expect(text).toContain('○')
-    expect(text).toContain('Cache leer')
+    // Im Terminal die Flocke als ein Zeichen, ohne U+FE0F.
+    expect(text).toContain('❄ Cache leer')
+    expect(text).not.toContain('️')
+    expect(text).not.toContain('○')
     expect(text).not.toContain('–')
     expect(text).not.toContain('🔥')
-    expect(text).not.toContain('❄')
+    const flocke = (await ui.findAll({ type: 'Text' })).find(t => t.text === '❄')
+    expect(flocke?.props.color).toBe('subtle')
     const schalter = await ui.find({ type: 'Button', key: 'warmhalten' })
-    expect(schalter?.props.label).toBe('❄️')
+    expect(schalter?.props.label).toBe('🔥')
     expect(schalter?.props.variant).toBe('secondary')
     expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.variant).toBe('secondary')
+
+    // In der App ist die Uhr eine blaue Schneeflocke, kein Ring.
+    const desktop = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    const cacheBild = String((await grafiken(desktop as never))[1]?.props.source)
+    expect(cacheBild).toContain('#4a9fd8')
+    expect(cacheBild).not.toContain('stroke-dasharray')
+    expect(await leiste(desktop as never)).toContain('Cache leer')
+    expect((await desktop.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('🔥')
+})
+
+test('leer: ein Druck auf 🔥 meldet nur, dass Warmhalten nicht möglich ist; /warmhalten schaltet vorab ein', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, { tokens: 10_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        await ui.press({ key: 'warmhalten' })
+        expect(toasts.at(-1)).toBe('Warmhalten des Cache ist nicht möglich, da dieser noch leer ist.')
+        expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
+        expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
+    }
+    expect(toasts).toHaveLength(2)
+
+    // Der Befehl geht trotzdem.
+    expect(await befehl($ as never, 'warmhalten', '90m')).toContain('Warmhalten an für 1 h 30 min')
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(await schalterStand(ui as never)).toEqual({ label: '🔥 1:30', variant: 'primary', kreuz: true })
 })
 
 test('nach einer Antwort: volle Uhr, Kontext-Kuchen, Flamme, alles in einer Zeile', async ($, on) => {
@@ -366,7 +399,7 @@ test('nach einer Antwort: volle Uhr, Kontext-Kuchen, Flamme, alles in einer Zeil
     expect(ring).toContain(`stroke-dasharray="${(umfang * 0.2).toFixed(2)} ${umfang.toFixed(2)}"`)
 })
 
-test('kalt: die Schneeflocke als Schalter, keine Meldung und keine Aufforderung zum Wiederholen', async ($, on) => {
+test('kalt: Schneeflocke mit Cache kalt statt der Uhr, keine Meldung und keine Aufforderung zum Wiederholen', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { tokens: 80_000, fenster: 200_000, schwelle: 166_000 })
@@ -375,12 +408,20 @@ test('kalt: die Schneeflocke als Schalter, keine Meldung und keine Aufforderung 
     await clock.advance(61 * MIN)
 
     const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
-    expect((await ui.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('❄️')
-    expect(await leiste(ui as never)).toContain('0 min?')
+    expect((await ui.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('🔥')
+    const text = await leiste(ui as never)
+    expect(text).toContain('❄ Cache kalt')
+    expect(text).not.toContain('️')
+    expect(text).not.toContain('0 min')
+    expect(text).not.toContain('○')
 
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
-    expect((await desktop.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('❄️')
-    const uhr = String((await grafiken(desktop as never))[1]?.props.alt)
+    expect((await desktop.find({ type: 'Button', key: 'warmhalten' }))?.props.label).toBe('🔥')
+    expect(await leiste(desktop as never)).toContain('Cache kalt')
+    const [, cacheBild] = await grafiken(desktop as never)
+    expect(String(cacheBild?.props.source)).toContain('#4a9fd8')
+    expect(String(cacheBild?.props.source)).not.toContain('stroke-dasharray')
+    const uhr = String(cacheBild?.props.alt)
     expect(uhr).toContain('Cache kalt')
     expect(uhr).toContain('80k Tokens')
 
@@ -388,6 +429,54 @@ test('kalt: die Schneeflocke als Schalter, keine Meldung und keine Aufforderung 
     await $.prompt.submit({ text: 'weiter', origin: { kind: 'composer' }, wait: false } as never)
     expect(b.eingaben).toEqual(['weiter'])
     expect(b.logs).toEqual([])
+})
+
+test('kalt: ein Druck auf 🔥 meldet nur, dass Warmhalten nicht möglich ist, und pingt nicht', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 80_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    await clock.advance(61 * MIN)
+
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        await ui.press({ key: 'warmhalten' })
+        expect(toasts.at(-1)).toBe('Warmhalten des Cache ist nicht möglich, da dieser bereits kalt ist.')
+        expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
+        expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
+    }
+    await clock.advance(60 * MIN)
+    expect(b.pings).toHaveLength(0)
+})
+
+test('kalt mit Warmhalten immer: der Schalter bleibt wie bisher, primary mit Kreuz, und schaltet aus', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const toasts = toastZaehler(on)
+    boden(on, { tokens: 80_000, fenster: 200_000, schwelle: 166_000 })
+    await start($ as never)
+    // Vorab eingeschaltet, solange der Cache noch leer ist.
+    expect(await befehl($ as never, 'warmhalten', 'immer')).toContain('ohne Ende in diesem Chat')
+
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect(await leiste(ui as never)).toContain('Cache leer')
+        expect(await schalterStand(ui as never)).toEqual({ label: '🔥 immer', variant: 'primary', kreuz: true })
+    }
+    await runde($ as never)
+    await clock.advance(61 * MIN)
+    for (const surface of FLAECHEN) {
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        expect(await schalterStand(ui as never)).toEqual({ label: '🔥 immer', variant: 'primary', kreuz: true })
+    }
+    // Der Druck wirkt wie bisher: von immer auf aus, ohne Meldung.
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await ui.press({ key: 'warmhalten' })
+    expect(await schalterStand(ui as never)).toEqual({ label: '🔥', variant: 'secondary', kreuz: false })
+    expect(await befehl($ as never, 'warmhalten', 'status')).toBe('Warmhalten ist aus.')
+    expect(toasts).toEqual([])
 })
 
 test('der Schalter haelt warm und schaltet wieder aus', async ($, on) => {
