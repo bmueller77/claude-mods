@@ -37,6 +37,14 @@ const BAND = {
   },
 } as const
 
+/**
+ * Ends the main turn, as the engine does once Claude's message has arrived: only then does a plan laid out in it show as
+ * waiting for Start.
+ */
+function endPlanTurn($: Engine, turnId = 't1') {
+  return $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId, reason: 'answer' })
+}
+
 /** Calls a tool as the engine does; typed loosely, since the full tool table is too wide to check here. */
 function callTool($: Engine, input: unknown): Promise<{ deny?: string; result?: unknown }> {
   return ($.tool.call as unknown as (input: unknown) => Promise<{ deny?: string; result?: unknown }>)(input)
@@ -799,10 +807,23 @@ describe('Passwortschutz nach Herkunft und Freigabe einer zurückgehaltenen Nach
     expect(seen.entered).toHaveLength(1)
     expect(seen.entered[0]!.text).toBe(SECRET_TEXT)
     expect(seen.entered[0]!.origin).toEqual({ kind: 'plugin', name: 'leitstand', asUser: true })
-    expect(seen.toasts).toEqual(['Die Nachricht geht an Claude, sobald es frei ist.'])
+    // No turn runs: the message goes at once, and no toast says anything.
+    expect(seen.toasts).toEqual([])
     for (const surface of SURFACES) expect((await band($, surface)).isHeld).toBe(false)
     expect(await run($, 'leitstand:trotzdem-senden')).toBe('Es wartet keine zurückgehaltene Nachricht.')
     expect(seen.entered).toHaveLength(1)
+  })
+
+  test('Trotzdem senden mitten in der Runde meldet die Warteschlange, ohne den Text zu nennen', async ($, on) => {
+    const { clock, seen } = guarded(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await submit($, 'sdk')
+    await clock.advance(100)
+    seen.toasts.length = 0
+    await press($, 'held-send', 'terminal')
+    expect(seen.entered.map(one => one.text)).toEqual([SECRET_TEXT])
+    expect(seen.toasts).toEqual(['Nachricht in die Warteschlange eingereiht...'])
+    expect(JSON.stringify(seen.toasts)).not.toContain(SAMPLE_PASSWORD)
   })
 
   test('scheitert das Senden, wartet die Nachricht wieder, und ein Hinweis sagt warum', async ($, on) => {
@@ -1087,6 +1108,7 @@ test('while a plan waits for Start, the row offers Start and no Pause', async ($
   await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  await endPlanTurn($)
   const shown = (await texts($, 'terminal')).join('\n')
   expect(shown).toContain('▶ Start')
   expect(shown).not.toContain('‖ Pause')
@@ -2634,6 +2656,7 @@ test('on the desktop a plan waiting for Start numbers its first step too', VIEW_
   await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
+  await endPlanTurn($)
   const coming = (await drawings($)).filter(one => one.alt === 'Als Nächstes').map(one => one.source)
   expect(coming).toHaveLength(2)
   expect(coming[0]).toContain('>1<')
@@ -5039,11 +5062,12 @@ test('with Approve the plan first on, Claude waits for Start before it works', a
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   const planned = await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect(String(planned.result)).toContain('warte auf ihre Antwort')
+  const denied = await callTool($, { tool: 'Bash', command: 'ls' })
+  expect(denied.deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($)
   let shown = (await texts($, 'terminal')).join('\n')
   expect(shown).toContain('Lies den Plan, dann drück Start')
   expect(shown).toContain('▶ Start')
-  const denied = await callTool($, { tool: 'Bash', command: 'ls' })
-  expect(denied.deny).toContain('noch nicht freigegeben')
 
   await $.turn.start({ text: 'Der Plan sieht gut aus. Leg bitte los.', turnId: 't2' })
   const ran = await callTool($, { tool: 'Bash', command: 'ls' })
@@ -5079,10 +5103,11 @@ test('with Approve the plan first on, a plan Claude makes with its own task list
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: 'TaskCreate', subject: 'Write the page' } as never)
   await callTool($, { tool: 'TaskCreate', subject: 'Check it' } as never)
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($)
   const shown = (await texts($, 'terminal')).join('\n')
   expect(shown).toContain('Lies den Plan, dann drück Start')
   expect(shown).toContain('Check it')
-  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
 
   await $.turn.start({ text: 'start', turnId: 't2' })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
@@ -5612,6 +5637,7 @@ test("in Gruppenarbeit, a helper's brief is no go-ahead: a waiting plan keeps wa
   await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Plane die Aufgaben', 'Prüfe die Ergebnisse'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($)
 
   await $.turn.start({ text: 'Schreib das rein. also: Leg los.', turnId: 'w-t1', agentId: 'w1' } as never)
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
@@ -6146,6 +6172,50 @@ describe('Arbeitsweise und Grill mich', () => {
     return { state, press, clock }
   }
   const skill = (name: string) => ({ name, description: name, source: 'plugin' })
+
+  // The engine queues what a mod sends while a main turn runs: the press says so at once, before the send resolves.
+  test('mitten in der Runde meldet ein Befehls-Button die Warteschlange sofort, still kommt kein Hinweis', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('clean-code')]
+    // skillWorld leaves turn t1 running.
+    await press('cleancode')
+    expect(state.runs.map(one => one.command)).toEqual(['clean-code'])
+    expect(state.toasts).toEqual(['Befehl "/clean-code" in die Warteschlange eingereiht...'])
+
+    await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    state.toasts.length = 0
+    await press('cleancode', 'terminal')
+    expect(state.runs.map(one => one.command)).toEqual(['clean-code', 'clean-code'])
+    expect(state.toasts).toEqual([])
+
+    // A helper's turn is no turn of the main loop: still no word.
+    await $.turn.start({ text: 'Prüf die Tabelle', turnId: 'w-t1', agentId: 'w1' } as never)
+    await press('cleancode')
+    expect(state.toasts).toEqual([])
+  })
+
+  test('Kurzfassen an und aus mitten in der Runde melden die Warteschlange, still nicht', async ($, on) => {
+    const sent: string[] = []
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      return { text: e.text }
+    })
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('kurzfassen:kurzfassen')]
+    await press('adhd')
+    expect(state.toasts).toEqual(['Befehl "/kurzfassen:kurzfassen" in die Warteschlange eingereiht...'])
+    state.toasts.length = 0
+    await press('adhd')
+    expect(sent).toEqual(['Kurzfassen aus'])
+    expect(state.toasts).toEqual(['Nachricht "Kurzfassen aus" in die Warteschlange eingereiht...'])
+
+    await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    state.toasts.length = 0
+    await press('adhd')
+    await press('adhd')
+    expect(sent).toEqual(['Kurzfassen aus', 'Kurzfassen aus'])
+    expect(state.toasts).toEqual([])
+  })
 
   test('hinter dem Autopiloten stehen Kurzantworten, Vermenschlichen, Grill mich, Selbstkritik, Sauberer Code, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
     await skillWorld($, on)
@@ -7358,6 +7428,7 @@ describe('Ansicht Minimal', () => {
     await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+    await endPlanTurn($)
     for (const surface of SURFACES) {
       const shown = (await texts($, surface)).join('\n')
       expect(shown).toContain('Wartet auf Start (0/2)')
@@ -7735,7 +7806,7 @@ describe('Verdecken und Tresor', () => {
 
     await pressBand($, 'privacy')
     expect(await bandButton($, 'privacy')).toBe(LOCK)
-    expect(toasts).toContain('Verdecken an: Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.')
+    expect(toasts).toContain('Verdecken an: Passwörter, Schlüssel, IP-Adressen, Hostnamen, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.')
     expect(await shows()).toEqual(hidden)
 
     // The command and the settings switch it too.
@@ -7882,7 +7953,7 @@ describe('Verdecken und Tresor', () => {
     const state = await vaultWorld($, on, { messages: [{ role: 'user', text: 'Schreib an jane@example.com', toolUses: [] }] })
     await pressBand($, 'vault')
     await pressBand($, 'vault')
-    expect(state.toasts).toContain('Im Chat stehen keine Passwörter oder Schlüssel.')
+    expect(state.toasts).toContain('Im Chat stehen keine Passwörter, Schlüssel, IP-Adressen oder Hostnamen.')
     expect(state.writes).toEqual([])
     expect(state.forks).toEqual([])
     expect(state.compacts).toEqual([])
@@ -7921,7 +7992,7 @@ describe('Verdecken und Tresor', () => {
     expect(state.writes).toEqual([])
     expect(state.compacts).toEqual([])
 
-    expect(await run('ja')).toBe('Verschiebe die Passwörter und Schlüssel dieses Chats in die .env und räume den Chat danach auf.')
+    expect(await run('ja')).toBe('Verschiebe die Passwörter, Schlüssel, IP-Adressen und Hostnamen dieses Chats in die .env und räume den Chat danach auf.')
     await state.clock.advance(1)
     await new Promise<void>(done => later(done, 50))
     expect(state.files.get('C:/work/shop/.env')).toContain(`GITHUB_TOKEN=${GITHUB}\n`)
@@ -8049,6 +8120,7 @@ test('with Approve the plan first on, a clear request to carry out work starts t
   // Claude lays out a different plan: the go-ahead went to the waiting one, so this one waits for its own.
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it', 'Ship it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($, 't3')
   expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
 })
 
@@ -8064,6 +8136,7 @@ test('mit Freigabe-Pflicht gibt „los“ den wartenden Plan frei; ein anderer P
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
   await callTool($, { tool: PLAN, steps: ['Build the form', 'Send the mail', 'Test it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($, 't2')
   expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
 })
 
@@ -8203,6 +8276,7 @@ for (const surface of SURFACES) {
     await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
     await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    await endPlanTurn($)
     const band = await $.ui.mount({ ...BAND, surface })
     const first = band.press({ key: 'start' })
     await clock.advance(3000)
@@ -8226,6 +8300,7 @@ for (const surface of SURFACES) {
     await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
     await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    await endPlanTurn($)
     const startButton = async () => {
       const ui = await $.ui.mount({ ...BAND, surface })
       const found = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'start')
@@ -8490,6 +8565,7 @@ test('in Gruppenarbeit, a new request out of the blue still gets its plan shown 
   await $.turn.start({ text: 'Baue mir eine Preisseite.', turnId: 't2' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($, 't2')
   expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
 })
 
@@ -8626,6 +8702,7 @@ for (const [name, calls, between] of NO_BOX_QUESTION) {
   test(`in Gruppenarbeit wartet der Plan zu einer Anweisung ${name}`, async ($, on) => {
     await askedInBox($, on, calls, between)
     expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+    await endPlanTurn($, 't2')
     expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
   })
 }
@@ -8666,6 +8743,7 @@ test('frisch geladen gibt dieselbe Anweisung nichts frei, wenn die Antwort im Ve
   await $.turn.start({ text: DO_A, turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  await endPlanTurn($)
   expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
 })
 
@@ -9841,4 +9919,176 @@ test('die Zeile der Modellwahl steht oben im Band; ihre Knöpfe bleiben bei ihr'
     expect(line).toContain('Nein')
     expect(actions).not.toContain('Übernehmen')
   }
+})
+
+// Claude's message with the plan still streams as plan_steps returns: Needs you and Start wait for the turn's end.
+test('in Gruppenarbeit zeigt das Band Braucht dich und Start erst, wenn die Runde mit dem Plan geendet hat', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'arbeitsweise dynamisch' } as never)
+  await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+  const planned = await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+  expect(String(planned.result)).toContain('warte auf ihre Antwort')
+  // The plan waits all the same: tools stay locked.
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  for (const surface of SURFACES) {
+    const shown = (await texts($, surface)).join('\n')
+    expect(shown).toContain('Lies die Notizen')
+    expect(shown).not.toContain('Braucht dich')
+    expect(shown).not.toContain('Lies den Plan, dann drück Start')
+    expect(shown).not.toMatch(/^(\S+ )?Start$/m)
+  }
+
+  await $.turn.complete({ answer: '1. Lies die Notizen\n2. Baue die Tabelle\nIch warte auf deine Freigabe.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  for (const surface of SURFACES) {
+    const shown = (await texts($, surface)).join('\n')
+    expect(shown).toContain('Braucht dich')
+    expect(shown).toMatch(/^(\S+ )?Start$/m)
+  }
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  // Start, or "los", approves it as before.
+  await $.turn.start({ text: 'los', turnId: 't2' })
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+})
+
+test('ein abgebrochener Plan-Zug zeigt Start danach auch', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+  await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+  expect((await texts($, 'terminal')).join('\n')).not.toContain('▶ Start')
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
+  expect((await texts($, 'terminal')).join('\n')).toContain('▶ Start')
+})
+
+test('in der Ansicht Detailliert steht jeder Schritt des Plans in seiner Zeile, ohne "weitere Schritte"', async ($, on) => {
+  world(on)
+  await detailsOn($)
+  const steps = ['Lies die Notizen', 'Baue die Tabelle', 'Schreib die Texte', 'Prüf die Preise', 'Teste die Seite', 'Lade sie hoch']
+  await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps })
+  await callTool($, { tool: PROGRESS, task: 'Lies die Notizen', percent: 100 })
+  await callTool($, { tool: PROGRESS, task: 'Baue die Tabelle', percent: 100 })
+  for (const surface of SURFACES) {
+    const shown = (await texts($, surface, 100)).join('\n')
+    for (const name of steps) expect(shown).toContain(name)
+    expect(shown).not.toContain('weitere Schritte')
+    expect(shown).not.toContain('Schritte fertig')
+  }
+})
+
+describe('die Liste der App (update_plan) neben dem Band', () => {
+  const APP_PLAN = 'mcp__ccd_turn__update_plan'
+  const APP_WRAP = 'mcp__ccd_turn__wrap_up'
+  const ITEMS = [
+    { content: 'Lies die Notizen', status: 'in_progress' },
+    { content: 'Baue die Tabelle', status: 'pending' },
+    { content: 'Prüf die Seite', status: 'pending' },
+  ]
+
+  /** As world(), on these surfaces: what reaches the tools beneath the Leitstand, and what it hands the app's server. */
+  function appWorld(on: On, surfaces: string[] = ['desktop']) {
+    const seen = {
+      floor: [] as string[],
+      handed: [] as { server: string; tool: string; args: Record<string, unknown> }[],
+      /** Set, the app's server refuses what the Leitstand hands it. */
+      isRefusing: false,
+      /** Both, in the order they came. */
+      order: [] as string[],
+    }
+    world(on, ((_: unknown, e: { tool: string }) => {
+      seen.floor.push(e.tool)
+      seen.order.push(e.tool)
+      return { result: 'Von der App.' }
+    }) as unknown as () => unknown)
+    on('session.surfaces', () => ({ value: surfaces }) as never)
+    on('mcp.call', (_, e) => {
+      // Remote Control's server is not there; only the app's task list answers.
+      if (e.server !== 'ccd_turn' || seen.isRefusing) throw new Error(`MCP server ${e.server} is not connected`)
+      seen.handed.push({ server: e.server, tool: e.tool, args: e.args })
+      seen.order.push(`${e.server}/${e.tool}`)
+      return { value: { content: [{ type: 'text', text: 'Plan shown (3 steps).' }], isError: false } } as never
+    })
+    return seen
+  }
+  const answer = async ($: Engine, input: Record<string, unknown>) => String((await callTool($, { tool: APP_PLAN, ...input })).result)
+
+  for (const surface of ['desktop', 'terminal']) {
+    test(`mit dem Band (${surface}) beantwortet der Leitstand update_plan selbst und hält die Liste nach`, async ($, on) => {
+      const seen = appWorld(on, [surface])
+      await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+      expect(await answer($, { items: ITEMS, scope: 'first_task' })).toBe('Plan shown (3 steps).')
+      expect(await answer($, { advance: true })).toBe('Plan updated: step 2 of 3 is in progress.')
+      expect(await answer($, { done: [2], start: 3 })).toBe('Plan updated: step 3 of 3 is in progress.')
+      expect(seen.floor).not.toContain(APP_PLAN)
+      expect(seen.handed).toEqual([])
+    })
+  }
+
+  test('bei wrap_up geht die nachgehaltene Liste genau einmal an die App, vor dem Kasten', async ($, on) => {
+    const seen = appWorld(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await answer($, { items: ITEMS, scope: 'first_task' })
+    await answer($, { advance: true })
+    await answer($, { done: [2], start: 3 })
+    await callTool($, { tool: APP_WRAP, recap: 'Die Seite steht.' })
+    expect(seen.handed).toEqual([
+      {
+        server: 'ccd_turn',
+        tool: 'update_plan',
+        args: {
+          items: [
+            { content: 'Lies die Notizen', status: 'completed' },
+            { content: 'Baue die Tabelle', status: 'completed' },
+            { content: 'Prüf die Seite', status: 'in_progress' },
+          ],
+          scope: 'first_task',
+        },
+      },
+    ])
+    // The box itself goes on to the app, after the list.
+    expect(seen.order).toEqual(['ccd_turn/update_plan', APP_WRAP])
+    await callTool($, { tool: APP_WRAP, recap: 'Die Seite steht.' })
+    expect(seen.handed).toHaveLength(1)
+
+    // A list changed after it was handed on goes once more at the next wrap_up.
+    await answer($, { advance: true })
+    await callTool($, { tool: APP_WRAP, recap: 'Fertig.' })
+    expect(seen.handed).toHaveLength(2)
+    expect((seen.handed[1]!.args.items as { status: string }[]).map(one => one.status)).toEqual(['completed', 'completed', 'completed'])
+  })
+
+  for (const [name, surfaces] of [['nur Handy', ['mobile']], ['ohne Oberfläche', []]] as const) {
+    test(`ohne Band (${name}) geht update_plan unverändert an die App`, async ($, on) => {
+      const seen = appWorld(on, [...surfaces])
+      await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+      expect(await answer($, { items: ITEMS, scope: 'first_task' })).toBe('Von der App.')
+      expect(seen.floor).toEqual([APP_PLAN])
+      await callTool($, { tool: APP_WRAP, recap: 'Fertig.' })
+      expect(seen.handed).toEqual([])
+    })
+  }
+
+  test('mit dem Leitstand aus geht update_plan an die App, ebenso der Aufruf eines Helfers', async ($, on) => {
+    const seen = appWorld(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: APP_PLAN, items: ITEMS, scope: 'first_task', agentId: 'w1' })
+    expect(seen.floor).toEqual([APP_PLAN])
+    await $.command.run({ command: 'leitstand', args: 'off' } as never)
+    expect(await answer($, { items: ITEMS, scope: 'first_task' })).toBe('Von der App.')
+    expect(seen.floor).toEqual([APP_PLAN, APP_PLAN])
+    await callTool($, { tool: APP_WRAP, recap: 'Fertig.' })
+    expect(seen.handed).toEqual([])
+  })
+
+  test('nimmt die App die Liste nicht an, geht update_plan danach wieder unverändert an sie', async ($, on) => {
+    const seen = appWorld(on)
+    seen.isRefusing = true
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await answer($, { items: ITEMS, scope: 'first_task' })
+    await callTool($, { tool: APP_WRAP, recap: 'Fertig.' })
+    // wrap_up itself still reaches the app.
+    expect(seen.floor).toEqual([APP_WRAP])
+    expect(await answer($, { items: ITEMS, scope: 'continuation' })).toBe('Von der App.')
+    expect(seen.floor).toEqual([APP_WRAP, APP_PLAN])
+  })
 })

@@ -206,6 +206,19 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Ein neuer Chat (`start_session`) lädt nach `claude plugin update` schon die neuen Versionen, ohne
   Neustart der App. Eine Nachricht aus einer anderen Sitzung (`send_message`, Herkunft `peer`) kommt
   als Text an; ein Slash-Befehl darin läuft nicht als Befehl.
+- `$.command.run` und `$.prompt.submit` eines Mods laufen erst, wenn die Sitzung still ist; mitten in einer
+  Runde reiht die Engine sie ein, und das `await` löst erst danach auf. Seit leitstand 0.63.4.0, statistik
+  0.19.4.0 und prompt-upgrade 0.4.3.0 sagt ein Button das sofort per Toast (`Befehl "/<name>" in die
+  Warteschlange eingereiht...`, bei Nachrichten `Nachricht ...`), nur mitten in einer Runde der Hauptschleife.
+- Leitstand seit 0.63.4.0: "Braucht dich", Start und der Ton eines wartenden Plans kommen erst mit dem
+  `turn.complete` der Runde, die ihn angelegt hat (Atom `planVeiled`); die Werkzeuge sind ab `plan_steps`
+  gesperrt. Solange das Band zu sehen ist, beantwortet er Claudes `mcp__ccd_turn__update_plan` selbst und
+  reicht die Liste beim `wrap_up` per `$.mcp.call('ccd_turn', 'update_plan', …)` einmal an die App weiter;
+  schlägt das fehl, gehen alle Aufrufe wieder an die App (live ungeprüft). Schloss und Schild erfassen IPs
+  und Hostnamen an Netz-Stellen (`privacy.ts`), der Passwortschutz nicht.
+- Nächste Schritte seit 0.4.4.0: Antworten, die Claude ausdrücklich anbietet (Antworte/Schreib/Sag + Phrase in
+  Anführungszeichen), stehen vorn als hervorgehobene Buttons und gehen mit einem Klick ab. Für Buttons bei
+  Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein".
 
 ## Offen (Stand 2026-10-26, nach dem Live-Test am PC)
 
@@ -261,3 +274,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Compact lassen sich je Chat nicht abschalten; `/leitstand handoff note` ist noch ein alter
    englischer Befehl. Live-Test ausstehend: die neuen Texte und 2 px Luft unter den Buttons der
    Zusammenfassung (`marginTop={0.2}`).
+11. Live-Test ausstehend (2026-10-31): Warteschlangen-Toasts, "Braucht dich" erst nach der Plan-Nachricht,
+   Detailliert mit allen Schritten, App-Liste nur am Ende (erreicht `$.mcp.call` den Server `ccd_turn`?),
+   Antwort-Buttons in Nächste Schritte, IPs/Hostnamen im Schloss. Als Nächstes geplant: Platz-Regel, damit
+   das Band in der App nie scrollt (jeder Mod meldet seine Höhe, Reihenfolge Zusammenfassung, Nächste
+   Schritte, Leitstand), und Ja/Nein-Buttons bei Ja/Nein-Fragen in Nächste Schritte.

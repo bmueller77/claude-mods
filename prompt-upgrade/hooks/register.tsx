@@ -491,6 +491,10 @@ const NICHT_GESENDET = 'Das hat nicht geklappt: Claude Code hat die Nachricht ni
 /** Senden, als haette die Person es getippt; wird es abgelehnt, steht es wieder im Eingabefeld. */
 async function sende($: EngineInterface, text: string): Promise<void> {
     try {
+        if (arbeitet) {
+            // Mitten in einer Runde reiht die Engine die Nachricht nur ein; ohne Hinweis sähe die Person nichts.
+            $.ui.toast('Nachricht in die Warteschlange eingereiht...')
+        }
         const r = await $.prompt.submit({ text, asUser: true })
         if (r.drop !== undefined) {
             await zurueckInsFeld($, text, NICHT_GESENDET)

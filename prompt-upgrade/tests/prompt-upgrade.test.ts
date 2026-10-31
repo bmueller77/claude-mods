@@ -85,6 +85,7 @@ function boden(on: On, clock: MockClock, x: { antworten?: Antwort[]; platz?: boo
         logs: [] as string[],
         modell: [] as { system: string; prompt: string }[],
         kopiert: [] as string[],
+        toasts: [] as string[],
     }
     const antworten = x.antworten ?? [FRAGEN, UMSCHRIFT]
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
@@ -116,6 +117,10 @@ function boden(on: On, clock: MockClock, x: { antworten?: Antwort[]; platz?: boo
     })
     on('ui.log', (_$, e, _next) => {
         b.logs.push(e.text)
+        return { value: undefined } as never
+    })
+    on('ui.toast', (_$, e, _next) => {
+        b.toasts.push(e.text)
         return { value: undefined } as never
     })
     on('ui.copy', (_$, e, _next) => {
@@ -1199,4 +1204,33 @@ test('Breiten: bei 40 und 120 Spalten ist keine Zeile breiter als das Fenster', 
     await clock.settle()
     await pruefeAlle('fehler')
     expect(b.eingang).toHaveLength(1)
+})
+
+test('Ausführen: Toast nur, wenn gerade eine Runde läuft', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, clock, { antworten: [FRAGEN, UMSCHRIFT, FRAGEN, UMSCHRIFT, FRAGEN, UMSCHRIFT, FRAGEN, UMSCHRIFT] })
+    await start($)
+    await befehl($, 'an')
+    const sende = async (vorher?: () => Promise<unknown>) => {
+        expect((await tippe($, ORIGINAL)).drop).toBe(GRUND_ABGEFANGEN)
+        await clock.settle()
+        const ui = await zeige($, 'terminal')
+        await ui.press({ key: 'rest' })
+        await clock.settle()
+        await vorher?.()
+        await ui.press({ key: 'ausfuehren' })
+        await clock.settle()
+        await ui.unmount()
+    }
+    await sende()
+    expect(b.toasts).toEqual([])
+    // Eine Runde eines Subagenten zählt nicht.
+    await sende(() => $.turn.start({ text: '', turnId: 'a1', agentId: 'ag' } as never))
+    expect(b.toasts).toEqual([])
+    await sende(() => $.turn.start({ text: '', turnId: 't2' } as never))
+    expect(b.toasts).toEqual(['Nachricht in die Warteschlange eingereiht...'])
+    await $.turn.complete({ answer: 'fertig', durationMs: 10, isAborted: false, turnId: 't2', reason: 'answer' } as never)
+    await sende()
+    expect(b.toasts).toHaveLength(1)
 })

@@ -61,6 +61,140 @@ const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
 const PHONE = /(?<![\w.])(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}(?![\w.])/g
 const PHONE_INTL = /(?<![\w.])\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,4}(?![\w.])/g
 
+// Network spots: IP addresses, and host names where a host stands (in an address, after user@, in a UNC path) or
+// where the name ends in a private suffix. The screen masks them and the shield moves them into the .env; the guard
+// lets them through.
+
+// IPv4 with an optional :port or /CIDR. The first number is at least 1 (so versions like 0.63.4.0 stay), and a longer
+// chain of dots (1.2.3.4.5) is no address. Group 1 is the address alone.
+const IPV4 = /(?<![\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?::\d{1,5})?(?:\/\d{1,2})?(?![\w-]|\.[\w-])/g
+
+// IPv6: eight groups, or fewer around one '::', with an optional zone (%eth0); also inside [..]:port. isIpv6 sorts out
+// the rest, so a time (12:30:45) or a C++ name (a::b) never counts. Group 1 is the address.
+const IPV6 =
+  /(?<![\w:.%])((?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6})?::(?:[0-9A-Fa-f]{1,4}(?::[0-9A-Fa-f]{1,4}){0,6})?)(?:%[\w.-]+)?(?![\w:%]|\.[\w-])/g
+
+// A host name: labels of letters, digits and inner hyphens, joined by dots.
+const HOST_NAME = '[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*'
+
+// The host of an address with a network scheme: scheme://[user[:pass]@]host[:port]/… Group 1 is everything before
+// the host, group 2 the host; scheme, port and path stay.
+const URL_HOST = new RegExp(
+  '\\b((?:https?|s?ftps?|ssh|scp|smb|cifs|afp|nfs|rdp|vnc|wss?|git|svn|telnet|ldaps?|rsync|mqtts?|redis|postgres(?:ql)?|mysql|mariadb|mongodb(?:\\+srv)?|amqps?|smtps?|imaps?|pop3s?)://(?:[^\\s/?#@]*@)?)' +
+    `(${HOST_NAME})(?![\\w-]|\\.[\\w-])`,
+  'gi',
+)
+
+// user@host outside an address (ssh root@nas01): a single label, since a dotted one is an email address, which EMAIL
+// takes. Group 1 is user@, group 2 the host. It counts when the host has a digit or a hyphen (nas01, pi-hole) or a
+// remote command stands before it on the line (REMOTE_COMMAND), so weights@inputs is no host.
+const USER_HOST = /(?<![\w.%+/@-])([A-Za-z_][\w.-]*@)([A-Za-z][A-Za-z0-9-]*[A-Za-z0-9])(?![\w+@-]|\.[\w-])/g
+const REMOTE_COMMAND = /\b(?:ssh|scp|sftp|rsync|mosh|telnet)\b/i
+
+// What stands after @ without being a host: package tags (react@latest) and digests (image@sha256:…).
+const NOT_A_HOST = new Set(['latest', 'next', 'beta', 'alpha', 'canary', 'rc', 'lts', 'stable', 'nightly', 'dev', 'experimental', 'insiders', 'edge', 'main', 'master', 'head', 'preview', 'release', 'sha1', 'sha256', 'sha512'])
+
+// UNC paths \\host\share and //host/share. Group 1 is the leading pair, group 2 the host.
+const UNC_BACKSLASH = new RegExp(`(?<![\\w:\\\\])(\\\\\\\\)(${HOST_NAME})(?=\\\\[^\\s\\\\])`, 'g')
+const UNC_SLASH = new RegExp(`(?<![\\w:/])(//)(${HOST_NAME})(?=/[^\\s/])`, 'g')
+
+// A name with a private suffix anywhere in the text, subdomains too. The suffix ends the name, so settings.local.json
+// and a member call (cfg.local()) are no host.
+const PRIVATE_HOST =
+  /(?<![\w.$-])((?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+(?:home\.arpa|fritz\.box|localdomain|intranet|internal|intern|local|lan|corp|home))(?![\w(\[-]|\.[\w-])/g
+
+// Suffixes that are host names only; the others (.local, .home, …) also end member names in code (options.local),
+// so they do not count inside backticks or a code block.
+const SURE_SUFFIX = /\.(?:home\.arpa|fritz\.box|localdomain)$/
+
+// Inline code and fenced code blocks; a block left open runs to the end.
+const CODE = /```[\s\S]*?(?:```|$)|`[^`\n]*`/g
+
+// Public services nobody needs hidden, each with its subdomains; add more here.
+const OPEN_HOSTS = [
+  'example.com', 'example.net', 'example.org',
+  'github.com', 'githubusercontent.com', 'gitlab.com', 'anthropic.com', 'claude.ai', 'claude.com', 'google.com',
+  'googleapis.com', 'microsoft.com', 'npmjs.com', 'npmjs.org', 'pypi.org', 'cloudflare.com', 'jsdelivr.net', 'unpkg.com',
+  'wikipedia.org', 'stackoverflow.com', 'youtube.com', 'apple.com', 'mozilla.org',
+]
+// Names reserved for tests and local use: localhost, *.localhost, *.example, *.test, *.invalid.
+const OPEN_SUFFIXES = ['localhost', 'example', 'test', 'invalid']
+
+const isOpenHost = (raw: string) => {
+  const host = raw.toLowerCase().replace(/\.$/, '')
+  if (host === 'localhost') return true
+  if (OPEN_SUFFIXES.some(suffix => host.endsWith(`.${suffix}`))) return true
+  return OPEN_HOSTS.some(open => host === open || host.endsWith(`.${open}`))
+}
+
+const isIpv4 = (host: string) => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+
+/** Loopback (127.x) and net masks (255.x) are no address worth hiding. */
+const isOpenIpv4 = (address: string) => /^(?:127|255)\./.test(address)
+
+/** An IPv6 match that is an address: a digit in it, at most seven groups around '::', and not ::1 or ::2 ([::2] slices). */
+function isIpv6(match: string): boolean {
+  const address = match.replace(/%.*$/, '')
+  if (!/\d/.test(address)) return false
+  if (!address.includes('::')) return true
+  const groups = address.split(':').filter(group => group !== '')
+  return groups.length <= 7 && !(address.startsWith('::') && groups.length < 2)
+}
+
+type NetSpot = { kind: 'ipv4' | 'ipv6' | 'host'; value: string; start: number; end: number }
+
+/** The network spots of a text in order: only the address or host itself, never its scheme, port or path. */
+function findNetSpots(text: string): NetSpot[] {
+  const spots: NetSpot[] = []
+  const add = (kind: NetSpot['kind'], value: string, start: number) => {
+    const end = start + value.length
+    if (spots.some(one => start < one.end && one.start < end)) return
+    spots.push({ kind, value, start, end })
+  }
+  for (const re of [URL_HOST, USER_HOST, UNC_BACKSLASH, UNC_SLASH]) {
+    for (const m of matches(re, text)) {
+      const [, head = '', host = ''] = m
+      if (isIpv4(host) || isOpenHost(host) || !/[A-Za-z]/.test(host)) continue
+      if (re === USER_HOST) {
+        if (NOT_A_HOST.has(host.toLowerCase())) continue
+        const line = text.slice(text.lastIndexOf('\n', m.index) + 1, m.index)
+        if (!/[\d-]/.test(host) && !REMOTE_COMMAND.test(line)) continue
+      }
+      add('host', host, m.index + head.length)
+    }
+  }
+  const code = matches(CODE, text).map(m => [m.index, m.index + m[0].length] as const)
+  for (const m of matches(PRIVATE_HOST, text)) {
+    if (isOpenHost(m[0])) continue
+    if (!SURE_SUFFIX.test(m[0]) && code.some(([from, to]) => from <= m.index && m.index < to)) continue
+    add('host', m[0], m.index)
+  }
+  for (const m of matches(IPV6, text)) {
+    const [, address = ''] = m
+    if (isIpv6(address)) add('ipv6', m[0], m.index)
+  }
+  for (const m of matches(IPV4, text)) {
+    const [, address = ''] = m
+    if (!isOpenIpv4(address)) add('ipv4', address, m.index)
+  }
+
+  return spots.sort((a, b) => a.start - b.start)
+}
+
+const NET_MASKS: Record<NetSpot['kind'], string> = { ipv4: '•••.•••.•••.•••', ipv6: '••••:••••', host: '•••.•••' }
+
+/** The text with each network spot masked; scheme, port, path and the user before @ stay. */
+function maskNetwork(text: string): string {
+  let out = ''
+  let at = 0
+  for (const spot of findNetSpots(text)) {
+    out += text.slice(at, spot.start) + NET_MASKS[spot.kind]
+    at = spot.end
+  }
+
+  return out + text.slice(at)
+}
+
 function luhn(digits: string): boolean {
   let sum = 0
   for (let i = 0; i < digits.length; i += 1) {
@@ -111,10 +245,11 @@ function coverSecrets(text: string, cover: { secret: string; card: string; iban:
 /** A message from afar (Remote Control) with each secret the guard finds as REMOVED: Claude reads the rest, not the secret. */
 export const removeSecrets = (text: string): string => coverSecrets(text, { secret: REMOVED, card: REMOVED, iban: REMOVED })
 
-/** Masks secrets and personal details for the screen; what Claude reads is unchanged. */
+/** Masks secrets and personal details, IP addresses and host names too, for the screen; what Claude reads is unchanged. */
 export function maskPrivate(text: string): string {
   let out = coverSecrets(text, { secret: DOTS, card: '•••• •••• •••• ••••', iban: '•••' })
   out = out.replace(EMAIL, '•••@•••')
+  out = maskNetwork(out)
   out = out.replace(PHONE, '•••-•••-••••')
   out = out.replace(PHONE_INTL, '+•• •••')
 
@@ -194,8 +329,9 @@ export function envName(raw: string): string {
 
 /**
  * The real secrets in a text, each under a .env name: keys and tokens, password assignments and sentences, card
- * numbers and IBANs. Email addresses and phone numbers stay: the screen masks those. A value counts once; a name
- * taken twice gets _2, _3. Several texts (a chat's messages) are read each on its own.
+ * numbers and IBANs, IP addresses and host names (IP and HOST, or the name before them: DB_HOST=10.0.0.5). Email
+ * addresses and phone numbers stay: the screen masks those. A value counts once; a name taken twice gets _2, _3.
+ * Several texts (a chat's messages) are read each on its own.
  */
 export function extractSecrets(texts: string | readonly string[]): Secret[] {
   const found: Secret[] = []
@@ -250,18 +386,44 @@ function scanSecrets(text: string, found: Secret[]) {
     add('IBAN', value, m.index + head.length, m.index + head.length + value.length)
   }
   for (const m of matches(IBAN, text)) add('IBAN', m[0], m.index, m.index + m[0].length)
+  for (const spot of findNetSpots(text)) {
+    // A name right before the spot names it: DB_HOST=10.0.0.5, "server": "nas.fritz.box".
+    const before = NAME_BEFORE.exec(text.slice(Math.max(0, spot.start - 120), spot.start))?.[1] ?? ''
+    add(envName(before) || (spot.kind === 'host' ? 'HOST' : 'IP'), spot.value, spot.start, spot.end)
+  }
 }
 
-/** The text with each secret's value, also as written without spaces or with CRLF, as its placeholder `${NAME}`. */
+// NAME=, NAME: or "name": right before a value; group 1 is the name.
+// The name stands on its own: in ::ffff:192.168.1.1 the ffff is part of the address, not a name.
+const NAME_BEFORE = /(?<![\w.:-])([A-Za-z_][\w.-]*)["']?\s*[=:]\s*["']?$/
+
+// A value shaped like an IP address or a host name; it is replaced as a whole word only (wholeWord).
+const NET_VALUE = new RegExp(`^(?:\\d{1,3}(?:\\.\\d{1,3}){3}|[0-9A-Fa-f:]*::?[0-9A-Fa-f:]*(?:%[\\w.-]+)?|${HOST_NAME})$`)
+
+/**
+ * Every place a network value stands as a whole word: no letter, digit, _ or - right before or after, and a dot only
+ * where no further label joins it. So a host "server" leaves Webserver, servers and server.firma.de alone.
+ */
+const wholeWord = (value: string) =>
+  new RegExp(`(?<![\\p{L}\\d_{-])(?<![\\p{L}\\d-]\\.)${value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\d_}-])(?!\\.[\\p{L}\\d-])`, 'gu')
+
+/**
+ * The text with each secret's value, also as written without spaces or with CRLF, as its placeholder `${NAME}`. An IP
+ * address or host name is replaced as a whole word only, whatever its length.
+ */
 export function replaceSecrets(text: string, secrets: readonly Secret[]): string {
-  const pairs = secrets.flatMap(({ name, value }) =>
-    [...new Set([value, value.replace(/\n/g, '\r\n'), value.replace(/\s+/g, '')])]
+  const pairs = secrets.flatMap(({ name, value }) => {
+    const placeholder = `\${${name}}`
+    if (NET_VALUE.test(value) && value.length >= 2) return [{ form: value, placeholder, isWhole: true }]
+    return [...new Set([value, value.replace(/\n/g, '\r\n'), value.replace(/\s+/g, '')])]
       .filter(form => form.length >= 4)
-      .map(form => [form, `\${${name}}`] as const),
-  )
-  pairs.sort((a, b) => b[0].length - a[0].length)
+      .map(form => ({ form, placeholder, isWhole: false }))
+  })
+  pairs.sort((a, b) => b.form.length - a.form.length)
   let out = text
-  for (const [form, placeholder] of pairs) out = out.split(form).join(placeholder)
+  for (const { form, placeholder, isWhole } of pairs) {
+    out = isWhole ? out.replace(wholeWord(form), () => placeholder) : out.split(form).join(placeholder)
+  }
   return out
 }
 

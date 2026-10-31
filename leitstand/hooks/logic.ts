@@ -1725,7 +1725,7 @@ export const STUFEN = 'Haiku, Sonnet, Opus mit mittlerem, hohem oder extra hohem
 
 /** Was Verdecken verdeckt, in der einen Fassung, die alle Texte teilen. */
 export const VERDECKEN_TEXT =
-  'Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte, in Nachrichten wie in Befehls- und Werkzeugausgaben, solange der Leitstand an ist. Das betrifft nur den Bildschirm: Claude liest alles unverändert.'
+  'Passwörter, Schlüssel, IP-Adressen, Hostnamen, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte, in Nachrichten wie in Befehls- und Werkzeugausgaben, solange der Leitstand an ist. Das betrifft nur den Bildschirm: Claude liest alles unverändert.'
 
 /** Der Autopilot, in der einen Fassung für Hilfe und Übersicht (steht bei seinen Befehlen). */
 export const AUTOPILOT_TEXT = AUTOPILOT_TUT
@@ -1807,7 +1807,7 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
     'Schutz',
     'leitstand:geheimnisse-sichern',
     'Passwörter aus dem Chat in die .env verschieben (mit ja)',
-    'Verschiebt Passwörter und Schlüssel aus diesem Chat in die Datei .env (eine Datei im Projektordner, aus der Programme geheime Werte lesen) und verdichtet den Chat danach wie /compact: Claude fasst ihn zusammen und arbeitet mit der Zusammenfassung weiter. Danach kennt Claude nur noch Platzhalter.',
+    'Verschiebt Passwörter, Schlüssel, IP-Adressen und Hostnamen aus diesem Chat in die Datei .env (eine Datei im Projektordner, aus der Programme geheime Werte lesen) und verdichtet den Chat danach wie /compact: Claude fasst ihn zusammen und arbeitet mit der Zusammenfassung weiter. Danach kennt Claude nur noch Platzhalter.',
     `Button: 🛡️ unten links (im Terminal 🔐). ${ZWEIMAL}`,
     'dauerhaft',
     { ...ja('leitstand:geheimnisse-sichern'), ort: 'die Datei .env im Projektordner' },

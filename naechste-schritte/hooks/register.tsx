@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Vorschlaege } from '../types'
+import type { Eintrag, Vorschlaege } from '../types'
 
 const MODELL = 'haiku'
 const MAX_EINTRAEGE = 3
@@ -213,6 +213,7 @@ export function uebersicht(id: string | null = null): string {
         '- Im Terminal: Tipp 1, 2 oder 3 ins leere Eingabefeld, dann steht der Vorschlag dort als Entwurf; Enter schickt ihn ab. ' +
             'Willst du wirklich nur eine Ziffer schicken, füge sie aus der Zwischenablage ein, statt sie zu tippen.',
         '- Überall: /naechste-schritte:1 bis :3 schicken den Vorschlag sofort als deine Nachricht ab, /naechste-schritte:zeigen listet die Vorschläge als Text.',
+        '- Bietet Claude Antworten ausdrücklich an (etwa Antworte "ja"), stehen sie vorn, und ein Klick oder die Ziffer schickt sie sofort ab.',
         '- Die Vorschläge verschwinden, sobald du etwas abschickst, und kommen nach der nächsten Antwort neu. ' +
             'Solange Claude Code selbst eine Frage mit Auswahl in der Leiste zeigt, sind sie ausgeblendet, und Ziffern gehen an diese Frage.',
         '',
@@ -237,28 +238,43 @@ export function uebersicht(id: string | null = null): string {
     ].join('\n')
 }
 
+/** Ein gespeicherter Eintrag mit Art; ein String aus 0.4.3 gilt als geraten. */
+export function alsEintrag(x: Eintrag | string): Eintrag {
+    return typeof x === 'string' ? { text: x, art: 'geraten' } : x
+}
+
+/** Die Eintraege eines gespeicherten Werts, jeder mit Art. */
+function eintraegeVon(v: Vorschlaege | null): Eintrag[] {
+    return v ? v.eintraege.map(alsEintrag) : []
+}
+
 /** Die Vorschlaege als nummerierte Liste. */
 async function zeigeVorschlaege($: EngineInterface): Promise<string> {
-    const v = await read($, vorschlaege)
-    if (!v || v.eintraege.length === 0) {
+    const liste = eintraegeVon(await read($, vorschlaege))
+    if (liste.length === 0) {
         return 'Gerade gibt es keine Vorschläge für den nächsten Schritt. Sie kommen nach der nächsten Antwort von Claude.'
     }
-    return ['Als Nächstes:', ...v.eintraege.map((t, i) => `${i + 1}. ${t}`)].join('\n')
+    return ['Als Nächstes:', ...liste.map((t, i) => `${i + 1}. ${t.text}`)].join('\n')
 }
 
 /** Den Vorschlag `n` (ab 1) als Nachricht der Person abschicken. */
 async function schickeVorschlag($: EngineInterface, n: number): Promise<string> {
-    const v = await read($, vorschlaege)
-    if (!v || v.eintraege.length === 0) {
+    const liste = eintraegeVon(await read($, vorschlaege))
+    if (liste.length === 0) {
         return 'Gerade gibt es keine Vorschläge, abgeschickt ist nichts. Sie kommen nach der nächsten Antwort von Claude.'
     }
-    const wahl = v.eintraege[n - 1]
+    const wahl = liste[n - 1]?.text
     if (!wahl) {
-        return `Gerade gibt es keinen ${n}. Vorschlag, nur ${v.eintraege.length}; abgeschickt ist nichts.`
+        return `Gerade gibt es keinen ${n}. Vorschlag, nur ${liste.length}; abgeschickt ist nichts.`
     }
     // Im Hintergrund, nach dem Befehl: Er antwortet sofort, die Nachricht geht raus, sobald die Sitzung frei ist.
     $.clock.after(0, () => void $.prompt.submit({ text: wahl, asUser: true }).catch(() => {}))
     return `Vorschlag ${n} ist abgeschickt: ${wahl}`
+}
+
+/** Einen angebotenen Eintrag abschicken, nach dem laufenden Hook, wie /naechste-schritte:N. */
+function schickeAb($: EngineInterface, text: string): void {
+    $.clock.after(0, () => void $.prompt.submit({ text, asUser: true }).catch(() => {}))
 }
 
 /** Was ein Befehl tut; zurueck kommt die Antwort. */
@@ -335,11 +351,22 @@ export const register: Register = on => {
             return r // die Runde eines Subagenten, nicht die der Person
         }
         aktuell = e.turnId // auch fuer eine Runde ohne turn.start und nach einem Neuladen
-        if (e.reason !== 'answer' || e.answer.trim().length < MIN_ANTWORT) {
+        if (e.reason !== 'answer') {
+            return r
+        }
+        // Was Claude ausdruecklich anbietet, steht sofort da, auch nach einer kurzen Antwort und
+        // waehrend Agenten laufen; Haikus Vorschlaege kommen spaeter dahinter.
+        const angeboten = angeboteneAntworten(e.answer)
+            .slice(0, MAX_EINTRAEGE)
+            .map((text): Eintrag => ({ text, art: 'angeboten' }))
+        if (angeboten.length > 0) {
+            await update($, vorschlaege, () => ({ turnId: e.turnId, eintraege: angeboten }))
+        }
+        if (e.answer.trim().length < MIN_ANTWORT || angeboten.length >= MAX_EINTRAEGE) {
             return r
         }
         // Im Hintergrund, damit die Runde sofort endet.
-        void schlageVor($, e.turnId, e.answer, () => aktuell).catch(() => {})
+        void schlageVor($, e.turnId, e.answer, angeboten, () => aktuell).catch(() => {})
         return r
     })
 
@@ -353,18 +380,24 @@ export const register: Register = on => {
         if (!v) {
             return next(e)
         }
-        const wahl = v.eintraege[Number(e.inputText) - 1]
+        const wahl = eintraegeVon(v)[Number(e.inputText) - 1]
         if (!wahl) {
             return next(e)
         }
-        return next({ ...e, inputText: wahl }) // ein Entwurf: bearbeiten oder mit Enter abschicken
+        if (wahl.art === 'angeboten') {
+            // Von Claude angeboten: sofort abschicken; die Ziffer landet nicht im Feld.
+            schickeAb($, wahl.text)
+            return { text: e.text, cursor: e.cursor }
+        }
+        return next({ ...e, inputText: wahl.text }) // ein Entwurf: bearbeiten oder mit Enter abschicken
     })
 
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
         const rest = await next(e) // was andere Mods und Claude Code hier zeichnen, bleibt
         hatUmfrage = e.props.hasSurvey
         const v = await read($, vorschlaege)
-        if (e.props.hasSurvey || e.props.isWorking || !v || v.eintraege.length === 0) {
+        const liste = eintraegeVon(v)
+        if (e.props.hasSurvey || e.props.isWorking || liste.length === 0) {
             return rest
         }
 
@@ -374,14 +407,19 @@ export const register: Register = on => {
         const Svg = e.surface === 'desktop' && 'Svg' in elemente ? elemente.Svg : null
         const einzeilig =
             // Einer je Zeile braucht je eine Zeile; ein niedriges Band bekommt die eine, am Ende gekuerzt.
-            passtInEineZeile(v.eintraege, e.props.bodyColumns) || e.props.maxRows < v.eintraege.length + 3
+            passtInEineZeile(liste.map(t => t.text), e.props.bodyColumns) || e.props.maxRows < liste.length + 3
 
         // Wie die getippte Ziffer: der Vorschlag als Entwurf. Der Knopf behaelt nach dem Klick aber
         // den Fokus und Enter drueckt ihn erneut; steht der Vorschlag schon im Feld, schickt der
-        // zweite Druck ihn deshalb ab.
+        // zweite Druck ihn deshalb ab. Was Claude angeboten hat, geht sofort raus.
         const hole = async (i: number) => {
-            const wahl = (await read($, vorschlaege))?.eintraege[i]
-            if (!wahl) {
+            const eintrag = eintraegeVon(await read($, vorschlaege))[i]
+            if (!eintrag) {
+                return
+            }
+            const wahl = eintrag.text
+            if (eintrag.art === 'angeboten') {
+                await $.prompt.submit({ text: wahl, asUser: true })
                 return
             }
             const { text } = await $.prompt.read()
@@ -402,22 +440,24 @@ export const register: Register = on => {
             // buendig nur ohne Leerzeichen: die Schrift ist proportional.
             const breite = Math.max(20, e.props.bodyColumns) // ohne Rand: buendig mit der Statistik darueber
             // Ziffern-Emoji: so breit wie die anderen Emoji-Knoepfe, alle drei gleich.
+            // Was Claude angeboten hat, bekommt einen hervorgehobenen Knopf: er schickt sofort ab.
             const knopf = (i: number) => (
                 <Box flexShrink={0}>
                     <Button
                         key={`naechste-schritte-${i + 1}`}
                         label={`${i + 1}️⃣`}
+                        {...(liste[i]?.art === 'angeboten' ? { variant: 'primary' as const } : {})}
                         onPress={() => void hole(i).catch(() => undefined)}
                     />
                 </Box>
             )
             zeilen = einzeilig ? (
                 <Box flexDirection="row" gap={1} alignItems="center" width={breite}>
-                    {v.eintraege.flatMap((t, i) => [
+                    {liste.flatMap((t, i) => [
                         ...(i > 0 ? [<Text dimColor>·</Text>] : []),
                         knopf(i),
                         <Box flexShrink={1} minWidth={0}>
-                            <Text wrap="truncate-end">{t}</Text>
+                            <Text wrap="truncate-end">{t.text}</Text>
                         </Box>,
                     ])}
                 </Box>
@@ -425,11 +465,11 @@ export const register: Register = on => {
                 // Die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile: 1.2 halbe Zeilen dazwischen lassen
                 // 4 Pixel frei, sonst schieben sich die Knoepfe uebereinander.
                 <Box flexDirection="column" rowGap={1.2} width={breite}>
-                    {v.eintraege.map((t, i) => (
+                    {liste.map((t, i) => (
                         <Box flexDirection="row" gap={1} alignItems="center">
                             {knopf(i)}
                             <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                                <Text wrap="truncate-end">{t}</Text>
+                                <Text wrap="truncate-end">{t.text}</Text>
                             </Box>
                         </Box>
                     ))}
@@ -437,18 +477,19 @@ export const register: Register = on => {
             )
         } else {
             const trenner = <Text dimColor>{'  ·  '}</Text>
-            const eintrag = (text: string, i: number) => [
+            // Was Claude angeboten hat, steht fett: die Ziffer schickt es sofort ab.
+            const eintrag = (t: Eintrag, i: number) => [
                 <Text color="cyan" bold>{`${i + 1} `}</Text>,
-                <Text>{text}</Text>,
+                t.art === 'angeboten' ? <Text bold>{t.text}</Text> : <Text>{t.text}</Text>,
             ]
             zeilen = einzeilig ? (
                 <Text wrap="truncate-end">
                     <Text dimColor>{VORSPANN}</Text>
-                    {v.eintraege.flatMap((t, i) => [...(i > 0 ? [trenner] : []), ...eintrag(t, i)])}
+                    {liste.flatMap((t, i) => [...(i > 0 ? [trenner] : []), ...eintrag(t, i)])}
                 </Text>
             ) : (
                 <Box flexDirection="column">
-                    {v.eintraege.map((t, i) => (
+                    {liste.map((t, i) => (
                         <Text wrap="truncate-end">
                             <Text dimColor>{i === 0 ? VORSPANN : LUECKE}</Text>
                             {eintrag(t, i)}
@@ -495,7 +536,7 @@ export function passtInEineZeile(eintraege: string[], spalten: number): boolean 
     return breite <= spalten - 2 // der Rand des Bands
 }
 
-async function schlageVor($: EngineInterface, turnId: string, antwort: string, jetzt: () => string): Promise<void> {
+async function schlageVor($: EngineInterface, turnId: string, antwort: string, angeboten: Eintrag[], jetzt: () => string): Promise<void> {
     // Laufen noch Agenten im Hintergrund, geht es danach ohnehin weiter: dann nichts vorschlagen.
     const agenten = await $.agent.list().catch(() => [])
     if (agenten.some(a => a.status === 'running')) {
@@ -527,9 +568,162 @@ async function schlageVor($: EngineInterface, turnId: string, antwort: string, j
     if (!r.isAnswered) {
         return
     }
-    const eintraege = leseVorschlaege(r.text)
+    const eintraege = mische(angeboten, leseVorschlaege(r.text))
     // In der Schreibung geprueft: ein Abschicken oder eine neue Runde, die inzwischen kam, gewinnt immer.
     await update($, vorschlaege, vorher => (jetzt() !== turnId ? vorher : eintraege.length > 0 ? { turnId, eintraege } : null))
+}
+
+/** Die angebotenen Antworten vorn, dahinter die geratenen ohne Doppelte; hoechstens drei. */
+export function mische(angeboten: Eintrag[], geraten: string[]): Eintrag[] {
+    const aus = angeboten.slice(0, MAX_EINTRAEGE)
+    for (const text of geraten) {
+        if (aus.length >= MAX_EINTRAEGE) {
+            break
+        }
+        if (!aus.some(a => a.text.toLowerCase() === text.toLowerCase())) {
+            aus.push({ text, art: 'geraten' })
+        }
+    }
+    return aus
+}
+
+// --- Angebotene Antworten ---
+
+/** So lang darf eine angebotene Antwort hoechstens sein. */
+const MAX_ANGEBOT = 60
+
+/** Zu jedem oeffnenden Anfuehrungszeichen die schliessenden. Backticks zaehlen nicht: das ist Code. */
+const ZU: Readonly<Record<string, string>> = {
+    '„': '“”"',
+    '“': '”',
+    '"': '"',
+    '»': '«',
+    '«': '»',
+}
+
+/** Ein Verb, nach dem die Antwort in Anfuehrungszeichen folgt: Antworte "ja", Schreib „los“, Reply "yes". */
+const VERB_DAVOR = /(?<!\p{L})(antworte|antwort|schreib|schreibe|sag|sage|tipp|tippe|gib|reply|type|say)(?!\p{L})/giu
+/** Ein Verb hinter der Antwort: mit „ja“ antworten. */
+const VERB_DANACH = /^[ \t]+(?:zu[ \t]+)?(?:antworten|schreiben|sagen|tippen|eingeben)(?!\p{L})/iu
+/** Was zwei Antworten verbindet: oder, Komma, or. */
+const VERBINDER = /^[ \t]*(?:,[ \t]*(?:(?:oder|or)(?!\p{L}))?|(?:oder|or)(?!\p{L}))[ \t]*/iu
+/** So viele Woerter duerfen zwischen Verb und Antwort stehen: Antworte einfach mit „ja“. */
+const MAX_WOERTER = 4
+
+type Fund = { stelle: number; text: string }
+
+/** Eine Antwort in Anfuehrungszeichen ab `i`, oder null. */
+function zitatAb(text: string, i: number): { fund: Fund; ende: number } | null {
+    const zu = ZU[text[i] ?? '']
+    if (!zu) {
+        return null
+    }
+    for (let j = i + 1; j < text.length && j <= i + 1 + MAX_ANGEBOT; j++) {
+        const c = text[j] ?? ''
+        if (c === '\n') {
+            return null
+        }
+        if (zu.includes(c)) {
+            const inhalt = text.slice(i + 1, j).trim()
+            return inhalt.length >= 1 && inhalt.length <= MAX_ANGEBOT ? { fund: { stelle: i, text: inhalt }, ende: j + 1 } : null
+        }
+    }
+    return null
+}
+
+/** Eine Kette von Antworten ab `i`: „ja“ oder „nein“, „a“, „b“. */
+function ketteAb(text: string, i: number): { funde: Fund[]; ende: number } | null {
+    const erste = zitatAb(text, i)
+    if (!erste) {
+        return null
+    }
+    const funde = [erste.fund]
+    let ende = erste.ende
+    for (;;) {
+        const m = VERBINDER.exec(text.slice(ende))
+        if (!m || m[0].trim() === '') {
+            break
+        }
+        const naechste = zitatAb(text, ende + m[0].length)
+        if (!naechste) {
+            break
+        }
+        funde.push(naechste.fund)
+        ende = naechste.ende
+    }
+    return { funde, ende }
+}
+
+/** Die Antwort nach einem Verb, hoechstens ein paar Woerter dahinter, im selben Satz. */
+function nachVerb(text: string, ab: number, verb: string): Fund[] {
+    let i = ab
+    let woerter = 0
+    while (i < text.length) {
+        while (text[i] === ' ' || text[i] === '\t') {
+            i++
+        }
+        const c = text[i] ?? ''
+        if (c in ZU) {
+            const kette = ketteAb(text, i)
+            if (!kette) {
+                return []
+            }
+            // "Gib … ein": ohne das ein danach ist Gib kein Eintippen.
+            if (verb === 'gib' && !/^[ \t]+ein(?!\p{L})/u.test(text.slice(kette.ende))) {
+                return []
+            }
+            return kette.funde
+        }
+        if (c === '' || c === '\n' || woerter >= MAX_WOERTER) {
+            return []
+        }
+        const wort = /^[^\s„“”"»«]+/.exec(text.slice(i))?.[0] ?? ''
+        if (wort === '' || /[.!?;]$/.test(wort)) {
+            return []
+        }
+        woerter++
+        i += wort.length
+    }
+    return []
+}
+
+/**
+ * Die Antworten, die Claude ausdruecklich anbietet, in der Reihenfolge ihres Auftretens:
+ * nach Antworte, Schreib, Sag, Tipp, Gib … ein, Reply, Type oder Say eine Phrase in
+ * Anfuehrungszeichen, hoechstens vier Woerter dahinter, oder eine Phrase vor antworten,
+ * schreiben, sagen, tippen. Mit oder, Komma oder or verbundene zaehlen alle. Nichts aus Code,
+ * nichts in Backticks; 1 bis 60 Zeichen, Doppelte fallen weg.
+ */
+export function angeboteneAntworten(antwort: string): string[] {
+    // Code faellt weg: erst Bloecke, dann Backticks in der Zeile; beides bricht den Satz.
+    const text = antwort
+        .replace(/^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?(?:^[ \t]*\1[^\n]*$|(?![\s\S]))/gm, '\n')
+        .replace(/`[^`\n]*`/g, '\n')
+    const funde: Fund[] = []
+    for (const m of text.matchAll(VERB_DAVOR)) {
+        funde.push(...nachVerb(text, (m.index ?? 0) + m[0].length, (m[1] ?? '').toLowerCase()))
+    }
+    for (let i = 0; i < text.length; i++) {
+        if (!((text[i] ?? '') in ZU)) {
+            continue
+        }
+        const kette = ketteAb(text, i)
+        if (!kette) {
+            continue
+        }
+        if (VERB_DANACH.test(text.slice(kette.ende))) {
+            funde.push(...kette.funde)
+        }
+        i = kette.ende - 1 // ein schliessendes Zeichen oeffnet nichts Neues
+    }
+    funde.sort((a, b) => a.stelle - b.stelle)
+    const aus: string[] = []
+    for (const f of funde) {
+        if (!aus.some(a => a.toLowerCase() === f.text.toLowerCase())) {
+            aus.push(f.text)
+        }
+    }
+    return aus
 }
 
 /**

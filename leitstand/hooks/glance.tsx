@@ -282,12 +282,12 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
         does: 'Damit steuerst du den Chat vom Handy aus. Leuchtet, solange es verbunden ist; ein Druck schaltet es ein oder aus. Fehlt, wo der Chat es nicht kann.',
         command: '/leitstand:fernsteuerung-an, /leitstand:fernsteuerung-aus',
       },
-      { sign: MASK_ON, name: 'Verdecken an', does: 'Steht da, solange Passwörter, Schlüssel und persönliche Daten auf dem Bildschirm als Punkte erscheinen; Claude liest alles unverändert. Ein Druck schaltet Verdecken aus.', command: '/leitstand:verdecken-aus' },
+      { sign: MASK_ON, name: 'Verdecken an', does: 'Steht da, solange Passwörter, Schlüssel, IP-Adressen, Hostnamen und persönliche Daten auf dem Bildschirm als Punkte erscheinen; Claude liest alles unverändert. Ein Druck schaltet Verdecken aus.', command: '/leitstand:verdecken-aus' },
       { sign: MASK_OFF, name: 'Verdecken aus', does: 'Steht da, solange alles so erscheint, wie es im Chat steht. Ein Druck schaltet Verdecken ein.', command: '/leitstand:verdecken-an' },
       {
         sign: VAULT,
         name: 'Geheimnisse sichern',
-        does: 'Verschiebt Passwörter und Schlüssel aus dem Chat in die Datei .env (aus ihr lesen Programme im Projektordner geheime Werte) und verdichtet den Chat wie /compact. Zweimal drücken: Der erste Druck fragt nach, der zweite führt aus.',
+        does: 'Verschiebt Passwörter, Schlüssel, IP-Adressen und Hostnamen aus dem Chat in die Datei .env (aus ihr lesen Programme im Projektordner geheime Werte) und verdichtet den Chat wie /compact. Zweimal drücken: Der erste Druck fragt nach, der zweite führt aus.',
         command: '/leitstand:geheimnisse-sichern ja',
       },
     ],
@@ -442,6 +442,9 @@ const compactingAtom = atom({ plugin: 'leitstand', key: 'isCompacting' } as cons
 // The plan Start was pressed for (waitingPlanOf's words) while its message is on its way; null otherwise. The band then
 // reads Startet gleich… and a press sends nothing more; kept in state, so it outlasts a reload.
 const startingAtom = atom({ plugin: 'leitstand', key: 'startingPlan' } as const, null)
+// A plan laid out in the running main turn waits for Start unseen: the band shows Needs you and Start only once that
+// turn has ended, so the person reads Claude's message with the plan first.
+const planVeiledAtom = atom({ plugin: 'leitstand', key: 'planVeiled' } as const, false)
 // Remote Control's state per source: the app's own switch (ccd_session_mgmt) and /remote-control's description;
 // `missing` while the session lacks that source.
 type RemoteSide = 'on' | 'off' | 'missing'
@@ -567,6 +570,9 @@ const noteMerge = (ran: { deny?: string; isError?: boolean }) => {
 // The main loop's running turn, for the Pause button; and whether a pause asked for its end.
 let runningTurn: string | undefined
 let isPausing = false
+// A turn of the main loop runs (helpers' turns do not count): a command or message a mod sends now waits in the
+// engine's queue until the session is idle.
+let isMainTurnRunning = false
 // The person started the running turn with a go-ahead ("Ja, leg los"): a plan Claude makes in it does not wait.
 // It approves one plan, the waiting one or the first one made, and is then used up.
 let isApprovingTurn = false
@@ -1032,6 +1038,19 @@ const isCompactingNow = async ($: $) => {
   return true
 }
 
+/** The toasts for a command or message a button sends while a turn runs: the engine queues it until the turn ends. */
+const queuedCommandWords = (name: string) => `Befehl "/${name}" in die Warteschlange eingereiht...`
+const queuedMessageWords = (text?: string) =>
+  text === undefined ? 'Nachricht in die Warteschlange eingereiht...' : `Nachricht "${text}" in die Warteschlange eingereiht...`
+
+/**
+ * While a main turn runs, says at once that what a button sends waits in the queue; the send itself resolves only after
+ * the turn. Silent when the session is idle, as the send then runs at once.
+ */
+const noteQueued = ($: $, words: string) => {
+  if (isMainTurnRunning) $.ui.toast(words)
+}
+
 /** Sends words as the person's own message; true when sent, otherwise (failed or dropped) onFail says what to do instead. */
 const sendAsUser = async ($: $, text: string, onFail: () => unknown) => {
   try {
@@ -1135,6 +1154,7 @@ const startFreshChat = async ($: $) => {
     // Kept in case anything below fails: /leitstand handoff note puts it back in the prompt box.
     await $.store.set(HANDOFF_KEY, { at: await now($), note })
     try {
+      noteQueued($, queuedCommandWords('clear'))
       await $.command.run({ command: 'clear', args: '' })
     } catch {
       $.ui.toast("Der Chat ließ sich nicht leeren. Schreib /leitstand handoff note, um die Übergabenotiz zu holen.")
@@ -1277,6 +1297,7 @@ const compactForVault = async ($: $, secrets: readonly Secret[]): Promise<'compa
     $.ui.log(`leitstand: compaction refused: ${refused instanceof Error ? refused.message : String(refused)}`, { to: 'debug' })
   }
   try {
+    noteQueued($, queuedCommandWords('compact'))
     await $.command.run({ command: 'compact', args: instructions })
     return 'command'
   } catch (failed) {
@@ -1322,7 +1343,7 @@ const withoutSecrets = (message: CompactedMessage, secrets: readonly Secret[]): 
 const secretRule = (secrets: readonly Secret[]) => {
   const placeholders = secrets.map(one => `\`\${${one.name}}\``).join(', ')
   return (
-    `Regel zu Geheimnissen: Passwörter und Schlüssel aus diesem Chat stehen jetzt in der .env im Projektordner, als ${placeholders}. ` +
+    `Regel zu Geheimnissen: Passwörter, Schlüssel, IP-Adressen und Hostnamen aus diesem Chat stehen jetzt in der .env im Projektordner, als ${placeholders}. ` +
     'Gib ihre Werte niemals wieder, auch nicht teilweise; schreib stattdessen immer den Platzhalter. Wer einen Wert braucht, liest ihn aus der .env im Projektordner.'
   )
 }
@@ -1370,7 +1391,7 @@ const vaultSecrets = async ($: $) => {
   const messages = await $.session.messages().catch(() => [])
   const found = extractSecrets(chatPieces(messages))
   if (found.length === 0) {
-    $.ui.toast('Im Chat stehen keine Passwörter oder Schlüssel.')
+    $.ui.toast('Im Chat stehen keine Passwörter, Schlüssel, IP-Adressen oder Hostnamen.')
     return
   }
   let secrets: Secret[]
@@ -1455,9 +1476,10 @@ const sendHeld = async ($: $, isPress: boolean): Promise<boolean> => {
   if (held === null) return false
   await clearHeld($)
   try {
+    // Mid-turn the press says the message waits in the queue, never its words: they hold a secret.
+    if (isPress) noteQueued($, queuedMessageWords())
     const result = await $.prompt.submit({ text: held.text, asUser: true })
     if (result.drop !== undefined) throw new Error(result.drop)
-    if (isPress) $.ui.toast('Die Nachricht geht an Claude, sobald es frei ist.')
   } catch (error) {
     heldMessage = { text: held.text, at: held.at }
     await update($, heldSecretAtom, () => ({ at: held.at, kinds: held.kinds }))
@@ -1656,7 +1678,7 @@ const setMasking = async ($: $, isOn: boolean) => {
 }
 
 const MASKING_WORDS = {
-  on: 'Verdecken an: Passwörter, Schlüssel, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.',
+  on: 'Verdecken an: Passwörter, Schlüssel, IP-Adressen, Hostnamen, Karten- und Kontonummern, E-Mail-Adressen und Telefonnummern erscheinen auf dem Bildschirm als Punkte. Claude liest alles unverändert.',
   off: 'Verdecken aus: alles ist wieder sichtbar.',
 }
 
@@ -1701,6 +1723,66 @@ const setWorkMode = async ($: $, mode: WorkMode) => {
 
 /** Ob gerade die Arbeitsweise Dynamisch gilt: nur mit dem Leitstand an. */
 const isDynamic = async ($: $): Promise<boolean> => (await read($, enabledAtom)) && (await read($, workModeAtom)) === 'dynamisch'
+
+/** The desktop app's task list in the chat (update_plan), its box at the end of a turn (wrap_up), and their server. */
+const APP_PLAN_TOOL = 'mcp__ccd_turn__update_plan'
+const APP_WRAP_TOOL = 'mcp__ccd_turn__wrap_up'
+const APP_SERVER = 'ccd_turn'
+// The surfaces that draw the band over the prompt (AbovePrompt): the phone draws panes only.
+const BAND_SURFACES: ReadonlySet<string> = new Set(['terminal', 'desktop'])
+type AppStepStatus = 'pending' | 'in_progress' | 'completed'
+/** Claude's list for the app's task list, as the Leitstand keeps it while the band shows the plan instead. */
+type AppPlan = { items: { content: string; status: AppStepStatus }[]; scope: string | null; isHandedOver: boolean }
+// The list Claude sent update_plan while the band was in view, held back from the app until wrap_up; null when none.
+let appPlan: AppPlan | null = null
+// Handing the list to the app failed once: from then on update_plan goes to the app unchanged.
+let isAppPlanBroken = false
+
+/** Whether the Leitstand is on and a terminal or the desktop app draws its band. */
+const drawsBand = async ($: $): Promise<boolean> =>
+  (await read($, enabledAtom)) && (await $.session.surfaces().catch(() => [])).some(one => BAND_SURFACES.has(one))
+
+const appStatus = (value: unknown): AppStepStatus => (value === 'in_progress' || value === 'completed' ? value : 'pending')
+
+/**
+ * The kept list after one update_plan call, as the app reads it: `items` replace the list (and `scope`, when given),
+ * `advance` completes the step in progress and starts the next pending one, `done` completes and `start` starts
+ * steps by number from 1. A changed list is handed on again at the next wrap_up.
+ */
+export const applyAppPlan = (plan: AppPlan | null, input: Record<string, unknown>): AppPlan | null => {
+  if (Array.isArray(input.items)) {
+    const items = input.items.map(one => {
+      const item = (typeof one === 'object' && one !== null ? one : {}) as Record<string, unknown>
+      return { content: String(item.content ?? ''), status: appStatus(item.status) }
+    })
+    return { items, scope: typeof input.scope === 'string' ? input.scope : (plan?.scope ?? null), isHandedOver: false }
+  }
+  if (plan === null) return null
+  const items = plan.items.map(one => ({ ...one }))
+  if (input.advance === true) {
+    const at = items.findIndex(one => one.status === 'in_progress')
+    if (at >= 0) items[at]!.status = 'completed'
+    const upNext = items.findIndex((one, index) => index > at && one.status === 'pending')
+    if (upNext >= 0) items[upNext]!.status = 'in_progress'
+  }
+  for (const number of Array.isArray(input.done) ? input.done : []) {
+    const item = items[Number(number) - 1]
+    if (item) item.status = 'completed'
+  }
+  const started = typeof input.start === 'number' ? items[input.start - 1] : undefined
+  if (started) started.status = 'in_progress'
+  return { ...plan, items, isHandedOver: false }
+}
+
+/** What Claude reads back from update_plan answered by the Leitstand, in the app's manner, so it repeats nothing. */
+export const appPlanAnswer = (plan: AppPlan | null, isNew: boolean): string => {
+  const count = plan?.items.length ?? 0
+  if (plan === null) return 'Plan updated.'
+  if (isNew) return `Plan shown (${count} steps).`
+  const at = plan.items.findIndex(one => one.status === 'in_progress')
+  if (at >= 0) return `Plan updated: step ${at + 1} of ${count} is in progress.`
+  return plan.items.every(one => one.status === 'completed') ? `Plan updated: all ${count} steps are completed.` : `Plan updated (${count} steps).`
+}
 
 /** No terminal, app or phone draws this session (a plain claude -p run): nobody could press Start. */
 const hasNoSurface = async ($: $): Promise<boolean> => (await $.session.surfaces().catch(() => ['?'])).length === 0
@@ -1784,6 +1866,7 @@ const runCommand = async ($: $, label: string, names: string[], args?: string): 
     return 'missing'
   }
   try {
+    noteQueued($, queuedCommandWords(hit.found))
     await $.command.run(args === undefined ? { command: hit.found } : { command: hit.found, args })
     return 'ran'
   } catch {
@@ -1896,6 +1979,7 @@ const adhdInTranscript = async ($: $): Promise<boolean> => {
  */
 const toggleAdhd = async ($: $) => {
   if (await read($, adhdAtom)) {
+    noteQueued($, queuedMessageWords(ADHD_STOP))
     await $.prompt.submit({ text: ADHD_STOP, asUser: true })
     await update($, adhdAtom, () => false)
     return
@@ -2053,6 +2137,7 @@ const grillMe = async ($: $) => {
     const args = `zum aktuellen Plan "${list.title}": ${list.tasks.map(one => one.name).join('; ')}`
     try {
       if (hit === null) throw new Error('not listed')
+      noteQueued($, queuedCommandWords(hit.found))
       await $.command.run({ command: hit.found, args })
     } catch {
       await $.prompt.fill({ text: `/${typed} ${args}` })
@@ -2062,6 +2147,15 @@ const grillMe = async ($: $) => {
   }
   await $.prompt.fill({ text: `/${typed} ` })
   $.ui.toast('grill-me steht im Eingabefeld: Schreib dein Thema dazu und drück Enter.')
+}
+
+/**
+ * The checklist as the band draws it: a plan laid out in the running main turn reads as one at work until that turn
+ * ends (no Start, no count to Start), while it waits for Start all the same.
+ */
+const bandChecklist = async ($: $): Promise<GlanceChecklist | null> => {
+  const list = await read($, checklistAtom)
+  return list !== null && list.approval === 'waiting' && (await read($, planVeiledAtom)) ? { ...list, approval: 'none' } : list
 }
 
 /** Whether a plan laid out now has to wait for Start: Approve the plan first on, or Gruppenarbeit, and not approved yet. */
@@ -2082,7 +2176,15 @@ const holdForApproval = async ($: $): Promise<boolean> => {
     await change($, list => ({ ...list, approval: 'approved' }))
     return false
   }
-  await change($, list => ({ ...list, approval: 'waiting', phase: 'needsYou', needsYouReason: APPROVE }))
+  // Laid out in a running main turn, the plan waits from now on (tools stay locked), but Needs you, Start and their
+  // sound wait for the turn's end: Claude's message with the plan is still on its way. turn.complete shows them.
+  const isMidTurn = isMainTurnRunning
+  await update($, planVeiledAtom, () => isMidTurn)
+  await change($, list =>
+    isMidTurn
+      ? { ...list, approval: 'waiting', phase: 'working', needsYouReason: null }
+      : { ...list, approval: 'waiting', phase: 'needsYou', needsYouReason: APPROVE },
+  )
   // With Autopilot on, its count to Start begins now; the same plan laid out again keeps its count.
   await armNightStart($)
 
@@ -2501,14 +2603,14 @@ const vermenschlichen = async ($: $, isPhone: boolean) => {
 /** The shield, after ja: only where a .env has a place and the chat holds a secret; the move itself goes on after. */
 const geheimnisseSichern = async ($: $, args: string) => {
   if (!istJa(args)) {
-    return 'Würde Passwörter und Schlüssel aus diesem Chat in die .env im Projektordner verschieben und den Chat danach verdichten; Claude kennt dann nur noch Platzhalter.\nZum Ausführen: /leitstand:geheimnisse-sichern ja'
+    return 'Würde Passwörter, Schlüssel, IP-Adressen und Hostnamen aus diesem Chat in die .env im Projektordner verschieben und den Chat danach verdichten; Claude kennt dann nur noch Platzhalter.\nZum Ausführen: /leitstand:geheimnisse-sichern ja'
   }
   const folder = await $.session.cwd().catch(() => '')
   if (folder === '' || folder.replace(/\\/g, '/').includes('scratch-workspaces')) return 'Dieser Chat hat keinen Projektordner, darum gibt es keinen Ort für eine .env.'
   const found = extractSecrets(chatPieces(await $.session.messages().catch(() => [])))
-  if (found.length === 0) return 'Im Chat stehen keine Passwörter oder Schlüssel.'
+  if (found.length === 0) return 'Im Chat stehen keine Passwörter, Schlüssel, IP-Adressen oder Hostnamen.'
   danach($, () => vaultSecrets($))
-  return 'Verschiebe die Passwörter und Schlüssel dieses Chats in die .env und räume den Chat danach auf.'
+  return 'Verschiebe die Passwörter, Schlüssel, IP-Adressen und Hostnamen dieses Chats in die .env und räume den Chat danach auf.'
 }
 
 /** One day's history: a line on the desktop, where the pane opens beside it; every job on the phone. */
@@ -3377,6 +3479,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   })
 
   on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      isMainTurnRunning = true
+      // A plan veiled in an earlier turn shows by now, even if that turn's end never arrived.
+      if (await read($, planVeiledAtom)) await update($, planVeiledAtom, () => false)
+    }
     // No main turn runs during a compaction: one that starts means it is over.
     if (e.agentId === undefined && (await read($, compactingAtom))) await update($, compactingAtom, () => false)
     if (e.agentId === undefined) void readRemote($)
@@ -3758,6 +3865,41 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     return ran
   })
 
+  // The desktop app draws Claude's update_plan as a list in the chat, the band draws the same plan: while the band is
+  // in view it alone shows it. The call is answered here, as the app would, and the list kept until wrap_up hands it on.
+  on('tool.call', { tool: APP_PLAN_TOOL }, async ($, e, next) => {
+    const input = e as unknown as Record<string, unknown>
+    const isNew = Array.isArray(input.items)
+    // A helper's call is the app's to refuse; with no band in view, or once handing on failed, the app shows the list.
+    // So does a change to a list the Leitstand never kept (one from before a reload): the app holds it.
+    if (e.agentId !== undefined || isAppPlanBroken || !(await drawsBand($)) || (!isNew && appPlan === null)) {
+      // From here the app's list is the one that counts.
+      if (e.agentId === undefined) appPlan = null
+      return next(e)
+    }
+    appPlan = applyAppPlan(appPlan, input)
+    return { result: appPlanAnswer(appPlan, isNew) }
+  }).catch(($, e, next) => next(e))
+
+  // At the end of the turn the app gets the kept list once, before its box checks it off: it then stays in the chat.
+  // A plugin's $.mcp.call is a dispatch of its own (`mcp.call`), seen by the hooks above it: this mod's tool.call hooks
+  // never see it, and nothing comes back in here.
+  on('tool.call', { tool: APP_WRAP_TOOL }, async ($, e, next) => {
+    const plan = appPlan
+    if (e.agentId === undefined && plan !== null && !plan.isHandedOver) {
+      appPlan = { ...plan, isHandedOver: true }
+      try {
+        const handed = await $.mcp.call(APP_SERVER, 'update_plan', { items: plan.items, scope: plan.scope ?? 'continuation' })
+        if (handed.isError) throw new Error(handed.content.map(block => block.text ?? '').join(' ') || 'isError')
+      } catch (failed) {
+        // The app keeps no list then: from now on Claude's lists go to it as they are, shown twice rather than lost.
+        isAppPlanBroken = true
+        $.ui.log(`leitstand: handing the plan to the app failed: ${failed instanceof Error ? failed.message : String(failed)}`, { to: 'debug' })
+      }
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('classic.Notification', async ($, e, next) => {
     const kind = String(e.notification_type ?? '')
     if (/permission/i.test(kind)) {
@@ -3780,6 +3922,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       await finishHelper($, e.agentId, e.reason === 'answer' ? 'done' : 'failed')
       return next(e)
     }
+    isMainTurnRunning = false
+    // The turn that laid out a waiting plan has ended, aborted or not: from here on the band shows Needs you and Start.
+    const wasVeiled = await read($, planVeiledAtom)
+    if (wasVeiled) await update($, planVeiledAtom, () => false)
     void readRemote($)
     const finished = await now($)
     if (isStalled) {
@@ -3825,10 +3971,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       } else if (e.reason === 'aborted') {
         await change($, current => ({ ...current, phase: 'stopped', stopKind: 'esc', needsYouReason: null, finishedAt: finished }))
       } else if (list.hasPlan && hasUnfinishedWork(list.tasks)) {
-        // A helper still running means Claude waits for it, not for the person.
+        // A helper still running means Claude waits for it, not for the person. A plan laid out in this turn waits for
+        // Start all the same, as it did before its Needs you waited for the turn's end.
         const asked = questionOf(e.answer ?? '')
         await change($, current =>
-          isBusy(current)
+          isBusy(current) && !(wasVeiled && current.approval === 'waiting')
             ? current
             : { ...current, phase: 'needsYou', needsYouReason: current.approval === 'waiting' ? APPROVE : WAITING, question: asked },
         )
@@ -4767,7 +4914,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const kit = kitOf(table, e.surface)
     const vector = kit.isVector
     const isEnabled = await read($, enabledAtom)
-    const list = isEnabled ? await read($, checklistAtom) : null
+    const list = isEnabled ? await bandChecklist($) : null
     const detail = await read($, detailAtom)
     // Minimal: one line, with what is happening, how far, the time left and the tokens; the view menu on its right,
     // and under it the row of places and actions, as in the other views.
@@ -4854,7 +5001,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       )
     }
     // Last row: open the history, or hand this chat off to a fresh one (a second press confirms).
-    const list0 = isEnabled ? await read($, checklistAtom) : null
+    const list0 = isEnabled ? await bandChecklist($) : null
     const canPause =
       runningTurn !== undefined &&
       list0 !== null &&
@@ -5657,8 +5804,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       .sort((a, b) => b.finishedAt! - a.finishedAt!)[0]
     const showsSummary = (list.phase === 'working' || list.phase === 'done') && list.activity === null && Boolean(justDone?.summary)
 
-    // A long plan folds its finished steps, and the steps after the next one, into a line each.
-    const isCompact = list.tasks.length > COMPACT_AFTER
+    // A long plan folds its finished steps, and the steps after the next one, into a line each. Details folds nothing:
+    // every step has its own line there (a plan has 8 at most).
+    const isCompact = !isDetailed && list.tasks.length > COMPACT_AFTER
     const doneSteps = list.tasks.filter(one => one.status === 'done')
     const foldsDone = isCompact && doneSteps.length >= 2
     const laterSteps = list.tasks.filter((one, index) => one.status === 'upcoming' && index !== firstUpcoming)

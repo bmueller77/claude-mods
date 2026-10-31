@@ -988,7 +988,7 @@ export function registerReflect(on: On, options: PluginOptions): void {
             <Text color="green" wrap="wrap">
               {`💡 „${l.rule}“${l.count > 1 ? ` ×${l.count}` : ''}`}
             </Text>
-            <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+            <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1.2}>
               {ZIELE.map(z => (
                 <Button
                   key={`${z.key}:${l.id}`}
@@ -1030,7 +1030,7 @@ export function registerReflect(on: On, options: PluginOptions): void {
         {r.status === 'laeuft' && <Text dimColor wrap="wrap">Selbstkritik läuft … Claude liest den bisherigen Chat noch einmal kritisch.</Text>}
         {r.status === 'fehlgeschlagen' && <Text wrap="wrap">{`Fehlgeschlagen: ${r.hinweis ?? 'ohne Grund'}`}</Text>}
         {r.status === 'fertig' && <Markdown key="selbstkritik" text={r.text} />}
-        <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1.2}>
           {r.status === 'fertig' && <Button key="beheben" label="Claude soll das beheben" variant="primary" onPress={() => uebergib($, r.id)} />}
           {r.status === 'fertig' && <Button key="kopieren" label="Kopieren" onPress={press => kopiere($, r.id, press.surface)} />}
           {i > 0 && <Button key="aeltere" label="← Ältere" onPress={() => blaettere($, -1)} />}

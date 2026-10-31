@@ -386,6 +386,8 @@ declare module 'claude-code' {
       isCompacting: boolean
       /** The plan Start was pressed for while its message is on its way, as the band names it; null otherwise. */
       startingPlan: string | null
+      /** A plan laid out in the running main turn waits for Start; the band shows that only once the turn has ended. */
+      planVeiled: boolean
       /** The button that waits for a second press to confirm, if any. */
       armedButton: 'handoff' | 'ship' | 'vault' | null
       /** Alerts: `chime` plays a short sound when Claude needs you, gets stuck or finishes a long job; `voice` also says it. */

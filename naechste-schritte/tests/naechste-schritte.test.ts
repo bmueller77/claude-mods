@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, fehlerText, hilfeText, leseVorschlaege, modIdAus, passtInEineZeile, uebersicht } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, alsEintrag, angeboteneAntworten, fehlerText, hilfeText, leseVorschlaege, mische, modIdAus, passtInEineZeile, uebersicht } from '../hooks/register'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 160 } }
 const ANTWORT = 'Ich habe Tests fuer das Login-Formular geschrieben, sie laufen lokal durch.'
@@ -509,5 +509,165 @@ describe('naechste-schritte: volle ID', () => {
         const text = await befehl($, 'naechste-schritte:hilfe')
         expect(text).toContain('`claude plugin disable naechste-schritte@bjoern-mods`')
         expect(text).not.toContain('Ältere Installationen')
+    })
+})
+
+// --- Angebotene Antworten ---
+
+const BJOERN = 'Mein Vorschlag: zuerst Punkt 1 (Git), dann Punkt 2. Antworte „Git ja“, dann lege ich das Repository an.'
+const LEITSTAND = 'Ich warte auf deine Freigabe: Schreib „los“ oder sag, was sich ändern soll.'
+
+describe('naechste-schritte: angebotene Antworten erkennen', () => {
+    test('Bjoerns Beispiel und der Satz des Leitstands', () => {
+        expect(angeboteneAntworten(BJOERN)).toEqual(['Git ja'])
+        expect(angeboteneAntworten(LEITSTAND)).toEqual(['los'])
+    })
+
+    test('mehrere Antworten mit oder, Komma und or', () => {
+        expect(angeboteneAntworten('Antworte „ja“ oder „nein“.')).toEqual(['ja', 'nein'])
+        expect(angeboteneAntworten('Antworte einfach mit „ja“, „nein“ oder „später“.')).toEqual(['ja', 'nein', 'später'])
+        expect(angeboteneAntworten('Reply with "yes" or "no".')).toEqual(['yes', 'no'])
+        expect(angeboteneAntworten('Sag »weiter« oder «stopp».')).toEqual(['weiter', 'stopp'])
+    })
+
+    test('die Phrase vor dem Verb und Gib ... ein', () => {
+        expect(angeboteneAntworten('Du kannst mit “ja” antworten, dann geht es weiter.')).toEqual(['ja'])
+        expect(angeboteneAntworten('Wenn es passt, kannst du einfach „ok“ oder „passt“ schreiben.')).toEqual(['ok', 'passt'])
+        expect(angeboteneAntworten('Gib „weiter“ ein, sobald du so weit bist.')).toEqual(['weiter'])
+        expect(angeboteneAntworten('Gib mir kurz Bescheid, ob „Variante A“ passt.')).toEqual([])
+    })
+
+    test('Reihenfolge des Auftretens, Doppelte fallen weg', () => {
+        expect(angeboteneAntworten('Schreib „Ja“ oder „nein“. Wenn du unsicher bist, sag „ja“ oder „später“.')).toEqual(['Ja', 'nein', 'später'])
+    })
+
+    test('nichts aus Codebloecken und nichts in Backticks', () => {
+        expect(angeboteneAntworten('Schreib `npm test` in die Konsole.')).toEqual([])
+        expect(angeboteneAntworten('So sieht es aus:\n```\nAntworte „ja“\n```\nFertig.')).toEqual([])
+        expect(angeboteneAntworten('```ts\nconst s = "x"\n```\nAntworte „ja“.')).toEqual(['ja'])
+    })
+
+    test('1 bis 60 Zeichen, kein Zeilenumbruch, nur wenige Woerter nach dem Verb', () => {
+        const sechzig = 'a'.repeat(60)
+        expect(angeboteneAntworten(`Antworte „${sechzig}“.`)).toEqual([sechzig])
+        expect(angeboteneAntworten(`Antworte „${sechzig}b“.`)).toEqual([])
+        expect(angeboteneAntworten('Antworte „“.')).toEqual([])
+        expect(angeboteneAntworten('Antworte „ja\nnein“.')).toEqual([])
+        expect(angeboteneAntworten('Ich sage dir morgen, wie es mit dem Projekt „Alpha“ weitergeht.')).toEqual([])
+        expect(angeboteneAntworten('Er sagte "hallo". Das Wort „Haus“ ist kurz.')).toEqual([])
+    })
+
+    test('angebotene vorn, geratene dahinter ohne Doppelte, hoechstens drei', () => {
+        const a = (text: string) => ({ text, art: 'angeboten' as const })
+        expect(mische([a('ja')], ['Ja', 'Fuehr die Tests aus', 'Ausliefern'])).toEqual([
+            a('ja'),
+            { text: 'Fuehr die Tests aus', art: 'geraten' },
+            { text: 'Ausliefern', art: 'geraten' },
+        ])
+        expect(mische([a('a'), a('b'), a('c')], ['d'])).toEqual([a('a'), a('b'), a('c')])
+        expect(alsEintrag('alt')).toEqual({ text: 'alt', art: 'geraten' })
+    })
+})
+
+describe('naechste-schritte: angebotene Antworten zeigen und druecken', () => {
+    const ANGEBOT = 'Ich habe den Plan fertig. Antworte „Git ja“ oder „nein“, dann lege ich das Repository an.'
+
+    test('stehen sofort da, vor Haikus Vorschlaegen; im Terminal fett', async ($, on) => {
+        let los: (s: string) => void = () => {}
+        const gehalten = new Promise<string>(fertig => (los = fertig))
+        engine(on, () => gehalten)
+        await rundeFertig($, 't1', ANGEBOT)
+        // Haiku antwortet noch nicht: die angebotenen stehen schon da.
+        let ui = await band($)
+        expect(await ui.find({ type: 'Text', text: /^Git ja$/ })).toMatchObject({ props: { bold: true } })
+        expect(await ui.find({ type: 'Text', text: /Fuehr die neuen Tests/ })).toBeUndefined()
+        await ui.unmount()
+        los('Nein\nFuehr die neuen Tests aus\nOeffne einen Entwurf fuer den PR')
+        await warte()
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Als Nächstes:\n1. Git ja\n2. nein\n3. Fuehr die neuen Tests aus')
+        ui = await band($)
+        const geraten = (await ui.find({ type: 'Text', text: /^Fuehr die neuen Tests aus$/ })) as { props: Record<string, unknown> } | undefined
+        expect(geraten).toBeDefined()
+        expect(geraten?.props.bold).toBeUndefined()
+        await ui.unmount()
+    })
+
+    test('auch nach einer kurzen Antwort und waehrend Agenten laufen, ohne Haiku', async ($, on) => {
+        const eng = engine(on, () => MODELL, [{ id: 'a1', description: 'Tests', type: 'general-purpose', status: 'running' }])
+        await rundeFertig($, 't1', 'Schreib „los“.')
+        expect(eng.aufrufe()).toBe(0)
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Als Nächstes:\n1. los')
+    })
+
+    test('bei drei angebotenen kein Haiku', async ($, on) => {
+        const eng = engine(on, () => MODELL)
+        await rundeFertig($, 't1', 'Antworte bitte mit „a“, „b“ oder „c“, dann mache ich weiter mit der Arbeit.')
+        expect(eng.aufrufe()).toBe(0)
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Als Nächstes:\n1. a\n2. b\n3. c')
+    })
+
+    test('in der App ein hervorgehobener Button, der sofort abschickt; ein geratener fuellt nur das Feld', async ($, on) => {
+        const gesendet: { text: string; origin: unknown }[] = []
+        const gefuellt: unknown[] = []
+        engine(on, () => 'Fuehr die neuen Tests aus', [], gesendet)
+        on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+        on('prompt.fill', (_$: any, e: any) => {
+            gefuellt.push({ text: e.text, mode: e.mode })
+            return { isFilled: true }
+        })
+        await rundeFertig($, 't1', ANGEBOT)
+        const ui = await band($, 160, 'desktop')
+        const knoepfe = (await ui.findAll({ type: 'Button' })) as { props: Record<string, unknown> }[]
+        expect(knoepfe.map(k => k.props.variant)).toEqual(['primary', 'primary', undefined])
+        await ui.press({ key: 'naechste-schritte-1' })
+        await warte()
+        expect(gesendet.map(e => e.text)).toEqual(['Git ja'])
+        expect(gesendet[0]?.origin).toMatchObject({ kind: 'plugin', asUser: true })
+        expect(gefuellt).toEqual([])
+        await ui.unmount()
+    })
+
+    test('in der App fuellt ein geratener Button nur das Feld', async ($, on) => {
+        const gesendet: { text: string; origin: unknown }[] = []
+        const gefuellt: unknown[] = []
+        engine(on, () => 'Fuehr die neuen Tests aus', [], gesendet)
+        on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+        on('prompt.fill', (_$: any, e: any) => {
+            gefuellt.push({ text: e.text, mode: e.mode })
+            return { isFilled: true }
+        })
+        await rundeFertig($, 't1', ANGEBOT)
+        const ui = await band($, 160, 'desktop')
+        await ui.press({ key: 'naechste-schritte-3' })
+        await warte()
+        await ui.unmount()
+        expect(gesendet).toEqual([])
+        expect(gefuellt).toEqual([{ text: 'Fuehr die neuen Tests aus', mode: 'replace' }])
+    })
+
+    test('im Terminal schickt die Ziffer eines angebotenen sofort ab', async ($, on) => {
+        const gesendet: { text: string; origin: unknown }[] = []
+        const uhr = mock.clock(on, { now: 1_000_000 })
+        engine(on, () => 'Fuehr die neuen Tests aus', [], gesendet)
+        await rundeFertig($, 't1', ANGEBOT)
+        const r = await bearbeite($, taste('', '2') as any)
+        expect(r.text).toBe('')
+        await uhr.advance(0)
+        await warte()
+        expect(gesendet.map(e => e.text)).toEqual(['nein'])
+        expect(gesendet[0]?.origin).toMatchObject({ kind: 'plugin', asUser: true })
+        // Die Ziffer eines geratenen holt weiter nur den Entwurf.
+        expect((await bearbeite($, taste('', '3') as any)).text).toBe('Fuehr die neuen Tests aus')
+    })
+
+    test('ein alter gespeicherter Wert mit Strings wird gelesen und gilt als geraten', async ($, on) => {
+        engine(on, () => MODELL)
+        on('state.get', () => ({ value: { value: { turnId: 't1', eintraege: ['Fuehr die Tests aus', 'Ausliefern'] }, version: 1 } }))
+        await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/arbeit' } as any)
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Als Nächstes:\n1. Fuehr die Tests aus\n2. Ausliefern')
+        expect((await bearbeite($, taste('', '2') as any)).text).toBe('Ausliefern')
+        const ui = await band($)
+        expect(await ui.find({ type: 'Text', text: /^Fuehr die Tests aus$/ })).toBeDefined()
+        await ui.unmount()
     })
 })

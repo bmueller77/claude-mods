@@ -1450,6 +1450,88 @@ test('lehnt die Engine /context ab, steht es im Eingabefeld, und ein Toast sagt:
     expect(geoeffnet).toEqual([])
 })
 
+const EINGEREIHT_KONTEXT = 'Befehl "/context" in die Warteschlange eingereiht...'
+const EINGEREIHT_COMPACT = 'Befehl "/compact" in die Warteschlange eingereiht...'
+
+test('📊 mitten in einer Runde: ein Toast sagt, dass /context wartet; still kein Toast', async ($, on) => {
+    mock.clock(on, { now: JETZT })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+
+    const still = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await still.press({ key: 'details' })
+    expect(toasts).toEqual([])
+    const beschaeftigt = await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ isWorking: true }) })
+    await beschaeftigt.press({ key: 'details' })
+    expect(toasts).toEqual([EINGEREIHT_KONTEXT])
+    expect(b.befehle).toEqual(['context', 'context'])
+})
+
+test('/statistik:kontext-zeigen meldet die Warteschlange nur, wenn gerade gearbeitet wird', async ($, on) => {
+    const clock = mock.clock(on, { now: JETZT })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 68_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+
+    await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await befehl($ as never, 'statistik:kontext-zeigen')
+    await clock.advance(0)
+    expect(toasts).toEqual([])
+    await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ isWorking: true }) })
+    await befehl($ as never, 'statistik:kontext-zeigen')
+    await clock.advance(0)
+    expect(toasts).toEqual([EINGEREIHT_KONTEXT])
+    expect(b.befehle).toEqual(['context', 'context'])
+})
+
+test('🔻 nach dem Countdown mitten in einer Runde: ein Toast sagt, dass /compact wartet', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ isWorking: true }) })
+    await ui.press({ key: 'compact' })
+    await clock.advance(COUNTDOWN)
+    expect(b.befehle).toEqual(['compact'])
+    expect(toasts).toEqual(['Der Kontext wird in 10 Sekunden verdichtet. Abbrechen stoppt das.', EINGEREIHT_COMPACT])
+    expect((await ui.find({ type: 'Button', key: 'compact' }))?.props.label).toBe('⏳')
+})
+
+test('🧽 nach dem Countdown mitten in einer Runde: Toast fuer /compact; still keiner', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000 })
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ isWorking: true }) })
+    await ui.press({ key: 'wischen' })
+    await clock.advance(COUNTDOWN)
+    expect(b.befehle).toEqual(['compact'])
+    expect(toasts.at(-1)).toBe(EINGEREIHT_COMPACT)
+})
+
+test('/statistik:verdichten mitten in einer Runde: Toast fuer /compact (still keiner, siehe oben)', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, STAND)
+    const toasts = toastZaehler(on)
+    await start($ as never)
+    await runde($ as never)
+    await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ isWorking: true }) })
+    await befehl($ as never, 'statistik:verdichten')
+    await clock.advance(0)
+    expect(b.befehle).toEqual(['compact'])
+    expect(toasts).toEqual([EINGEREIHT_COMPACT])
+})
+
 test('zwischen den Mods darueber und der Statistik steht eine Trennlinie', async ($, on) => {
     mock.clock(on, { now: JETZT })
     mock.store(on, {})

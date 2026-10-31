@@ -813,15 +813,27 @@ export function nimmHeraus(baum: RenderNode, schluessel: string): { oben: Render
  * Kein Werkzeug der App nennt sie, `ccd_view.show_pane` kennt keinen Kontext.
  * /context ist der Weg, den App und Terminal selbst anbieten; der Befehl laeuft,
  * sobald die Sitzung still ist. Lehnt die Engine ihn ab, steht er im
- * Eingabefeld und wartet auf Enter.
+ * Eingabefeld und wartet auf Enter. Laeuft gerade eine Runde, sagt ein Toast,
+ * dass der Befehl wartet; sonst saehe die Person keine Reaktion.
  */
-async function zeigeKontext($: EngineInterface): Promise<void> {
+async function zeigeKontext($: EngineInterface, istBeschaeftigt: boolean): Promise<void> {
     try {
+        if (istBeschaeftigt) {
+            meldeEingereiht($, 'context')
+        }
         await $.command.run({ command: 'context' })
     } catch {
         await $.prompt.fill({ text: '/context' }).catch(() => {})
         $.ui.toast('Im Eingabefeld steht /context. Drück Enter, dann zeigt Claude Code den Kontext.')
     }
+}
+
+/**
+ * Toast fuer einen Befehl, den `$.command.run` mitten in einer Runde nur einreiht:
+ * Er laeuft erst, wenn die Sitzung still ist, bis dahin saehe die Person nichts.
+ */
+function meldeEingereiht($: EngineInterface, name: string): void {
+    $.ui.toast(`Befehl "/${name}" in die Warteschlange eingereiht...`)
 }
 
 // --- Messen ---
@@ -1277,6 +1289,9 @@ async function verdichte(
     }
     await update($, eingereiht, () => wer)
     try {
+        if (istBeschaeftigt) {
+            meldeEingereiht($, 'compact')
+        }
         await $.command.run({ command: 'compact' })
     } catch {
         await update($, eingereiht, () => null)
@@ -1803,7 +1818,8 @@ async function kontextBefehl($: EngineInterface, vomHandy: boolean): Promise<str
                 : 'Den Kontext konnte der Mod gerade nicht messen.'
         return `${zeile} Die ausführliche Kontext-Anzeige (/context) gibt es nur am Rechner.`
     }
-    $.clock.after(0, () => void zeigeKontext($).catch(() => {}))
+    const beschaeftigt = zuletztBeschaeftigt.get(zuletztFlaeche ?? 'desktop') ?? false
+    $.clock.after(0, () => void zeigeKontext($, beschaeftigt).catch(() => {}))
     return 'Die Kontext-Anzeige (/context) geht gleich auf.'
 }
 
@@ -2620,7 +2636,7 @@ export const register: Register = (on, options) => {
         ) : null
         // Details zum Kontext: /context, die Anzeige der App; im Terminal die von Claude Code.
         const detailsKnopf = (
-            <Button key="details" label={SYMBOL_DETAILS} variant="secondary" onPress={() => void zeigeKontext($)} />
+            <Button key="details" label={SYMBOL_DETAILS} variant="secondary" onPress={() => void zeigeKontext($, e.props.isWorking)} />
         )
 
         // Aufraeumen mit Sicherungspunkt steht rechts neben der Chatlaenge; wird der
