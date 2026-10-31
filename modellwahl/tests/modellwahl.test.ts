@@ -218,7 +218,7 @@ test('ein alter Name wie /modellwahl-zeigen nennt nur den neuen und tut sonst ni
     expect(b.angemeldet.find(k => k.name.startsWith('modellwahl-'))).toBeUndefined()
 })
 
-test('neuer Chat: die erste Nachricht schlägt vor und läuft sofort; nach 15 s gilt der Vorschlag mit voller ID und Aufwand', async ($, on) => {
+test('neuer Chat: die erste Nachricht schlägt vor und läuft sofort; nach 15 s gilt der Vorschlag mit Kurzname und Aufwand', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})
     const b = boden(on, { antworten: [wahlJson('opus', 'high')] })
@@ -242,7 +242,7 @@ test('neuer Chat: die erste Nachricht schlägt vor und läuft sofort; nach 15 s 
     expect(b.toasts.at(-1)).toBe('Modellwahl: Opus · Hoch übernommen.')
     await schritt($)
     await schritt($, 'claude-sonnet-5-5', 'medium', 'agent-7')
-    expect(b.schritte[1]).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+    expect(b.schritte[1]).toEqual({ model: 'opus', effort: 'high' })
     // Der Subagent bleibt, wie er ist.
     expect(b.schritte[2]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium', agentId: 'agent-7' })
 
@@ -267,7 +267,7 @@ test('Desktop-App: kein /model und kein /effort; die Auswahl der App zieht die W
     await $.classic.PostModelSwitch({ from_model: 'claude-opus-5-5', to_model: 'claude-opus-5-5', requested_model: 'opus', source: 'sdk' } as never)
     expect(await befehl($, 'modellwahl:zeigen')).toContain('Zurückgezogen: nein, Modellwahl stellt Modell und Aufwand ein.')
     await schritt($, 'claude-opus-5-5', 'xhigh')
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'haiku', effort: 'low' })
     expect(b.status.at(-1)).toBe('Modellwahl: Haiku · Niedrig')
 })
 
@@ -284,7 +284,7 @@ test('Terminal: nur turn.step, kein /model; der Vorschlag gilt nach 15 s wie in 
     await clock.settle()
     expect(b.befehle).toEqual([])
     expect(b.schritte[0]).toEqual({ model: 'claude-opus-5-5', effort: 'xhigh' })
-    expect(b.schritte[1]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
+    expect(b.schritte[1]).toEqual({ model: 'sonnet', effort: 'medium' })
 })
 test('fortgesetzter Chat: keine automatische Wahl; eine gespeicherte gilt weiter', async ($, on) => {
     mock.clock(on, { now: 1_000_000 })
@@ -295,7 +295,7 @@ test('fortgesetzter Chat: keine automatische Wahl; eine gespeicherte gilt weiter
     expect(b.anfragen).toHaveLength(0)
     expect(b.status.at(-1)).toBe('Modellwahl: Fable · Extra hoch')
     await schritt($)
-    expect(b.schritte[0]).toEqual({ model: 'claude-fable-5-1', effort: 'xhigh' })
+    expect(b.schritte[0]).toEqual({ model: 'fable', effort: 'xhigh' })
 })
 
 test('ohne SessionStart: Rückfall auf die Zahl der Runden', async ($, on) => {
@@ -389,7 +389,7 @@ test('/modellwahl mitten im Chat mit Ziel Opus: Vorschlag mit Tokens und Prozent
 
     expect(await befehl($, 'modellwahl', 'ja')).toBe('Modellwahl: Opus · Hoch (Umbau über mehrere Dateien) gilt jetzt. Das neue Modell liest den Chat einmal neu.')
     await schritt($, 'claude-sonnet-5-5', 'medium')
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'opus', effort: 'high' })
     expect(await befehl($, 'modellwahl', 'ja')).toContain('Gerade ist kein Vorschlag offen.')
 })
 
@@ -404,7 +404,7 @@ test('mitten im Chat gilt auch Opus oder Fable nach 15 s ohne Reaktion', async (
     expect(await befehl($, 'modellwahl:zeigen')).toContain('Offener Vorschlag: Fable · Extra hoch, gilt in 1 s.')
     await clock.advance(1000)
     await schritt($, 'claude-sonnet-5-5', 'medium')
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-fable-5-1', effort: 'xhigh' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'fable', effort: 'xhigh' })
 })
 
 test('vom Handy: kein Countdown, der Vorschlag wartet zehn Minuten auf ja', async ($, on) => {
@@ -445,7 +445,7 @@ test('vom Handy: ja, ok oder Okay übernehmen; die Nachricht geht trotzdem an Cl
     expect(b.eingang.at(-1)?.context.join('\n')).toContain('"Modellwahl: Haiku · Niedrig übernommen."')
     expect(b.status.at(-1)).toBe('Modellwahl: Haiku · Niedrig')
     await schritt($, 'claude-opus-5-5', 'xhigh')
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'haiku', effort: 'low' })
     // Ohne offenen Vorschlag ist ein ja nur ein ja.
     await sende($, 'ja', 'bridge')
     expect(b.eingang.at(-1)?.context).toEqual([])
@@ -468,7 +468,7 @@ test('/modellwahl nein, /modellwahl:ablehnen und /modellwahl:uebernehmen', async
     await befehl($, 'modellwahl')
     expect(await befehl($, 'modellwahl:uebernehmen')).toBe('Modellwahl: Haiku · Niedrig (Umbau über mehrere Dateien) gilt jetzt. Das neue Modell liest den Chat einmal neu.')
     await schritt($, 'claude-sonnet-5-5', 'medium')
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-haiku-5-5', effort: 'low' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'haiku', effort: 'low' })
 })
 
 test('Band in der App: Vorschlag mit Countdown, Übernehmen per Klick', async ($, on) => {
@@ -495,7 +495,7 @@ test('Band in der App: Vorschlag mit Countdown, Übernehmen per Klick', async ($
     expect((await sicht.ui.findAll({ type: 'Button' })).length).toBe(0)
     await sicht.ui.unmount()
     await schritt($)
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'opus', effort: 'high' })
 })
 
 test('Band: Nein verwirft, das Modell aus dem Menü bleibt; im Terminal schlichte Buttons', async ($, on) => {
@@ -546,7 +546,7 @@ test('/modellwahl im leeren Chat: ohne Aufgabe bei der nächsten Nachricht, mit 
     expect(await befehl($, 'modellwahl', 'Der härteste Fehler der Welt')).toContain('Modellwahl-Vorschlag: Fable · Hoch (Umbau über mehrere Dateien).')
     await clock.advance(UEBERNAHME_MS)
     await schritt($)
-    expect(b.schritte[0]).toEqual({ model: 'claude-fable-5-1', effort: 'high' })
+    expect(b.schritte[0]).toEqual({ model: 'fable', effort: 'high' })
 
     expect(await befehl($, 'modellwahl')).toBe('Modellwahl: Ich schlage bei deiner nächsten Nachricht vor.')
     await sende($, 'Neue Aufgabe.')
@@ -605,7 +605,7 @@ test('Rückfall und Wiederherstellen sind kein Wechsel der Person', async ($, on
     await $.classic.PostModelSwitch({ from_model: 'a', to_model: 'b', requested_model: null, source: 'resume' } as never)
     await clock.advance(UEBERNAHME_MS)
     await schritt($)
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'opus', effort: 'high' })
 })
 
 test('Aufwand von Hand geändert: zurückgezogen', async ($, on) => {
@@ -617,7 +617,7 @@ test('Aufwand von Hand geändert: zurückgezogen', async ($, on) => {
     await clock.advance(UEBERNAHME_MS)
     await schritt($, 'claude-sonnet-5-5', 'medium')
     await schritt($, 'claude-sonnet-5-5', 'medium')
-    expect(b.schritte.at(-1)).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+    expect(b.schritte.at(-1)).toEqual({ model: 'opus', effort: 'high' })
     // Die Person stellt /effort um: die Sitzung schickt einen anderen Aufwand.
     await schritt($, 'claude-sonnet-5-5', 'max')
     expect(b.schritte.at(-1)).toEqual({ model: 'claude-sonnet-5-5', effort: 'max' })

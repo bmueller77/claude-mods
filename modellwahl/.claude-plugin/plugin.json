@@ -1,6 +1,6 @@
 {
   "name": "modellwahl",
-  "version": "0.3.4.0",
+  "version": "0.3.4.1",
   "description": "Schlägt einmal je Aufgabe Modell und Aufwand für den Chat vor: von selbst bei der ersten Nachricht eines neuen Chats oder mit /modellwahl; ein kleiner Aufruf von Haiku schätzt die Aufgabe ein. Am Rechner gilt der Vorschlag nach 15 Sekunden, wenn du nicht Nein drückst, vom Handy erst auf ja oder ok; eine Nachricht nur aus ja, ok oder okay nimmt einen offenen Vorschlag immer an. Hilfe: /modellwahl:hilfe.",
   "author": {
     "name": "Björn Müller"

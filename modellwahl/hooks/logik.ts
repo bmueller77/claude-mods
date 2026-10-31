@@ -3,12 +3,15 @@ import type { Aufwand, Einschaetzung, Kalibrierung, Modell } from '../types'
 // Reine Rechnungen der Modellwahl: Namen, Einschaetzung lesen, Kosten schaetzen.
 // Kein `$` hier; register.ts holt die Werte und legt sie ab.
 
-/** Die Modelle mit voller ID: `turn.step` loest keine Aliase auf. */
+/**
+ * Die Modelle als Kurznamen: Die Engine loest sie wie `--model` zum neuesten Modell der Familie auf,
+ * auch in `turn.step` (seit 2.1.309 belegt). So kommt ein neues Opus ohne Update an.
+ */
 export const MODELLE: Record<Modell, { id: string; name: string }> = {
-    haiku: { id: 'claude-haiku-5-5', name: 'Haiku' },
-    sonnet: { id: 'claude-sonnet-5-5', name: 'Sonnet' },
-    opus: { id: 'claude-opus-5-5', name: 'Opus' },
-    fable: { id: 'claude-fable-5-1', name: 'Fable' },
+    haiku: { id: 'haiku', name: 'Haiku' },
+    sonnet: { id: 'sonnet', name: 'Sonnet' },
+    opus: { id: 'opus', name: 'Opus' },
+    fable: { id: 'fable', name: 'Fable' },
 }
 
 /** Die Stufen des Aufwands mit dem Namen, den die App in ihrer Auswahl zeigt (Björn, 2026-10-27). */
@@ -146,7 +149,8 @@ const OPUS_EINGABE = 5
 
 /** Die Preise eines Modells; ein unbekanntes rechnet wie Opus. */
 export function preisVon(id: string | null | undefined): { eingabe: number; lesen: number; schreiben: number; ausgabe: number } {
-    const s = String(id ?? '').toLowerCase()
+    // Ein Kurzname meint das neueste Modell der Familie; bei Fable ist das 5.1 mit eigenem Preis.
+    const s = String(id ?? '').toLowerCase() === 'fable' ? 'fable-5-1' : String(id ?? '').toLowerCase()
     const z = PREISE.find(p => s.includes(p[0])) ?? PREISE[2]!
     return { eingabe: z[1], lesen: z[2], schreiben: z[3], ausgabe: z[4] }
 }
