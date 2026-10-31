@@ -340,7 +340,7 @@ function zeigeStatus($: EngineInterface): void {
                 : z.tipp
                   ? `Modellvorschlag: ${wahlText(z.tipp)}`
                   : z.wahl && !z.wahl.zurueckgezogen
-                  ? `Gewählt: ${wahlText(z.wahl)}`
+                  ? `Antwortet: ${wahlText(z.wahl)}`
                   : undefined,
         )
     } catch {
