@@ -4,6 +4,7 @@ import type { On } from 'claude-code'
 
 import { ALTE_BEFEHLE, BEFEHLE, BEFEHL_FEHLER, EINSCHAETZUNG_MS, HILFE, HINWEIS_OHNE, UEBERNAHME_MS } from '../hooks/register'
 import { GEMELDET } from '../hooks/logik'
+import { BAND_VERSION } from '../hooks/band'
 
 const USAGE = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const MIN = 60_000
@@ -754,4 +755,41 @@ test('Kalibrierung über die Runden: aus Limit-Anstieg und Tokens wird eine Quot
     b.stand.limits = [{ kind: 'five_hour', percentUsed: 10.6, resetsAt: '2026-10-19T15:00:00Z' }]
     await rundeEnde($, { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 1_000_000, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' })
     expect(await befehl($, 'modellwahl:zeigen')).toContain('Kalibrierung: 1 Messung, 1 % des Sitzungslimits (5 Stunden) ≈ 1 Mio. Opus-Tokens.')
+})
+
+test('Band: die Höhe der Zeile geht genau einmal je Änderung in $.state (1 mit Vorschlag, sonst 0), ohne Schleife', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, { antworten: [wahlJson('opus', 'high')] })
+    darunter(on)
+    const geschrieben: { id: string | undefined; value: unknown }[] = []
+    on('state.set', { plugin: 'modellwahl' }, (_$, e, next) => {
+        if (e.key === 'bandHoehe') {
+            geschrieben.push({ id: e.id, value: e.value })
+        }
+        return next(e)
+    })
+    const hoehe = (zeilen: number) => ({ v: BAND_VERSION, voll: zeilen, klein: zeilen })
+    await start($)
+    const sicht = await band($, on)
+    // Beim Zeichnen wird nicht geschrieben, erst einen Takt spaeter.
+    expect(geschrieben).toEqual([])
+    await clock.advance(1)
+    expect(geschrieben).toEqual([{ id: 'desktop', value: hoehe(0) }])
+    await clock.advance(1000)
+    expect(geschrieben).toHaveLength(1)
+
+    // Ein Vorschlag wartet: eine Zeile. Der Countdown zeichnet jede Sekunde neu, geschrieben wird nicht mehr.
+    await sende($, 'Bau den Login um.')
+    await clock.advance(1)
+    expect(geschrieben.map(g => g.value)).toEqual([hoehe(0), hoehe(1)])
+    await clock.advance(5000)
+    expect(geschrieben).toHaveLength(2)
+
+    // Nein: die Zeile ist weg, wieder 0.
+    await sicht.ui.press({ key: 'modellwahl-nein' })
+    await clock.advance(1)
+    await clock.advance(30_000)
+    expect(geschrieben.map(g => g.value)).toEqual([hoehe(0), hoehe(1), hoehe(0)])
+    await sicht.ui.unmount()
 })

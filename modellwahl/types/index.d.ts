@@ -37,6 +37,12 @@ export type Vorschlag = {
     bis: number | null
 }
 
+/**
+ * Hoehe der eigenen Zeile im Band ueber dem Eingabefeld, je Flaeche: dieselbe Form wie `BandHoehe`
+ * in hooks/band.ts. 1 mit wartendem Vorschlag, sonst 0; `klein` ist gleich `voll`.
+ */
+export type BandHoehe = { v: number; voll: number; klein: number }
+
 declare module 'claude-code' {
     interface PluginState {
         modellwahl: {
@@ -44,6 +50,8 @@ declare module 'claude-code' {
             vorschlag: Vorschlag | null
             /** Zaehlt jede Sekunde hoch, solange ein Vorschlag laeuft, damit der Countdown weiterlaeuft. */
             takt: number
+            /** Die Hoehe der eigenen Zeile im Band, je Flaeche (`id` = `e.surface`); andere Mods planen damit ihren Platz. */
+            bandHoehe: StateFamily<BandHoehe>
         }
     }
 }

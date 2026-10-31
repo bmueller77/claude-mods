@@ -1,7 +1,7 @@
 {
   "name": "naechste-schritte",
-  "version": "0.4.4.0",
-  "description": "Nach jeder Antwort zwei oder drei Vorschläge, was du Claude als Nächstes schreiben könntest, über dem Eingabefeld. In der App holt ein Button den Vorschlag ins Eingabefeld, im Terminal eine Ziffer; /naechste-schritte:1 bis :3 schicken ihn sofort ab. Bietet Claude Antworten ausdrücklich an (etwa Antworte \"ja\"), stehen sie vorn, und ein Klick schickt sie sofort ab. Hilfe: /naechste-schritte:hilfe. Grundlage: next-steps von Hamza Zafar.",
+  "version": "0.4.5.0",
+  "description": "Nach jeder Antwort zwei oder drei Vorschläge, was du Claude als Nächstes schreiben könntest, über dem Eingabefeld. In der App holt ein Button den Vorschlag ins Eingabefeld, im Terminal eine Ziffer; /naechste-schritte:1 bis :3 schicken ihn sofort ab. Bietet Claude Antworten ausdrücklich an (etwa Antworte \"ja\"), stehen sie vorn, und ein Klick schickt sie sofort ab; nach einer Ja/Nein-Frage gibt es ebenso Ja und Nein. Hilfe: /naechste-schritte:hilfe. Grundlage: next-steps von Hamza Zafar.",
   "author": {
     "name": "Björn Müller",
     "email": "bjoern@mueller.family"

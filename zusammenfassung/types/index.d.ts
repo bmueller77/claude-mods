@@ -35,6 +35,14 @@ export type Bericht = {
     holtErklaerung: boolean
 }
 
+/**
+ * Hoehe des eigenen Teils im Band ueber dem Eingabefeld, je Flaeche: dieselbe Form wie
+ * `BandHoehe` in hooks/band.ts. Terminal ganze Zeilen, Desktop Zeilen zu 20 px mit Bruchteilen.
+ * `voll` ist der Block, wie er gerade steht, `klein` nur Trennlinie und Kopfzeile; 0 und 0, wenn
+ * nichts steht. Ist sie aufgeklappt, ist `klein` gleich `voll`.
+ */
+export type BandHoehe = { v: number; voll: number; klein: number }
+
 declare module 'claude-code' {
     interface PluginState {
         zusammenfassung: {
@@ -46,12 +54,31 @@ declare module 'claude-code' {
             laufend: Schritt[]
             /** Der Schritt, den das Replay gerade zeigt. */
             index: number
-            /** Ob die Zusammenfassung aufgeklappt ist. */
+            /**
+             * Ob die Person die Zusammenfassung in dieser Runde aufgeklappt hat (Chevron oder
+             * /zusammenfassung:aufklappen). Dann bleibt sie offen, auch wenn im Band wenig Platz ist;
+             * die naechste Runde klappt wieder zu.
+             */
             istOffen: boolean
             /** Ob die Zusammenfassung aus ist (das Replay bleibt). */
             isAus: boolean
             /** Der zuletzt gezeigte Hinweis, damit derselbe nicht zweimal kommt. */
             letzter: string | null
+            /** Die Hoehe des eigenen Teils im Band, je Flaeche (`id` = `e.surface`); andere Mods planen damit ihren Platz. */
+            bandHoehe: StateFamily<BandHoehe>
+        }
+        // Die Hoehen der anderen Mods im Band, nur gelesen (hooks/band.ts). Ihr Vertrag liegt bei ihnen.
+        leitstand: {
+            bandHoehe: StateFamily<BandHoehe>
+        }
+        statistik: {
+            bandHoehe: StateFamily<BandHoehe>
+        }
+        'naechste-schritte': {
+            bandHoehe: StateFamily<BandHoehe>
+        }
+        modellwahl: {
+            bandHoehe: StateFamily<BandHoehe>
         }
     }
 }

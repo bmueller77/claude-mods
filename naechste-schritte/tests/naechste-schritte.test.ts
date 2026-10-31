@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, alsEintrag, angeboteneAntworten, fehlerText, hilfeText, leseVorschlaege, mische, modIdAus, passtInEineZeile, uebersicht } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, alsEintrag, angeboteneAntworten, fehlerText, hilfeText, jaNeinAntworten, leseVorschlaege, mische, modIdAus, passtInEineZeile, uebersicht } from '../hooks/register'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 160 } }
 const ANTWORT = 'Ich habe Tests fuer das Login-Formular geschrieben, sie laufen lokal durch.'
@@ -668,6 +668,133 @@ describe('naechste-schritte: angebotene Antworten zeigen und druecken', () => {
         expect((await bearbeite($, taste('', '2') as any)).text).toBe('Ausliefern')
         const ui = await band($)
         expect(await ui.find({ type: 'Text', text: /^Fuehr die Tests aus$/ })).toBeDefined()
+        await ui.unmount()
+    })
+})
+
+// --- Ja/Nein-Fragen ---
+
+describe('naechste-schritte: Ja/Nein-Fragen', () => {
+    test('eine Ja/Nein-Frage am Schluss ergibt Ja und Nein, englisch Yes und No', () => {
+        expect(jaNeinAntworten('Die Tests laufen. Soll ich die Platz-Regel einbauen?')).toEqual(['Ja', 'Nein'])
+        expect(jaNeinAntworten('Fertig umgebaut.\n\nKurze Frage: Passt das so?')).toEqual(['Ja', 'Nein'])
+        expect(jaNeinAntworten('Und, passt das? 🙂')).toEqual(['Ja', 'Nein'])
+        expect(jaNeinAntworten('**Soll ich `npm test` laufen lassen?**')).toEqual(['Ja', 'Nein'])
+        expect(jaNeinAntworten('Alles klar?')).toEqual(['Ja', 'Nein'])
+        expect(jaNeinAntworten('All tests pass. Should I push it?')).toEqual(['Yes', 'No'])
+    })
+
+    test('W-Fragen, Alternativen, Fragen mitten im Text und im Code ergeben nichts', () => {
+        expect(jaNeinAntworten('Welche Variante willst du?')).toEqual([])
+        expect(jaNeinAntworten('Soll ich A oder B bauen?')).toEqual([])
+        expect(jaNeinAntworten('Should I push or wait?')).toEqual([])
+        expect(jaNeinAntworten('Soll ich die Regel einbauen? Ich warte auf dich.')).toEqual([])
+        expect(jaNeinAntworten('Fertig:\n```\nSoll ich weitermachen?\n```')).toEqual([])
+        expect(jaNeinAntworten('Ich habe die Datei angelegt.')).toEqual([])
+        expect(jaNeinAntworten('Lange Einleitung mit vielen Woertern davor, soll ich?')).toEqual([])
+    })
+
+    test('nach einer Ja/Nein-Frage stehen Ja und Nein vorn und schicken ab; Haiku fuellt Platz drei', async ($, on) => {
+        const gesendet: { text: string; origin: unknown }[] = []
+        const uhr = mock.clock(on, { now: 1_000_000 })
+        engine(on, () => 'Bau die Platz-Regel ein\nFuehr die Tests aus', [], gesendet)
+        await rundeFertig($, 't1', 'Die Tests laufen alle durch. Soll ich die Platz-Regel einbauen?')
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Als Nächstes:\n1. Ja\n2. Nein\n3. Bau die Platz-Regel ein')
+        expect((await bearbeite($, taste('', '1') as any)).text).toBe('')
+        await uhr.advance(0)
+        await warte()
+        expect(gesendet.map(e => e.text)).toEqual(['Ja'])
+    })
+
+    test('ein ausdrueckliches Angebot geht vor', async ($, on) => {
+        engine(on, () => '')
+        await rundeFertig($, 't1', 'Antworte „Git ja“, dann lege ich es an. Soll ich danach auch pushen?')
+        expect(await befehl($, 'naechste-schritte:zeigen')).toBe('Als Nächstes:\n1. Git ja')
+    })
+})
+
+describe('naechste-schritte: Platz im Band', () => {
+    // Fremde Hoehen unterschieben; alles andere (auch die eigenen Vorschlaege) geht an die Engine.
+    function fremd(on: any, hoehen: Record<string, { voll: number; klein: number }>) {
+        on('state.get', async (_$: any, e: any, next: any) => {
+            const h = e.key === 'bandHoehe' ? hoehen[e.plugin] : undefined
+            if (e.key === 'bandHoehe' && e.plugin !== 'naechste-schritte') {
+                return { value: { value: h ? { v: 1, ...h } : undefined, version: 1 } }
+            }
+            return next(e)
+        })
+    }
+    const app = ($: any, props: Record<string, unknown> = {}) =>
+        $.ui.mount({
+            plugin: 'naechste-schritte',
+            surface: 'desktop',
+            ...BAND,
+            props: { ...BAND.props, bodyColumns: 50, maxRows: 12, scroll: { offset: 0, bodyRows: 13 }, ...props },
+        } as any)
+
+    test('in der App: viel von anderen Mods, die Vorschlaege ruecken in eine Zeile', async ($, on) => {
+        engine(on, () => MODELL)
+        fremd(on, { leitstand: { voll: 9, klein: 6 }, statistik: { voll: 1.75, klein: 1.75 } })
+        await rundeFertig($)
+        const ui = await app($)
+        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeDefined()
+        expect(((await ui.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]).some(b => b.props.rowGap !== undefined)).toBe(false)
+        await ui.unmount()
+    })
+
+    test('in der App: wenig von anderen Mods, einer je Zeile', async ($, on) => {
+        engine(on, () => MODELL)
+        fremd(on, { leitstand: { voll: 3, klein: 3 }, statistik: { voll: 1.75, klein: 1.75 } })
+        await rundeFertig($)
+        const ui = await app($)
+        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeUndefined()
+        expect((await ui.findAll({ type: 'Button' })).length).toBe(3)
+        expect(((await ui.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]).some(b => b.props.rowGap === 1.2)).toBe(true)
+        await ui.unmount()
+    })
+
+    test('im Terminal: knapp eine Zeile, sonst drei', async ($, on) => {
+        engine(on, () => MODELL)
+        fremd(on, { leitstand: { voll: 4, klein: 4 } })
+        await rundeFertig($)
+        // Eigener Block mehrzeilig 4 Zeilen (Strich und drei), einzeilig 2; Budget 7.
+        const knapp = await $.ui.mount({ plugin: 'naechste-schritte', surface: 'terminal', ...BAND, props: { ...BAND.props, bodyColumns: 50, maxRows: 7 } } as any)
+        expect(await knapp.find({ type: 'Text', text: /^ {15}$/ })).toBeUndefined()
+        expect(await knapp.find({ type: 'Text', text: /^ {2}· {2}$/ })).toBeDefined()
+        await knapp.unmount()
+        const weit = await $.ui.mount({ plugin: 'naechste-schritte', surface: 'terminal', ...BAND, props: { ...BAND.props, bodyColumns: 50, maxRows: 8 } } as any)
+        expect(await weit.find({ type: 'Text', text: /^ {15}$/ })).toBeDefined()
+        await weit.unmount()
+    })
+
+    test('veroeffentlicht die eigene Hoehe einen Takt spaeter, einmal je Aenderung, ohne Schleife', async ($, on) => {
+        const uhr = mock.clock(on, { now: 1_000_000 })
+        const geschrieben: { id: unknown; value: unknown }[] = []
+        on('state.set', async (_$: any, e: any, next: any) => {
+            if (e.key === 'bandHoehe') {
+                geschrieben.push({ id: e.id, value: e.value })
+            }
+            return next(e)
+        })
+        engine(on, () => MODELL)
+        fremd(on, {})
+        await rundeFertig($)
+        const ui = await app($)
+        expect(geschrieben).toEqual([])
+        await uhr.advance(1)
+        // Mehrzeilig: Linie 0,75 + drei Zeilen + zwei Luecken zu 0,6; einzeilig: Linie + eine Zeile.
+        expect(geschrieben).toEqual([{ id: 'desktop', value: { v: 1, voll: 4.95, klein: 1.75 } }])
+        await uhr.advance(1)
+        await uhr.advance(1000)
+        expect(geschrieben.length).toBe(1)
+        // Ohne Vorschlaege steht nichts: 0 und 0, wieder genau einmal.
+        await $.prompt.submit({ text: 'weiter', origin: { kind: 'composer' } } as any)
+        const leer = await app($)
+        await uhr.advance(1)
+        await uhr.advance(1000)
+        expect(geschrieben.at(-1)).toEqual({ id: 'desktop', value: { v: 1, voll: 0, klein: 0 } })
+        expect(geschrieben.length).toBe(2)
+        await leer.unmount()
         await ui.unmount()
     })
 })

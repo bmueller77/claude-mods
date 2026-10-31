@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderNode, SessionMessage } from 'claude-code'
+import type { EngineInterface, Register, RenderNode, RenderSurface, SessionMessage } from 'claude-code'
 
-import type { Aufwand, AutoSchalter, Einschaetzung, Kalibrierung, Vorschlag, Wahl } from '../types'
+import type { Aufwand, AutoSchalter, BandHoehe, Einschaetzung, Kalibrierung, Vorschlag, Wahl } from '../types'
+import { BAND_VERSION, zeilenVon } from './band'
 import {
     AUFWAENDE,
     GEMELDET,
@@ -890,16 +891,23 @@ export const register: Register = (on, options) => {
         return next({ ...e, message: { ...e.message, content } })
     }).catch(($, e, next) => next(e))
 
+    // Was dieses Laden zuletzt als Hoehe im Band veroeffentlicht oder geplant hat (meldeBandHoehe).
+    const band: BandMerker = { veroeffentlicht: new Map(), geplant: new Map() }
+
     // Über der Eingabe, solange ein Vorschlag wartet: was er wäre, wann er gilt, Übernehmen und Nein.
     // Das Band zeichnen nur Terminal und Desktop-App; auf dem Handy wartet nichts darauf.
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
         const darunter = await next(e)
         if (e.props.hasSurvey || e.surface === 'mobile') {
+            if (e.surface !== 'mobile') {
+                meldeBandHoehe($, band, e.surface, 0)
+            }
             return darunter
         }
         const v = await read($, vorschlagAtom)
         // Einer aus einem frueheren Laden hat keinen Takt mehr: er gilt als verworfen.
         if (!v || z.offen?.at !== v.at) {
+            meldeBandHoehe($, band, e.surface, 0)
             return darunter
         }
         void (await read($, taktAtom))
@@ -918,6 +926,7 @@ export const register: Register = (on, options) => {
             knopf('modellwahl-ja', 'Übernehmen', true, () => void uebernehme($, v.at).catch(() => {})),
             knopf('modellwahl-nein', 'Nein', false, () => void lehneAb($, v.at).catch(() => {})),
         )
+        meldeBandHoehe($, band, e.surface, zeilenVon(zeile as RenderNode, e.surface, e.props.bodyColumns))
         return h(Box, { flexDirection: 'column' }, zeile, darunter) as RenderNode as never
     })
 
@@ -940,6 +949,38 @@ export const register: Register = (on, options) => {
         const jetzt = ALTE_BEFEHLE.get(e.command)
         return { text: jetzt === undefined ? BEFEHL_FEHLER : neuerName(jetzt) }
     }).catch(() => ({ text: BEFEHL_FEHLER }))
+}
+
+/** Je Flaeche: die zuletzt veroeffentlichte und die geplante Hoehe im Band. */
+type BandMerker = { veroeffentlicht: Map<RenderSurface, number>; geplant: Map<RenderSurface, number> }
+
+/**
+ * Veroeffentlicht die Hoehe der eigenen Zeile im Band, je Flaeche, fuer die Mods, die ihren Platz
+ * danach planen (hooks/band.ts): 1 mit wartendem Vorschlag, sonst 0. Beim Zeichnen darf kein Hook
+ * schreiben: geschrieben wird einen Takt spaeter und nur bei einer Aenderung, sonst zeichnet jede
+ * Schreibung neu und plant die naechste.
+ */
+function meldeBandHoehe($: EngineInterface, band: BandMerker, flaeche: RenderSurface, zeilen: number): void {
+    const geplant = band.geplant.get(flaeche)
+    if ((geplant ?? band.veroeffentlicht.get(flaeche)) === zeilen) {
+        return
+    }
+    band.geplant.set(flaeche, zeilen)
+    if (geplant !== undefined) {
+        return
+    }
+    $.clock.after(0, () => {
+        const g = band.geplant.get(flaeche)
+        band.geplant.delete(flaeche)
+        if (g === undefined || band.veroeffentlicht.get(flaeche) === g) {
+            return
+        }
+        band.veroeffentlicht.set(flaeche, g)
+        const hoehe: BandHoehe = { v: BAND_VERSION, voll: g, klein: g }
+        void $.state.set({ plugin: 'modellwahl', key: 'bandHoehe', id: flaeche }, hoehe).catch(() => {
+            band.veroeffentlicht.delete(flaeche)
+        })
+    })
 }
 
 /** Nach /clear: neuer Chat, keine Wahl; die Automatik dieses Fensters geht mit. */

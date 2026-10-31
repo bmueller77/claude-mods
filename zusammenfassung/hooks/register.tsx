@@ -7,9 +7,10 @@
 // Apache-2.0). Der Chevron klappt den Block auf: beide Zeilen ungekuerzt, die Erklaerung
 // zum Hinweis und die geaenderten Dateien.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, RenderElement } from 'claude-code'
+import type { EngineInterface, Register, RenderElement, RenderSurface } from 'claude-code'
 
-import type { Bericht, DiffZeile, Schritt } from '../types'
+import type { BandHoehe, Bericht, DiffZeile, Schritt } from '../types'
+import { BAND_VERSION, bandBudget, plane, zeilenVon } from './band'
 
 /** So viele Nachrichten vom Ende der Runde bekommt das Modell zu sehen. */
 const NACHRICHTEN = 10
@@ -105,6 +106,61 @@ const index = atom({ plugin: 'zusammenfassung', key: 'index' } as const, 0)
 const istOffen = atom({ plugin: 'zusammenfassung', key: 'istOffen' } as const, false)
 const isAus = atom({ plugin: 'zusammenfassung', key: 'isAus' } as const, false)
 const letzter = atom({ plugin: 'zusammenfassung', key: 'letzter' } as const, null as string | null)
+
+/** Je Flaeche: die zuletzt veroeffentlichte und die geplante Hoehe im Band. */
+type BandMerker = {
+    veroeffentlicht: Map<RenderSurface, { voll: number; klein: number }>
+    geplant: Map<RenderSurface, { voll: number; klein: number }>
+}
+
+const gleicheHoehe = (a: { voll: number; klein: number } | undefined, b: { voll: number; klein: number }) =>
+    a !== undefined && a.voll === b.voll && a.klein === b.klein
+
+/**
+ * Veroeffentlicht die Hoehe des eigenen Blocks im Band, je Flaeche, fuer die Mods, die ihren Platz
+ * danach planen (hooks/band.ts). Beim Zeichnen darf kein Hook schreiben: geschrieben wird einen
+ * Takt spaeter und nur, wenn sich die Hoehe aendert; sonst zeichnet jede Schreibung neu und plant
+ * die naechste.
+ */
+function meldeBandHoehe($: EngineInterface, band: BandMerker, flaeche: RenderSurface, h: { voll: number; klein: number }): void {
+    const geplant = band.geplant.get(flaeche)
+    if (gleicheHoehe(geplant ?? band.veroeffentlicht.get(flaeche), h)) {
+        return
+    }
+    band.geplant.set(flaeche, h)
+    if (geplant) {
+        return
+    }
+    $.clock.after(0, () => {
+        const g = band.geplant.get(flaeche)
+        band.geplant.delete(flaeche)
+        if (!g || gleicheHoehe(band.veroeffentlicht.get(flaeche), g)) {
+            return
+        }
+        band.veroeffentlicht.set(flaeche, g)
+        const hoehe: BandHoehe = { v: BAND_VERSION, voll: g.voll, klein: g.klein }
+        void $.state.set({ plugin: 'zusammenfassung', key: 'bandHoehe', id: flaeche }, hoehe).catch(() => {
+            band.veroeffentlicht.delete(flaeche)
+        })
+    })
+}
+
+/** Die Hoehen der anderen Mods im Band auf dieser Flaeche; was fehlt oder sich nicht lesen laesst, ist null. */
+async function fremdeHoehen($: EngineInterface, flaeche: RenderSurface) {
+    const lies = async (f: () => Promise<{ value: BandHoehe | undefined }>) => {
+        try {
+            return (await f()).value ?? null
+        } catch {
+            return null
+        }
+    }
+    return {
+        leitstand: await lies(() => $.state.get({ plugin: 'leitstand', key: 'bandHoehe', id: flaeche })),
+        statistik: await lies(() => $.state.get({ plugin: 'statistik', key: 'bandHoehe', id: flaeche })),
+        naechsteSchritte: await lies(() => $.state.get({ plugin: 'naechste-schritte', key: 'bandHoehe', id: flaeche })),
+        modellwahl: await lies(() => $.state.get({ plugin: 'modellwahl', key: 'bandHoehe', id: flaeche })),
+    }
+}
 
 export const SYSTEM =
     'Du fasst eine Runde eines KI-Assistenten für die Person zusammen, für die er arbeitet. ' +
@@ -771,6 +827,7 @@ export function uebersicht(id: string | null = null): string {
         '- Neben "Zusammenfassung" steht etwa "5 Änderungen in 3 Dateien". Eine Änderung ist eine Stelle, die Claude in einer Datei geändert hat, oder eine Datei, die er ganz neu geschrieben hat.',
         `- ${SYMBOL_AUF} klappt auf: beide Zeilen ganz, eine längere Erklärung zum Hinweis und die geänderten Dateien mit der Zahl neuer (+) und entfernter (−) Zeilen. ` +
             `${SYMBOL_ZU} klappt wieder zu. Als Befehl: /zusammenfassung:aufklappen und /zusammenfassung:zuklappen.`,
+        `- Ist über dem Eingabefeld wenig Platz, klappt sich die Zusammenfassung auf ihre Kopfzeile zu; ein Klick auf ${SYMBOL_AUF} öffnet sie bis zur nächsten Runde.`,
         `- ${SYMBOL_REPLAY} öffnet das Replay im Seitenfenster. ◀ Zurück und Weiter ▶ blättern durch die Schritte, die Zahlen oben zeigen, bei welchem du bist. ` +
             'Grün mit + sind neue Zeilen, rot mit - entfernte, blass die unveränderten drumherum; ⋯ steht für ausgelassene Zeilen. ' +
             'Im Terminal gehen auch die Tasten z (zurück), w (weiter) und s (schließen), Escape schließt das Fenster. Als Befehl: /replay.',
@@ -915,6 +972,9 @@ export const register: Register = (on, options) => {
         if (!e.agentId) {
             werkzeuge = 0
             await update($, laufend, () => [])
+            // Aufgeklappt gilt nur bis zur naechsten Runde, wie die Hilfe sagt; danach entscheidet
+            // wieder der Platz im Band, ob die Zusammenfassung zwei Zeilen oder nur die Kopfzeile zeigt.
+            await update($, istOffen, () => false)
         }
         return next(e)
     })
@@ -966,17 +1026,23 @@ export const register: Register = (on, options) => {
         return r
     })
 
+    // Was dieses Laden zuletzt als Hoehe im Band veroeffentlicht oder geplant hat (meldeBandHoehe).
+    const band: BandMerker = { veroeffentlicht: new Map(), geplant: new Map() }
+
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
         const rest = await next(e)
         if (e.props.hasSurvey || e.props.isWorking) {
+            meldeBandHoehe($, band, e.surface, { voll: 0, klein: 0 })
             return rest
         }
         const b = await read($, bericht)
         const s = await read($, schritte)
         const hatBericht = b !== null && (b.schreibt || b.getan !== null || b.beachte !== null)
         if (!hatBericht && s.length === 0) {
+            meldeBandHoehe($, band, e.surface, { voll: 0, klein: 0 })
             return rest
         }
+        // Aufgeklappt hat sie nur die Person, in dieser Runde (turn.start klappt zu).
         const offen = await read($, istOffen)
 
         const elemente = $.ui.resolve(e)
@@ -1097,7 +1163,16 @@ export const register: Register = (on, options) => {
                 {'─'.repeat(Math.max(0, e.props.bodyColumns))}
             </Text>
         )
-        const block = (
+        // Klein: nur Trennlinie und Kopfzeile.
+        const kleinerBlock = (
+            <Box key="zusammenfassung" flexDirection="column" width={appBreite}>
+                {trennlinie}
+                <Box flexDirection="column" width={appBreite}>
+                    {kopf}
+                </Box>
+            </Box>
+        )
+        const vollerBlock = (
             <Box key="zusammenfassung" flexDirection="column" width={appBreite}>
                 {trennlinie}
                 {/* Die Breite auch hier: ob die App sie vom Block uebernimmt, ist nicht sicher. */}
@@ -1123,6 +1198,17 @@ export const register: Register = (on, options) => {
                 </Box>
             </Box>
         )
+        // Die Hoehe fuer die anderen Mods: voll wie der Block ohne Platzmangel, klein nur die Kopfzeile.
+        // Von Hand aufgeklappt laesst sie sich nicht klein machen, dann ist klein gleich voll.
+        const voll = zeilenVon(vollerBlock, e.surface, e.props.bodyColumns)
+        const eigene = { voll, klein: offen ? voll : zeilenVon(kleinerBlock, e.surface, e.props.bodyColumns) }
+        meldeBandHoehe($, band, e.surface, eigene)
+        // Ist im Band wenig Platz (hooks/band.ts), steht nur die Kopfzeile; von Hand aufgeklappt bleibt sie offen.
+        const plan = plane(bandBudget(e.surface, e.props), e.surface, {
+            ...(await fremdeHoehen($, e.surface)),
+            zusammenfassung: { v: BAND_VERSION, ...eigene },
+        })
+        const block = plan.zusammenfassungKlein && !offen ? kleinerBlock : vollerBlock
         return rest ? (
             <Box flexDirection="column">
                 {block}

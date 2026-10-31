@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
+import { BAND_VERSION } from '../hooks/band'
 import { ALTE_BEFEHLE, BEFEHLE, KURZFORMEN, SYSTEM, SYSTEM_MEHR, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, modIdAus, relPfad, schrittArt, uebersicht, zeilenUmbruch } from '../hooks/register'
 
 const BAND = { plugin: 'zusammenfassung', component: 'AbovePrompt' } as const
@@ -1005,4 +1006,126 @@ test('der Prompt an das Modell verlangt echte Umlaute und zeigt Beispiele mit Um
         expect(system).not.toMatch(/fuer|geaendert|hoechstens|Erklaere|Aufzaehl/)
     }
     expect(SYSTEM).toContain('ergänzt, er läuft grün')
+})
+
+// --- Platz im Band: wenig Platz klappt die Zusammenfassung auf ihre Kopfzeile zu (hooks/band.ts) ---
+
+/** Schiebt die Hoehen der anderen Mods unter; `gewicht` ist die volle Hoehe des Leitstands. */
+function fremdeHoehen(on: On, gewicht: { leitstand: number }) {
+    on('state.get', (_$, e, next) => {
+        const name = e as unknown as { plugin: string; key: string }
+        if (name.plugin !== 'zusammenfassung' && name.key === 'bandHoehe') {
+            const value = name.plugin === 'leitstand' ? { v: BAND_VERSION, voll: gewicht.leitstand, klein: gewicht.leitstand } : undefined
+            return { value: { value, version: value ? 1 : 0 } } as never
+        }
+        return next(e)
+    })
+}
+
+/** Schreibt jede veroeffentlichte Hoehe der Zusammenfassung mit; die Schreibung geht weiter an den Speicher. */
+function bandHoehen(on: On) {
+    const geschrieben: { id: string | undefined; value: unknown }[] = []
+    on('state.set', { plugin: 'zusammenfassung' }, (_$, e, next) => {
+        if (e.key === 'bandHoehe') {
+            geschrieben.push({ id: e.id, value: e.value })
+        }
+        return next(e)
+    })
+    return geschrieben
+}
+
+test('Band: großes fremdes Gewicht zeigt nur die Kopfzeile, kleines den ganzen Block', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, [ANTWORT_MODELL])
+    const gewicht = { leitstand: 13 }
+    fremdeHoehen(on, gewicht)
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    for (const surface of FLAECHEN) {
+        gewicht.leitstand = 13
+        const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+        let text = await leiste(ui as never)
+        expect(text).toContain('Zusammenfassung')
+        expect(text).toContain('3 Änderungen in 2 Dateien')
+        expect(text).not.toContain('Beachte')
+        expect(text).not.toContain(GETAN)
+        expect((await ui.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏷')
+        expect(await ui.find({ type: 'Button', key: 'zf-replay' })).toBeDefined()
+        // Wenig fremdes Gewicht: der ganze Block.
+        gewicht.leitstand = 2
+        await ui.redraw(props())
+        text = await leiste(ui as never)
+        expect(text).toContain(GETAN)
+        expect(text).toContain('Beachte')
+        await ui.unmount()
+    }
+})
+
+test('Band: von Hand aufgeklappt bleibt trotz großem Gewicht offen, nach der nächsten Runde gilt wieder der Platz', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, [ANTWORT_MODELL, 'Ausfuehrlich: Im Test fehlt die Flaeche der App.'])
+    fremdeHoehen(on, { leitstand: 13 })
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(await leiste(ui as never)).not.toContain('Beachte')
+    await ui.press({ key: 'zf-auf' })
+    let text = await leiste(ui as never)
+    expect(text).toContain(BEACHTE)
+    expect(text).toContain('Ausfuehrlich: Im Test fehlt die Flaeche der App.')
+    expect((await ui.find({ type: 'Button', key: 'zf-auf' }))?.props.label).toBe('⏶')
+    // Zugeklappt bleibt sie zu, also wieder nur die Kopfzeile.
+    await ui.press({ key: 'zf-auf' })
+    expect(await leiste(ui as never)).not.toContain('Beachte')
+    // Wieder auf, dann beginnt eine neue Runde (eine reine Antwort): es gilt wieder der Plan.
+    await ui.press({ key: 'zf-auf' })
+    expect(await leiste(ui as never)).toContain(BEACHTE)
+    await $.turn.start({ text: 'und?', turnId: 't2' } as never)
+    await ui.redraw(props())
+    text = await leiste(ui as never)
+    expect(text).toContain('Zusammenfassung')
+    expect(text).not.toContain('Beachte')
+    await ui.unmount()
+})
+
+test('Band: die Höhe geht einmal je Änderung in $.state, einen Takt nach dem Zeichnen, ohne Schleife', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    boden(on, [ANTWORT_MODELL, 'Ausfuehrlich: Im Test fehlt die Flaeche der App.'])
+    fremdeHoehen(on, { leitstand: 13 })
+    const geschrieben = bandHoehen(on)
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT, MULTI])
+    await clock.advance(0)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    expect(geschrieben).toEqual([])
+    await clock.advance(1)
+    // Terminal: Strich, Kopfzeile, Getanes und Hinweis je eine Zeile; klein Strich und Kopfzeile.
+    expect(geschrieben).toEqual([{ id: 'terminal', value: { v: BAND_VERSION, voll: 4, klein: 2 } }])
+    await clock.advance(1)
+    await clock.advance(60_000)
+    await ui.redraw(props())
+    await clock.advance(1)
+    expect(geschrieben).toHaveLength(1)
+
+    // Von Hand aufgeklappt laesst sie sich nicht klein machen: klein gleich voll.
+    await ui.press({ key: 'zf-auf' })
+    await clock.advance(1)
+    await clock.advance(1)
+    expect(geschrieben).toHaveLength(2)
+    const offen = geschrieben[1]!.value as { voll: number; klein: number }
+    expect(offen.voll).toBeGreaterThan(4)
+    expect(offen.klein).toBe(offen.voll)
+
+    // Haelt eine Umfrage das Band, steht nichts: 0.
+    await ui.redraw(props({ hasSurvey: true }))
+    await clock.advance(1)
+    await clock.advance(1)
+    expect(geschrieben.map(g => g.value).at(-1)).toEqual({ v: BAND_VERSION, voll: 0, klein: 0 })
+    expect(geschrieben).toHaveLength(3)
+    await ui.unmount()
 })

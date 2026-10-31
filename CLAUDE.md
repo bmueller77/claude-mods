@@ -218,7 +218,17 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   und Hostnamen an Netz-Stellen (`privacy.ts`), der Passwortschutz nicht.
 - Nächste Schritte seit 0.4.4.0: Antworten, die Claude ausdrücklich anbietet (Antworte/Schreib/Sag + Phrase in
   Anführungszeichen), stehen vorn als hervorgehobene Buttons und gehen mit einem Klick ab. Für Buttons bei
-  Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein".
+  Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein". Seit 0.4.5.0 bekommt auch eine
+  Ja/Nein-Frage am Ende der Antwort ("Soll ich …?") die Buttons Ja und Nein.
+- Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
+  Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
+  zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung
+  in alle fünf, `BAND_VERSION` hochzählen). Jeder Mod veröffentlicht `{ v, voll, klein }` im eigenen
+  `$.state` (`bandHoehe`, Familie je Fläche, geschrieben per `$.clock.after(0)` nur bei Änderung; beim
+  Zeichnen schreiben lehnt die Engine ab) und liest die der anderen (fremdes Lesen geht ohne
+  `dependencies`). `plane` wählt für alle dieselbe Stufe: Zusammenfassung klein, dann Nächste Schritte
+  einzeilig, dann faltet der Leitstand wie in Normal; passt nichts, scrollt das Band. Die Hooks liegen in
+  Ladereihenfolge, auf jeder Instanz anders; die Lösung hängt nicht davon ab.
 
 ## Offen (Stand 2026-10-26, nach dem Live-Test am PC)
 
@@ -276,6 +286,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Zusammenfassung (`marginTop={0.2}`).
 11. Live-Test ausstehend (2026-10-31): Warteschlangen-Toasts, "Braucht dich" erst nach der Plan-Nachricht,
    Detailliert mit allen Schritten, App-Liste nur am Ende (erreicht `$.mcp.call` den Server `ccd_turn`?),
-   Antwort-Buttons in Nächste Schritte, IPs/Hostnamen im Schloss. Als Nächstes geplant: Platz-Regel, damit
-   das Band in der App nie scrollt (jeder Mod meldet seine Höhe, Reihenfolge Zusammenfassung, Nächste
-   Schritte, Leitstand), und Ja/Nein-Buttons bei Ja/Nein-Fragen in Nächste Schritte.
+   Antwort-Buttons in Nächste Schritte, IPs/Hostnamen im Schloss. Dazu die Platz-Regel (leitstand 0.63.5.0,
+   statistik 0.19.5.0, zusammenfassung 0.7.4.0, naechste-schritte 0.4.5.0, modellwahl 0.3.4.0) und die
+   Ja/Nein-Buttons. Risiko: `zeilenVon` schätzt die Button-Reihe des Leitstands am Desktop eher zu hoch
+   (bei 80 Spalten 4,8 Zeilen); faltet Detailliert ohne Not, die Breitenschätzung in `band.ts` eichen.

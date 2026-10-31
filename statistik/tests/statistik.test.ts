@@ -26,6 +26,7 @@ import {
     wochentagZeit,
     zusammenfassungKopf,
 } from '../hooks/register'
+import { BAND_VERSION } from '../hooks/band'
 
 const FLAECHEN = ['terminal', 'desktop'] as const
 const BAND = { plugin: 'statistik', component: 'AbovePrompt' } as const
@@ -120,6 +121,7 @@ function boden(on: On, stand: Stand) {
     const pings: Ping[] = []
     const naechsterPing: Ping = { read: 40_000, write: 20 }
     const logs: string[] = []
+    const debug: string[] = []
     const eingaben: string[] = []
     const befehle: string[] = []
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
@@ -169,7 +171,12 @@ function boden(on: On, stand: Stand) {
         return { text: '' }
     })
     on('ui.log', (_$, e, _next) => {
-        logs.push(String(e.text))
+        // Nur Zeilen im Verlauf; das Debug-Log (etwa die Hoehe im Band) sieht Bjoern nicht.
+        if (e.to !== 'debug') {
+            logs.push(String(e.text))
+        } else {
+            debug.push(String(e.text))
+        }
         return { value: undefined }
     })
     on('ui.status', (_$, _e, _next) => ({ value: undefined }))
@@ -224,7 +231,7 @@ function boden(on: On, stand: Stand) {
         }
         return h(Text, {}, 'engine') as RenderElement
     })
-    return { pings, naechsterPing, logs, eingaben, befehle, abrufe, angemeldet, sicherungen }
+    return { pings, naechsterPing, logs, debug, eingaben, befehle, abrufe, angemeldet, sicherungen }
 }
 
 type T$ = {
@@ -2480,4 +2487,85 @@ test('nach /clear gibt es keine Zusammenfassung mehr', async ($, on) => {
     expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe('Die Zusammenfassung vom letzten Verdichten steht im Fenster "Zusammenfassung vom Verdichten".')
     await $.classic.SessionStart({ source: 'clear' } as never)
     expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(OHNE_ZUSAMMENFASSUNG)
+})
+
+// --- Hoehe im Band: die Statistik veroeffentlicht sie je Flaeche fuer die Mods, die danach planen ---
+
+/** Schreibt jede veroeffentlichte Hoehe der Statistik mit; die Schreibung geht weiter an den Speicher. */
+function bandHoehen(on: On) {
+    const geschrieben: { id: string | undefined; value: unknown }[] = []
+    on('state.set', { plugin: 'statistik' }, (_$, e, next) => {
+        if (e.key === 'bandHoehe') {
+            geschrieben.push({ id: e.id, value: e.value })
+        }
+        return next(e)
+    })
+    return geschrieben
+}
+
+const breit = (bodyColumns: number) => ({ ...(props() as object), bodyColumns }) as never
+const hoehe = (zeilen: number) => ({ v: BAND_VERSION, voll: zeilen, klein: zeilen })
+
+test('Band: die Höhe geht genau einmal je Änderung in $.state, einen Takt nach dem Zeichnen, ohne Schleife', async ($, on) => {
+    const clock = mock.clock(on, { now: JETZT })
+    mock.store(on, {})
+    const b = boden(on, { tokens: 40_000, fenster: 200_000, schwelle: 166_000, limits: LIMITS })
+    const geschrieben = bandHoehen(on)
+    await start($ as never)
+    await runde($ as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    expect(geschrieben).toEqual([])
+    await clock.advance(1)
+    // Darunter zeichnet ein Mod ("engine"): Linie 15 px und die Zeile.
+    expect(geschrieben).toEqual([{ id: 'desktop', value: hoehe(1.75) }])
+    await clock.advance(1)
+    await clock.advance(5 * MIN)
+    expect(geschrieben).toHaveLength(1)
+    // Eine Debug-Zeile je Aenderung, mit dem, was die App dem Band gibt.
+    expect(b.debug).toEqual(['statistik: Band desktop, maxRows 10, bodyRows 10, Spalten 120, eigene Hoehe 1.75'])
+    expect(b.logs).toEqual([])
+
+    // Haelt eine Umfrage das Band, zeichnet die Statistik nichts: 0.
+    await ui.redraw(props({ hasSurvey: true }))
+    await clock.advance(1)
+    await clock.advance(MIN)
+    expect(geschrieben.map(g => g.value)).toEqual([hoehe(1.75), hoehe(0)])
+    await ui.redraw(props())
+    await clock.advance(1)
+    await clock.advance(MIN)
+    expect(geschrieben.map(g => g.value)).toEqual([hoehe(1.75), hoehe(0), hoehe(1.75)])
+    expect(b.debug).toHaveLength(3)
+    await ui.unmount()
+})
+
+test('Band: Höhe je Fläche, im Terminal 1 ohne und 2 mit Strich; schmal rutschen die Limits in eine zweite Zeile', async ($, on) => {
+    const clock = mock.clock(on, { now: JETZT })
+    mock.store(on, {})
+    const stand: Stand = { tokens: 40_000, fenster: 200_000, schwelle: 166_000, limits: LIMITS, unten: 'allein' }
+    boden(on, stand)
+    const geschrieben = bandHoehen(on)
+    await start($ as never)
+    await runde($ as never)
+    // Nur die Vorschlaege von unten: kein Strich, eine Zeile.
+    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    await clock.advance(1)
+    expect(geschrieben).toEqual([{ id: 'terminal', value: hoehe(1) }])
+    // Ein Mod darunter zeichnet etwas: Strich und Zeile.
+    stand.unten = undefined
+    await terminal.redraw(props())
+    await clock.advance(1)
+    expect(geschrieben.at(-1)).toEqual({ id: 'terminal', value: hoehe(2) })
+    // Schmal: die Limits rutschen in eine eigene Zeile.
+    await terminal.redraw(breit(60))
+    await clock.advance(1)
+    expect(geschrieben.at(-1)).toEqual({ id: 'terminal', value: hoehe(3) })
+    // Die Desktop-App zaehlt fuer sich.
+    const desktop = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    await clock.advance(1)
+    expect(geschrieben.at(-1)).toEqual({ id: 'desktop', value: hoehe(1.75) })
+    await desktop.redraw(breit(60))
+    await clock.advance(1)
+    expect(geschrieben.at(-1)).toEqual({ id: 'desktop', value: hoehe(2.75) })
+    await terminal.unmount()
+    await desktop.unmount()
 })

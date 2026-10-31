@@ -114,6 +114,13 @@ export type Zusammenfassung = {
     tokensNachher?: number
 }
 
+/**
+ * Hoehe des eigenen Teils im Band ueber dem Eingabefeld, je Flaeche: dieselbe Form wie
+ * `BandHoehe` in hooks/band.ts. Terminal ganze Zeilen, Desktop Zeilen zu 20 px mit Bruchteilen.
+ * Die Statistik kann sich nicht klein machen: `klein` ist gleich `voll`, 0 und 0, wenn sie nichts zeichnet.
+ */
+export type BandHoehe = { v: number; voll: number; klein: number }
+
 declare module 'claude-code' {
     interface PluginState {
         statistik: {
@@ -134,6 +141,8 @@ declare module 'claude-code' {
             countdown: Countdown | null
             /** Die Zusammenfassung vom letzten Compact, nur die letzte; null, solange in diesem Chat keiner lief. */
             zusammenfassung: Zusammenfassung | null
+            /** Die Hoehe der eigenen Zeile im Band, je Flaeche (`id` = `e.surface`); andere Mods planen damit ihren Platz. */
+            bandHoehe: StateFamily<BandHoehe>
         }
     }
 }

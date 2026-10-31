@@ -8,6 +8,7 @@ import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, m
 import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
+import { BAND_VERSION } from '../hooks/band'
 
 /** A time on Berlin's wall clock as a moment: what the Leitstand shows on every machine, on UTC servers too. */
 const berlinZeit = (year: number, month: number, date: number, hours = 0, minutes = 0, seconds = 0) => {
@@ -1974,7 +1975,8 @@ test('a long plan says how many steps are out of view', async ($, on) => {
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'] })
   await callTool($, { tool: PROGRESS, task: 'Three', percent: 100 })
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 4 }, surface: 'terminal' })
+  // Five rows: the line over the band, the header, two for the steps and the row of buttons.
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 5 }, surface: 'terminal' })
   const shown = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await ui.unmount()
   expect(shown).toContain('… 3 davor · 4 weitere Schritte')
@@ -2000,6 +2002,143 @@ test('a long plan folds its finished steps and the ones after next, so the band 
   await callTool($, { tool: PROGRESS, task: 'B2', percent: 100 })
   const short = (await texts($, 'terminal')).join('\n')
   for (const name of ['A1', 'B2', 'C3', 'D4', 'E5']) expect(short).toContain(name)
+})
+
+// --- Room in the band: the other mods publish their heights (hooks/band.ts), Leitstand plans its part by them ---
+
+/** Answers the other mods' `bandHoehe` with `heights` (by plugin name), as they would have published it. */
+function otherBandHeights(on: On, heights: Record<string, { voll: number; klein: number }>) {
+  on('state.get', (_$, e, next) => {
+    const ref = e as unknown as { plugin: string; key: string }
+    const one = heights[ref.plugin]
+    if (ref.key === 'bandHoehe' && one !== undefined) return { value: { value: { v: BAND_VERSION, ...one }, version: 1 } } as never
+    return next(e)
+  })
+}
+
+/** Every height Leitstand publishes, with its surface; the write goes on to the state. */
+function publishedBandHeights(on: On) {
+  const written: { id: string | undefined; value: unknown }[] = []
+  on('state.set', { plugin: 'leitstand' }, (_$, e, next) => {
+    if (e.key === 'bandHoehe') written.push({ id: e.id, value: e.value })
+    return next(e)
+  })
+  return written
+}
+
+/** The band's words on `surface`, mounted with these props over the usual ones. */
+async function bandWords($: Engine, surface: (typeof SURFACES)[number], props: object = {}): Promise<string> {
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface })
+  const found = (await ui.findAll({ type: 'Text' })).map(one => one.text)
+  await ui.unmount()
+  return found.join('\n')
+}
+
+const SEVEN_STEPS = ['Notizen lesen', 'Tabelle bauen', 'Seite prüfen', 'Formular bauen', 'Fußzeile setzen', 'Menü bauen', 'Handys prüfen']
+
+test('Details folds a long plan as Simple does only when the band runs short of room', async ($, on) => {
+  world(on)
+  const heights: Record<string, { voll: number; klein: number }> = {}
+  otherBandHeights(on, heights)
+  await detailsOn($)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: SEVEN_STEPS })
+  await callTool($, { tool: PROGRESS, task: 'Seite prüfen', percent: 100 })
+  // Wide enough for the desktop's row of buttons to stand on one line.
+  const tall = { bodyColumns: 120, maxRows: 14, scroll: { offset: 0, bodyRows: 14 } }
+  for (const surface of SURFACES) {
+    // The other mods take little: every step has its own line.
+    for (const key of Object.keys(heights)) delete heights[key]
+    heights.statistik = { voll: 1, klein: 1 }
+    const roomy = await bandWords($, surface, tall)
+    for (const name of SEVEN_STEPS) expect(roomy).toContain(name)
+    expect(roomy).not.toContain('3 Schritte fertig')
+    expect(roomy).not.toContain('weitere Schritte')
+
+    // The summary and the next steps take much, and small they still leave too little: the finished steps fold into
+    // a line, and the ones after next too.
+    heights.statistik = { voll: 2, klein: 2 }
+    heights.zusammenfassung = { voll: 4, klein: 1 }
+    heights['naechste-schritte'] = { voll: 4, klein: 2 }
+    const short = await bandWords($, surface, tall)
+    expect(short).toContain('3 Schritte fertig')
+    expect(short).toContain(surface === 'terminal' ? '2 weitere Schritte' : '2 weitere Schritte im Plan')
+    expect(short).toContain('Formular bauen')
+    expect(short).toContain('Fußzeile setzen')
+    for (const name of ['Notizen lesen', 'Tabelle bauen', 'Seite prüfen', 'Menü bauen', 'Handys prüfen']) expect(short).not.toContain(name)
+  }
+})
+
+test('the steps get the rows the other mods leave in the band, and say how many are out of view', VIEW_SIMPLE, async ($, on) => {
+  world(on)
+  const heights: Record<string, { voll: number; klein: number }> = {}
+  otherBandHeights(on, heights)
+  await $.turn.start({ text: 'Fix the menu', turnId: 't1' })
+  const five = ['Menü lesen', 'Menü bauen', 'Menü prüfen', 'Menü testen', 'Menü zeigen']
+  await callTool($, { tool: PLAN, steps: five })
+  for (const surface of SURFACES) {
+    for (const key of Object.keys(heights)) delete heights[key]
+    const roomy = await bandWords($, surface, { bodyColumns: 120 })
+    for (const name of five) expect(roomy).toContain(name)
+    expect(roomy).not.toContain('weitere Schritte')
+
+    // Statistik takes five of the twelve rows: the current step stays, the last ones make way for the line that says so.
+    heights.statistik = { voll: 5, klein: 5 }
+    const short = await bandWords($, surface, { bodyColumns: 120 })
+    expect(short).toContain('Menü lesen')
+    expect(short).not.toContain('Menü zeigen')
+    expect(short).toMatch(/\d weitere Schritte?/)
+  }
+})
+
+test('Leitstand publishes its height in the band once per change, a tick after drawing, without a loop', async ($, on) => {
+  const clock = world(on)
+  const written = publishedBandHeights(on)
+  const debug: string[] = []
+  on('ui.log', (_$, e) => {
+    if (e.to === 'debug') debug.push(String(e.text))
+    return { value: undefined }
+  })
+  // What the engine draws under the mods; under a survey the band is only that.
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Box', props: {}, children: [] }) as never)
+  await detailsOn($)
+  await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+  await callTool($, { tool: PLAN, steps: SEVEN_STEPS })
+  await callTool($, { tool: PROGRESS, task: 'Seite prüfen', percent: 100 })
+  for (const surface of SURFACES) {
+    written.length = 0
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(written).toEqual([])
+    await clock.advance(1)
+    expect(written).toHaveLength(1)
+    const first = written[0]!
+    expect(first.id).toBe(surface)
+    const { v, voll, klein } = first.value as { v: number; voll: number; klein: number }
+    expect(v).toBe(BAND_VERSION)
+    // In Details all seven steps have their own line; folded, the three finished and the two after next take one each:
+    // three rows fewer, in the desktop app rows of 21 px, as hooks/band.ts measures a step's line there.
+    expect(Math.round((voll - klein) * 1000) / 1000).toBe(surface === 'terminal' ? 3 : 3.15)
+    // The ticker draws the band again and again; the height stays, so nothing more is written.
+    await clock.advance(1)
+    await clock.advance(60_000)
+    expect(written).toHaveLength(1)
+
+    // A survey holds the band: Leitstand draws nothing there, 0 and 0; back, the height as before.
+    await ui.redraw({ ...BAND.props, hasSurvey: true })
+    await clock.advance(1)
+    await clock.advance(10_000)
+    expect(written.map(one => one.value)).toEqual([first.value, { v: BAND_VERSION, voll: 0, klein: 0 }])
+    await ui.redraw({ ...BAND.props })
+    await clock.advance(1)
+    await clock.advance(10_000)
+    expect(written.map(one => one.value)).toEqual([first.value, { v: BAND_VERSION, voll: 0, klein: 0 }, first.value])
+    await ui.unmount()
+  }
+  // The stage the band is planned at goes to the debug log once per surface, not with every draw.
+  expect(debug).toHaveLength(2)
+  for (const [at, surface] of SURFACES.entries()) {
+    expect(debug[at]).toMatch(new RegExp(`^leitstand: Band ${surface}, Budget 12, Summe [0-9.]+, Stufe [0-3], passt (ja|nein)$`))
+  }
 })
 
 test('names in any script line up: CJK and emoji take two cells', () => {
@@ -7222,15 +7361,15 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(lines[places]!.startsWith('\u{1F465}')).toBe(true)
     expect(lines.filter(line => widthOf(line) > 75)).toEqual([])
 
-    // The steps keep the room the two lines leave: header, four steps, two lines of buttons in seven rows (the
-    // Autopilot's line and the line over the band are not counted), and with one row fewer one step makes way for
-    // the line that says so.
+    // The steps keep the room the two lines leave: header, four steps, two lines of buttons in seven rows, and the
+    // Autopilot's line and the line over the band in two more (both Leitstand's own, so they count, hooks/band.ts);
+    // with one row fewer one step makes way for the line that says so.
     const steps = ['Lies die Notizen', 'Baue die Tabelle', 'Prüfe die Seite', 'Schreib die Doku']
     const band = (lines: string[]) => lines.slice(lines.findIndex(line => line.startsWith('─')) + 1)
-    const roomy = band(await terminalLines($, { bodyColumns: 75, maxRows: 7 }))
+    const roomy = band(await terminalLines($, { bodyColumns: 75, maxRows: 9 }))
     expect(roomy.length).toBe(7)
     for (const step of steps) expect(roomy.join('\n')).toContain(step)
-    const tight = band(await terminalLines($, { bodyColumns: 75, maxRows: 6 }))
+    const tight = band(await terminalLines($, { bodyColumns: 75, maxRows: 8 }))
     expect(tight.length).toBe(6)
     expect(tight.join('\n')).toContain('Lies die Notizen')
     expect(tight.join('\n')).toMatch(/… \d+ weitere Schritte?/)

@@ -370,9 +370,23 @@ export type FiletreeTheme = {
   bg: string
 }
 
+/**
+ * How many rows a mod's part of the band over the prompt takes, per surface: the same shape as `BandHoehe` in
+ * hooks/band.ts. Whole rows on the terminal, rows of 20 px with fractions in the desktop app. `voll` as the mod draws
+ * it now, `klein` made small (Leitstand folded as in Simple); 0 and 0 while it draws nothing.
+ */
+export type BandHoehe = { v: number; voll: number; klein: number }
+
 declare module 'claude-code' {
   interface PluginState {
+    // The other mods in the band publish their height there too; Leitstand reads it to plan its room (hooks/band.ts).
+    statistik: { bandHoehe: StateFamily<BandHoehe> }
+    zusammenfassung: { bandHoehe: StateFamily<BandHoehe> }
+    'naechste-schritte': { bandHoehe: StateFamily<BandHoehe> }
+    modellwahl: { bandHoehe: StateFamily<BandHoehe> }
     'leitstand': {
+      /** The rows Leitstand's own part of the band takes, per surface (`id` = `e.surface`); the other mods plan by it. */
+      bandHoehe: StateFamily<BandHoehe>
       glanceEnabled: boolean
       /** `simple`: steps, progress and time. `detailed`: also time, tokens, cache and plan usage. */
       detailLevel: 'simple' | 'detailed' | 'minimal'

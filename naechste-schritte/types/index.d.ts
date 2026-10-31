@@ -28,11 +28,25 @@ export type Vorschlaege = {
     eintraege: (Eintrag | string)[]
 }
 
+/**
+ * Was ein Mod unter `bandHoehe` je Flaeche veroeffentlicht, wortgleich mit `BandHoehe` in hooks/band.ts:
+ * Zeilen seines Teils im Band, Terminal ganze Zeilen, Desktop Zeilen zu 20 px mit Bruchteilen.
+ * Naechste-Schritte: `voll` mehrzeilig, `klein` einzeilig, je mit Trennstrich; 0 und 0, wenn nichts steht.
+ */
+export type BandHoehe = { v: number; voll: number; klein: number }
+
 declare module 'claude-code' {
     interface PluginState {
         'naechste-schritte': {
             /** Die Vorschlaege, solange sie gelten; null, sobald etwas abgeschickt wurde oder eine Runde laeuft. */
             vorschlaege: Vorschlaege | null
+            /** Die Hoehe des eigenen Blocks im Band, je Flaeche (`id` = `e.surface`); andere Mods planen damit ihren Platz. */
+            bandHoehe: StateFamily<BandHoehe>
         }
+        // Fremde Hoehen, nur gelesen (keine dependencies): jeder Mod veroeffentlicht seine unter bandHoehe.
+        leitstand: { bandHoehe: StateFamily<BandHoehe> }
+        statistik: { bandHoehe: StateFamily<BandHoehe> }
+        zusammenfassung: { bandHoehe: StateFamily<BandHoehe> }
+        modellwahl: { bandHoehe: StateFamily<BandHoehe> }
     }
 }

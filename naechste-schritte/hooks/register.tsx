@@ -8,9 +8,11 @@
 // haengt er seinen Block selbst unter alles andere; steht er innen, findet die Statistik den
 // Block am Schluessel BLOCK und setzt ihn unter sich.
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import type { Eintrag, Vorschlaege } from '../types'
+import type { BandHoehe, Eintrag, Vorschlaege } from '../types'
+import { BAND_VERSION, bandBudget, plane, zeilenVon } from './band'
+import type { BandHoehen } from './band'
 
 const MODELL = 'haiku'
 const MAX_EINTRAEGE = 3
@@ -31,6 +33,53 @@ const LUECKE = ' '.repeat(VORSPANN.length)
 const TRENNLINIE_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="15" viewBox="0 0 4000 15" preserveAspectRatio="none">' +
     '<rect x="0" y="7" width="4000" height="1" fill="#8a8a8a" fill-opacity="0.5"/></svg>'
+
+/** Je Flaeche: die zuletzt veroeffentlichte und die geplante Hoehe im Band. */
+type BandMerker = { veroeffentlicht: Map<RenderSurface, BandHoehe>; geplant: Map<RenderSurface, BandHoehe> }
+
+const gleich = (a: BandHoehe | undefined, b: BandHoehe) => a !== undefined && a.voll === b.voll && a.klein === b.klein
+
+/**
+ * Veroeffentlicht die Hoehe des eigenen Blocks im Band, je Flaeche, fuer die Mods, die ihren Platz
+ * danach planen (hooks/band.ts). Beim Zeichnen darf kein Hook schreiben: geschrieben wird einen
+ * Takt spaeter und nur, wenn sich die Hoehe aendert; sonst zeichnet jede Schreibung neu und plant
+ * die naechste.
+ */
+function meldeBandHoehe($: EngineInterface, band: BandMerker, flaeche: RenderSurface, voll: number, klein: number): void {
+    const hoehe: BandHoehe = { v: BAND_VERSION, voll, klein }
+    const geplant = band.geplant.get(flaeche)
+    if (gleich(geplant ?? band.veroeffentlicht.get(flaeche), hoehe)) {
+        return
+    }
+    band.geplant.set(flaeche, hoehe)
+    if (geplant) {
+        return
+    }
+    $.clock.after(0, () => {
+        const g = band.geplant.get(flaeche)
+        band.geplant.delete(flaeche)
+        if (!g || gleich(band.veroeffentlicht.get(flaeche), g)) {
+            return
+        }
+        band.veroeffentlicht.set(flaeche, g)
+        void $.state.set({ plugin: 'naechste-schritte', key: 'bandHoehe', id: flaeche }, g).catch(() => {
+            band.veroeffentlicht.delete(flaeche)
+        })
+    })
+}
+
+/** Die Hoehen der anderen Mods im Band dieser Flaeche; was fehlt oder nicht lesbar ist, zaehlt 0. */
+async function fremdeHoehen($: EngineInterface, flaeche: RenderSurface): Promise<BandHoehen> {
+    // Je Mod ein eigener Aufruf: Plugin und Schluessel muessen an der Stelle als Text dastehen.
+    const sicher = (p: Promise<{ value?: BandHoehe | null }>) => p.then(r => r.value ?? null).catch(() => null)
+    const [leitstand, statistik, zusammenfassung, modellwahl] = await Promise.all([
+        sicher($.state.get({ plugin: 'leitstand', key: 'bandHoehe', id: flaeche })),
+        sicher($.state.get({ plugin: 'statistik', key: 'bandHoehe', id: flaeche })),
+        sicher($.state.get({ plugin: 'zusammenfassung', key: 'bandHoehe', id: flaeche })),
+        sicher($.state.get({ plugin: 'modellwahl', key: 'bandHoehe', id: flaeche })),
+    ])
+    return { leitstand, statistik, zusammenfassung, modellwahl }
+}
 
 // Beim Host gehalten, so ueberleben die Vorschlaege ein Neuladen des Moduls.
 const vorschlaege = atom({ plugin: 'naechste-schritte', key: 'vorschlaege' } as const, null as Vorschlaege | null)
@@ -213,7 +262,8 @@ export function uebersicht(id: string | null = null): string {
         '- Im Terminal: Tipp 1, 2 oder 3 ins leere Eingabefeld, dann steht der Vorschlag dort als Entwurf; Enter schickt ihn ab. ' +
             'Willst du wirklich nur eine Ziffer schicken, füge sie aus der Zwischenablage ein, statt sie zu tippen.',
         '- Überall: /naechste-schritte:1 bis :3 schicken den Vorschlag sofort als deine Nachricht ab, /naechste-schritte:zeigen listet die Vorschläge als Text.',
-        '- Bietet Claude Antworten ausdrücklich an (etwa Antworte "ja"), stehen sie vorn, und ein Klick oder die Ziffer schickt sie sofort ab.',
+        '- Bietet Claude Antworten ausdrücklich an (etwa Antworte "ja"), stehen sie vorn, und ein Klick oder die Ziffer schickt sie sofort ab. Endet die Antwort mit einer Ja/Nein-Frage, gibt es ebenso Ja und Nein.',
+        '- Ist die Leiste über dem Eingabefeld knapp, weil andere Mods dort viel zeigen, rücken die Vorschläge in eine Zeile.',
         '- Die Vorschläge verschwinden, sobald du etwas abschickst, und kommen nach der nächsten Antwort neu. ' +
             'Solange Claude Code selbst eine Frage mit Auswahl in der Leiste zeigt, sind sie ausgeblendet, und Ziffern gehen an diese Frage.',
         '',
@@ -355,8 +405,10 @@ export const register: Register = on => {
             return r
         }
         // Was Claude ausdruecklich anbietet, steht sofort da, auch nach einer kurzen Antwort und
-        // waehrend Agenten laufen; Haikus Vorschlaege kommen spaeter dahinter.
-        const angeboten = angeboteneAntworten(e.answer)
+        // waehrend Agenten laufen; Haikus Vorschlaege kommen spaeter dahinter. Ohne ausdrueckliches
+        // Angebot bietet eine Ja/Nein-Frage am Schluss Ja und Nein an.
+        const ausdruecklich = angeboteneAntworten(e.answer)
+        const angeboten = (ausdruecklich.length > 0 ? ausdruecklich : jaNeinAntworten(e.answer))
             .slice(0, MAX_EINTRAEGE)
             .map((text): Eintrag => ({ text, art: 'angeboten' }))
         if (angeboten.length > 0) {
@@ -392,12 +444,16 @@ export const register: Register = on => {
         return next({ ...e, inputText: wahl.text }) // ein Entwurf: bearbeiten oder mit Enter abschicken
     })
 
+    // Was dieses Laden zuletzt als Hoehe im Band veroeffentlicht oder geplant hat (meldeBandHoehe).
+    const band: BandMerker = { veroeffentlicht: new Map(), geplant: new Map() }
+
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
         const rest = await next(e) // was andere Mods und Claude Code hier zeichnen, bleibt
         hatUmfrage = e.props.hasSurvey
         const v = await read($, vorschlaege)
         const liste = eintraegeVon(v)
         if (e.props.hasSurvey || e.props.isWorking || liste.length === 0) {
+            meldeBandHoehe($, band, e.surface, 0, 0)
             return rest
         }
 
@@ -405,9 +461,7 @@ export const register: Register = on => {
         const { Box, Text, Button } = elemente
         // Bilder zeichnet nur die App; das Terminal fuehrt Svg zwar, zeichnet es aber nicht.
         const Svg = e.surface === 'desktop' && 'Svg' in elemente ? elemente.Svg : null
-        const einzeilig =
-            // Einer je Zeile braucht je eine Zeile; ein niedriges Band bekommt die eine, am Ende gekuerzt.
-            passtInEineZeile(liste.map(t => t.text), e.props.bodyColumns) || e.props.maxRows < liste.length + 3
+        const inEiner = passtInEineZeile(liste.map(t => t.text), e.props.bodyColumns)
 
         // Wie die getippte Ziffer: der Vorschlag als Entwurf. Der Knopf behaelt nach dem Klick aber
         // den Fokus und Enter drueckt ihn erneut; steht der Vorschlag schon im Feld, schickt der
@@ -434,69 +488,73 @@ export const register: Register = on => {
             }
         }
 
-        let zeilen
-        if (e.surface === 'desktop') {
-            // In der App Knoepfe statt Ziffern. Gekuerzt wird dort nur ein einzelner Text in fester Breite,
-            // buendig nur ohne Leerzeichen: die Schrift ist proportional.
-            const breite = Math.max(20, e.props.bodyColumns) // ohne Rand: buendig mit der Statistik darueber
-            // Ziffern-Emoji: so breit wie die anderen Emoji-Knoepfe, alle drei gleich.
-            // Was Claude angeboten hat, bekommt einen hervorgehobenen Knopf: er schickt sofort ab.
-            const knopf = (i: number) => (
-                <Box flexShrink={0}>
-                    <Button
-                        key={`naechste-schritte-${i + 1}`}
-                        label={`${i + 1}️⃣`}
-                        {...(liste[i]?.art === 'angeboten' ? { variant: 'primary' as const } : {})}
-                        onPress={() => void hole(i).catch(() => undefined)}
-                    />
-                </Box>
-            )
-            zeilen = einzeilig ? (
-                <Box flexDirection="row" gap={1} alignItems="center" width={breite}>
-                    {liste.flatMap((t, i) => [
-                        ...(i > 0 ? [<Text dimColor>·</Text>] : []),
-                        knopf(i),
-                        <Box flexShrink={1} minWidth={0}>
-                            <Text wrap="truncate-end">{t.text}</Text>
-                        </Box>,
-                    ])}
-                </Box>
-            ) : (
-                // Die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile: 1.2 halbe Zeilen dazwischen lassen
-                // 4 Pixel frei, sonst schieben sich die Knoepfe uebereinander.
-                <Box flexDirection="column" rowGap={1.2} width={breite}>
-                    {liste.map((t, i) => (
-                        <Box flexDirection="row" gap={1} alignItems="center">
-                            {knopf(i)}
-                            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+        const baueZeilen = (einzeilig: boolean) => {
+            let zeilen
+            if (e.surface === 'desktop') {
+                // In der App Knoepfe statt Ziffern. Gekuerzt wird dort nur ein einzelner Text in fester Breite,
+                // buendig nur ohne Leerzeichen: die Schrift ist proportional.
+                const breite = Math.max(20, e.props.bodyColumns) // ohne Rand: buendig mit der Statistik darueber
+                // Ziffern-Emoji: so breit wie die anderen Emoji-Knoepfe, alle drei gleich.
+                // Was Claude angeboten hat, bekommt einen hervorgehobenen Knopf: er schickt sofort ab.
+                const knopf = (i: number) => (
+                    <Box flexShrink={0}>
+                        <Button
+                            key={`naechste-schritte-${i + 1}`}
+                            label={`${i + 1}️⃣`}
+                            {...(liste[i]?.art === 'angeboten' ? { variant: 'primary' as const } : {})}
+                            onPress={() => void hole(i).catch(() => undefined)}
+                        />
+                    </Box>
+                )
+                zeilen = einzeilig ? (
+                    <Box flexDirection="row" gap={1} alignItems="center" width={breite}>
+                        {liste.flatMap((t, i) => [
+                            ...(i > 0 ? [<Text dimColor>·</Text>] : []),
+                            knopf(i),
+                            <Box flexShrink={1} minWidth={0}>
                                 <Text wrap="truncate-end">{t.text}</Text>
+                            </Box>,
+                        ])}
+                    </Box>
+                ) : (
+                    // Die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile: 1.2 halbe Zeilen dazwischen lassen
+                    // 4 Pixel frei, sonst schieben sich die Knoepfe uebereinander.
+                    <Box flexDirection="column" rowGap={1.2} width={breite}>
+                        {liste.map((t, i) => (
+                            <Box flexDirection="row" gap={1} alignItems="center">
+                                {knopf(i)}
+                                <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                                    <Text wrap="truncate-end">{t.text}</Text>
+                                </Box>
                             </Box>
-                        </Box>
-                    ))}
-                </Box>
-            )
-        } else {
-            const trenner = <Text dimColor>{'  ·  '}</Text>
-            // Was Claude angeboten hat, steht fett: die Ziffer schickt es sofort ab.
-            const eintrag = (t: Eintrag, i: number) => [
-                <Text color="cyan" bold>{`${i + 1} `}</Text>,
-                t.art === 'angeboten' ? <Text bold>{t.text}</Text> : <Text>{t.text}</Text>,
-            ]
-            zeilen = einzeilig ? (
-                <Text wrap="truncate-end">
-                    <Text dimColor>{VORSPANN}</Text>
-                    {liste.flatMap((t, i) => [...(i > 0 ? [trenner] : []), ...eintrag(t, i)])}
-                </Text>
-            ) : (
-                <Box flexDirection="column">
-                    {liste.map((t, i) => (
-                        <Text wrap="truncate-end">
-                            <Text dimColor>{i === 0 ? VORSPANN : LUECKE}</Text>
-                            {eintrag(t, i)}
-                        </Text>
-                    ))}
-                </Box>
-            )
+                        ))}
+                    </Box>
+                )
+            } else {
+                const trenner = <Text dimColor>{'  ·  '}</Text>
+                // Was Claude angeboten hat, steht fett: die Ziffer schickt es sofort ab.
+                const eintrag = (t: Eintrag, i: number) => [
+                    <Text color="cyan" bold>{`${i + 1} `}</Text>,
+                    t.art === 'angeboten' ? <Text bold>{t.text}</Text> : <Text>{t.text}</Text>,
+                ]
+                zeilen = einzeilig ? (
+                    <Text wrap="truncate-end">
+                        <Text dimColor>{VORSPANN}</Text>
+                        {liste.flatMap((t, i) => [...(i > 0 ? [trenner] : []), ...eintrag(t, i)])}
+                    </Text>
+                ) : (
+                    <Box flexDirection="column">
+                        {liste.map((t, i) => (
+                            <Text wrap="truncate-end">
+                                <Text dimColor>{i === 0 ? VORSPANN : LUECKE}</Text>
+                                {eintrag(t, i)}
+                            </Text>
+                        ))}
+                    </Box>
+                )
+            }
+
+            return zeilen
         }
 
         // Ein Trennstrich ueber den Vorschlaegen: in der App 1 Pixel mit je 7 Pixeln Luft,
@@ -511,12 +569,25 @@ export const register: Register = on => {
             </Text>
         )
         // In der App ohne Rand: die Knoepfe stehen buendig mit Statistik und Zusammenfassung.
-        const block = (
-            <Box key={BLOCK} flexDirection="column">
-                {trennlinie}
-                {e.surface === 'desktop' ? <Box>{zeilen}</Box> : <Box paddingX={1}>{zeilen}</Box>}
-            </Box>
-        )
+        const baueBlock = (einzeilig: boolean) => {
+            const zeilen = baueZeilen(einzeilig)
+            return (
+                <Box key={BLOCK} flexDirection="column">
+                    {trennlinie}
+                    {e.surface === 'desktop' ? <Box>{zeilen}</Box> : <Box paddingX={1}>{zeilen}</Box>}
+                </Box>
+            )
+        }
+        // Einer je Zeile braucht je eine Zeile. Ist das Band zu knapp fuer alles, was die Mods dort
+        // zeigen, rueckt alles in eine Zeile, am Ende gekuerzt (Stufe 2 von plane in hooks/band.ts).
+        const klein = baueBlock(true)
+        const hoeheKlein = zeilenVon(klein, e.surface, e.props.bodyColumns)
+        const voll = inEiner ? klein : baueBlock(false)
+        const hoeheVoll = inEiner ? hoeheKlein : zeilenVon(voll, e.surface, e.props.bodyColumns)
+        meldeBandHoehe($, band, e.surface, hoeheVoll, hoeheKlein)
+        const fremde = await fremdeHoehen($, e.surface)
+        const plan = plane(bandBudget(e.surface, e.props), e.surface, { ...fremde, naechsteSchritte: { v: BAND_VERSION, voll: hoeheVoll, klein: hoeheKlein } })
+        const block = inEiner || plan.naechsteKlein ? klein : voll
         if (!rest) {
             return block
         }
@@ -724,6 +795,69 @@ export function angeboteneAntworten(antwort: string): string[] {
         }
     }
     return aus
+}
+
+// --- Ja/Nein-Fragen ---
+
+/** So beginnt eine deutsche Ja/Nein-Frage: ein Verb oder eine typische Einleitung. */
+const JA_NEIN_DE = new Set([
+    'soll', 'sollen', 'sollte', 'möchtest', 'möchten', 'willst', 'wollen', 'darf', 'dürfen', 'kann', 'können',
+    'magst', 'passt', 'ist', 'sind', 'hast', 'brauchst', 'reicht', 'klingt', 'stimmt', 'wäre', 'okay', 'ok', 'einverstanden',
+])
+/** So beginnt eine englische Ja/Nein-Frage. */
+const JA_NEIN_EN = new Set(['should', 'shall', 'do', 'does', 'did', 'can', 'could', 'would', 'will', 'want', 'is', 'are', 'may'])
+/** W-Fragen wollen eine Antwort in Worten, kein Ja oder Nein. */
+const W_FRAGEN = new Set([
+    'was', 'wie', 'welche', 'welcher', 'welches', 'welchen', 'welchem', 'wo', 'woher', 'wohin', 'warum', 'weshalb', 'wieso',
+    'wann', 'wer', 'wen', 'wem', 'what', 'how', 'which', 'where', 'why', 'when', 'who',
+])
+/** So viele Woerter darf ein Vorspann vor Doppelpunkt oder Komma haben: Kurze Frage: …, Und, … */
+const MAX_VORSPANN = 4
+
+/** Das erste Wort eines Satzteils, klein; Markdown und Anfuehrungszeichen davor zaehlen nicht. */
+function erstesWort(teil: string): string {
+    return /^[^\p{L}]*([\p{L}']+)/u.exec(teil)?.[1]?.toLowerCase() ?? ''
+}
+
+/**
+ * Ja und Nein (englisch Yes und No), wenn die Antwort mit einer Ja/Nein-Frage endet: Der letzte Satz
+ * ausserhalb von Code endet auf ?, dahinter nur Leerraum und Emoji, und beginnt, nach hoechstens einem
+ * kurzen Vorspann mit Doppelpunkt oder Komma, mit einem Wort wie Soll, Passt, Should. W-Fragen und
+ * Saetze mit oder (or) bieten Alternativen und zaehlen nicht. Sonst nichts.
+ */
+export function jaNeinAntworten(antwort: string): string[] {
+    // Codebloecke fallen weg; Code in der Zeile wird ein Wort, damit der Satz heil bleibt.
+    const text = antwort
+        .replace(/^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?(?:^[ \t]*\1[^\n]*$|(?![\s\S]))/gm, '\n')
+        .replace(/`[^`\n]*`/g, 'Code')
+        .replace(/[\s\p{Extended_Pictographic}\p{Emoji_Modifier}‍️*_]+$/u, '')
+    if (!text.endsWith('?')) {
+        return []
+    }
+    const rumpf = text.slice(0, -1)
+    const anfang = Math.max(rumpf.lastIndexOf('\n'), ...['.', '!', '?'].map(z => rumpf.lastIndexOf(z)))
+    const satz = rumpf.slice(anfang + 1).trim()
+    if (satz === '' || /\s(?:oder|or)\s/i.test(` ${satz} `) || W_FRAGEN.has(erstesWort(satz))) {
+        return []
+    }
+    // Der ganze Satz, dann der Rest hinter einem kurzen Vorspann.
+    const teile = [satz]
+    for (const m of satz.matchAll(/[:,]/g)) {
+        const vorspann = satz.slice(0, m.index ?? 0).trim()
+        if (vorspann.split(/\s+/).length <= MAX_VORSPANN) {
+            teile.push(satz.slice((m.index ?? 0) + 1))
+        }
+    }
+    for (const teil of teile) {
+        const wort = erstesWort(teil)
+        if (JA_NEIN_EN.has(wort)) {
+            return ['Yes', 'No']
+        }
+        if (JA_NEIN_DE.has(wort) || /^[^\p{L}]*alles\s+klar(?![\p{L}])/iu.test(teil)) {
+            return ['Ja', 'Nein']
+        }
+    }
+    return []
 }
 
 /**

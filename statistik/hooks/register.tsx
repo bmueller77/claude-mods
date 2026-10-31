@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderElement, RenderNode, RenderSurface, SessionCompactInput, SessionMessage } from 'claude-code'
 
-import type { CacheSample, Chatlaenge, ContextSample, Countdown, Fenster, Lage, Nutzung, Zusammenfassung } from '../types'
+import type { BandHoehe, CacheSample, Chatlaenge, ContextSample, Countdown, Fenster, Lage, Nutzung, Zusammenfassung } from '../types'
+import { BAND_VERSION, zeilenVon } from './band'
 
 // Statistik: cache-meter und cache-tax in einer Zeile.
 //
@@ -2083,6 +2084,40 @@ async function wirke($: EngineInterface, name: string, args: string, vomHandy: b
     }
 }
 
+/** Je Flaeche: die zuletzt veroeffentlichte und die geplante Hoehe im Band (mit Angaben fuer das Debug-Log). */
+type BandMerker = { veroeffentlicht: Map<RenderSurface, number>; geplant: Map<RenderSurface, { zeilen: number; info: string }> }
+
+/**
+ * Veroeffentlicht die Hoehe der eigenen Zeile im Band, je Flaeche, fuer die Mods, die ihren Platz
+ * danach planen (hooks/band.ts). Beim Zeichnen darf kein Hook schreiben: geschrieben wird einen
+ * Takt spaeter und nur, wenn sich die Hoehe aendert; sonst zeichnet jede Schreibung neu und plant
+ * die naechste. Jede Aenderung schreibt eine Zeile ins Debug-Log (claude --debug), damit sich
+ * nachlesen laesst, was die App dem Band gibt.
+ */
+function meldeBandHoehe($: EngineInterface, band: BandMerker, flaeche: RenderSurface, zeilen: number, info: string): void {
+    const geplant = band.geplant.get(flaeche)
+    if ((geplant ? geplant.zeilen : band.veroeffentlicht.get(flaeche)) === zeilen) {
+        return
+    }
+    band.geplant.set(flaeche, { zeilen, info })
+    if (geplant) {
+        return
+    }
+    $.clock.after(0, () => {
+        const g = band.geplant.get(flaeche)
+        band.geplant.delete(flaeche)
+        if (!g || band.veroeffentlicht.get(flaeche) === g.zeilen) {
+            return
+        }
+        band.veroeffentlicht.set(flaeche, g.zeilen)
+        $.ui.log(`statistik: Band ${flaeche}, ${g.info}, eigene Hoehe ${g.zeilen}`, { to: 'debug' })
+        const hoehe: BandHoehe = { v: BAND_VERSION, voll: g.zeilen, klein: g.zeilen }
+        void $.state.set({ plugin: 'statistik', key: 'bandHoehe', id: flaeche }, hoehe).catch(() => {
+            band.veroeffentlicht.delete(flaeche)
+        })
+    })
+}
+
 export const register: Register = (on, options) => {
     z.gewaehlt = String(options.cacheLaufzeit ?? 'auto')
 
@@ -2530,8 +2565,13 @@ export const register: Register = (on, options) => {
     const alterName = (e: { command: string }) => ({ text: neuerName(ALTE_BEFEHLE.get(e.command) ?? e.command) })
     on('command.run', { command: [...ALTE_BEFEHLE.keys()] }, async (_$, e) => alterName(e)).catch((_$, e) => alterName(e))
 
+    // Was dieses Laden zuletzt als Hoehe im Band veroeffentlicht oder geplant hat (meldeBandHoehe).
+    const band: BandMerker = { veroeffentlicht: new Map(), geplant: new Map() }
+
     on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+        const bandInfo = `maxRows ${e.props.maxRows}, bodyRows ${e.props.scroll?.bodyRows}, Spalten ${e.props.bodyColumns}`
         if (e.props.hasSurvey) {
+            meldeBandHoehe($, band, e.surface, 0, bandInfo)
             return next(e)
         }
         // Erst die Mods darunter zeichnen lassen; die eigene Zeile bleibt dicht am Eingabefeld.
@@ -2758,7 +2798,11 @@ export const register: Register = (on, options) => {
         // Mod in der Kette unter der Statistik, kommt sein Block hier mit `rest` an:
         // herausnehmen und unter die eigene Zeile setzen.
         const { oben, unten } = ohneZeile ? nimmHeraus(ohneZeile, BLOCK_UNTEN) : { oben: null, unten: null }
+        // Eigener Teil: die Zeile und, wenn sie gezeichnet wird, die Trennlinie. Was herausgenommen
+        // und umgesetzt wird (Zeile des Autopiloten, Vorschlaege), messen seine Besitzer.
+        const eigeneHoehe = zeilenVon(eigene, e.surface, e.props.bodyColumns)
         if (!oben && !zeile) {
+            meldeBandHoehe($, band, e.surface, eigeneHoehe, bandInfo)
             return unten ? (
                 <Box flexDirection="column">
                     {eigene}
@@ -2780,6 +2824,7 @@ export const register: Register = (on, options) => {
                 {'─'.repeat(Math.max(0, e.props.bodyColumns))}
             </Text>
         )
+        meldeBandHoehe($, band, e.surface, Math.round((eigeneHoehe + zeilenVon(trennlinie, e.surface, e.props.bodyColumns)) * 1000) / 1000, bandInfo)
         return (
             <Box flexDirection="column">
                 {zeile}
