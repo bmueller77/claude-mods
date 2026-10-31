@@ -4292,7 +4292,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
           workMode === 'dynamisch'
             ? `${PLAN_FREIGABE} Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll.`
             : approves
-            ? `Claude zeigt seinen Plan und wartet. Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll. Ein Plan, der nur liest, und eine Nachricht, die mit Starte sofort beginnt, starten sofort.`
+            ? `Claude zeigt seinen Plan und wartet. Drück ${vector ? 'Start' : '▶ Start'} oder sag Claude, was sich ändern soll. Ein Plan, der nur liest, und eine Nachricht, die mit Starte sofort beginnt oder endet, starten sofort.`
             : 'Claude legt direkt los, sobald der Plan steht.',
         )}
         {group(

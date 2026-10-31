@@ -114,8 +114,9 @@ deshalb gleiches Bild auf jeder Instanz.
   nennt Claude den Plan im Chat und wartet auf "los" oder Start. Bei laufendem Autopilot startet
   ein wartender Plan nach 30 Sekunden von selbst; solange Arbeiter im Hintergrund laufen, stößt
   der Autopilot nicht an. Ohne Warten starten: ein Plan, der nur liest oder im Chat antwortet, ein
-  Prompt, der mit "Starte sofort" beginnt (so auch Cron-Aufträge per tmux), und `claude -p` ohne
-  Oberfläche. Ein Auftrag aus einer geplanten Aufgabe (`/schedule`, Routine) startet nach 30 Sekunden.
+  Prompt, der mit "Starte sofort" beginnt oder endet (so auch Cron-Aufträge per tmux), und
+  `claude -p` ohne Oberfläche. Ein Auftrag aus einer geplanten Aufgabe (`/schedule`, Routine)
+  startet nach 30 Sekunden.
 - Android-App (Remote Control): Kein Mod hält etwas an, das dort nicht zu sehen ist. Passwörter in
   Nachrichten vom Handy werden entfernt statt die Nachricht anzuhalten; `/better` und die
   Seitenfenster von Selbstkritik und Dateien gehen nur am Rechner, `/selbstkritik-zeigen` und

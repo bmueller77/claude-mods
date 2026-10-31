@@ -1,6 +1,6 @@
 {
   "name": "leitstand",
-  "version": "0.63.5.0",
+  "version": "0.63.5.1",
   "description": "Zeigt in der Leiste über dem Eingabefeld, woran Claude arbeitet: den Plan als Checkliste, den Fortschritt und wann Claude dich braucht. Dazu Buttons für Pause und Weiter, Auto-Modus oder Gruppenarbeit, Autopilot, Kurzantworten, Selbstkritik, Dateien und den Schutz von Passwörtern; aus deinen Korrekturen schlägt er Regeln vor. Hilfe: /leitstand:hilfe. Grundlage: GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"
@@ -18,7 +18,7 @@
     "arbeitsweise": {
       "type": "string",
       "title": "Arbeitsweise",
-      "description": "auto (Auto-Modus): Claude entscheidet selbst über Helfer für Teilaufgaben. gruppenarbeit: Claude leitet und prüft, Arbeiter (Helfer mit fester Stufe, von Haiku bis Fable) setzen um; kostet mehr Tokens. In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:arbeitsmodus-auto oder -gruppenarbeit um.",
+      "description": "auto (Auto-Modus): Claude entscheidet selbst über Helfer für Teilaufgaben. gruppenarbeit: Claude leitet und prüft, Arbeiter (Helfer mit fester Stufe, von Haiku bis Fable) setzen um; kostet mehr Tokens. In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt oder endet; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:arbeitsmodus-auto oder -gruppenarbeit um.",
       "default": "auto",
       "options": ["auto", "gruppenarbeit"]
     },
@@ -62,7 +62,7 @@
     "planFreigeben": {
       "type": "boolean",
       "title": "Plan zuerst freigeben",
-      "description": "An: Claude zeigt erst seinen Plan und wartet auf Start (oder los) oder eine Änderung. In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:plan-freigeben-an oder -aus um.",
+      "description": "An: Claude zeigt erst seinen Plan und wartet auf Start (oder los) oder eine Änderung. In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt oder endet; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst. Standard für neue Chats; in einem Chat stellst du es im Einstellungsfenster oder mit /leitstand:plan-freigeben-an oder -aus um.",
       "default": false
     },
     "githubAbschluss": {

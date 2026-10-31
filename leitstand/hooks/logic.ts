@@ -478,11 +478,15 @@ export function isStartWords(text: string): boolean {
 }
 
 /**
- * "Starte sofort" at the head of a message: the plan Claude makes for it needs no approval, whatever follows ("Starte
- * sofort: Schreib die Übergabe, bevor der Server neu startet"). Typed by the person or put there by a cron job.
+ * "Starte sofort" at the head of a message or as its last sentence: the plan Claude makes for it needs no approval,
+ * whatever follows or precedes ("Starte sofort: Schreib die Übergabe, bevor der Server neu startet", or a cron job that
+ * ends with "... Antworte danach nur mit einer Zeile. Starte sofort"). Typed by the person or put there by a cron job.
  */
 export function startsAtOnce(text: string): boolean {
-  return /^\s*starte\s+(?:bitte\s+)?sofort(?![\p{L}\p{N}])/iu.test(text)
+  return (
+    /^\s*starte\s+(?:bitte\s+)?sofort(?![\p{L}\p{N}])/iu.test(text) ||
+    /(?:^|[.!?\n])\s*(?:bitte\s+)?starte\s+(?:bitte\s+)?sofort[.!]*\s*$/iu.test(text)
+  )
 }
 
 // Filler words that may open a clause before a go-ahead: "also: leg los", "ja, dann fang bitte an".
@@ -1718,7 +1722,7 @@ export const PASSWORTSCHUTZ_TEXT =
 
 /** Wann ein Plan auf Freigabe wartet, in der einen Fassung, die alle Texte teilen. */
 export const PLAN_FREIGABE =
-  'In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst.'
+  'In der Gruppenarbeit wartet ein Plan auf deine Freigabe. Ohne Freigabe starten Pläne, die nur lesen, und Pläne zu einer Nachricht, die mit Starte sofort beginnt oder endet; läuft der Autopilot, startet ein wartender Plan nach 30 Sekunden von selbst.'
 
 /** Die sechs Stufen der Arbeiter, so dass die Zahl stimmt. */
 export const STUFEN = 'Haiku, Sonnet, Opus mit mittlerem, hohem oder extra hohem Aufwand und Fable'

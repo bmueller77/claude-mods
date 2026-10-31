@@ -9909,11 +9909,19 @@ test('days and times count in Berlin on every machine, summer and winter time al
   expect(resetTime(new Date(Date.UTC(2026, 10, 5, 8, 0)).toISOString(), Date.UTC(2026, 10, 1, 12, 0))).toBe('am Do um 09:00')
 })
 
-test('startsAtOnce: nur "Starte sofort" am Anfang der Nachricht', () => {
+test('startsAtOnce: "Starte sofort" am Anfang oder als letzter Satz', () => {
   expect(startsAtOnce('Starte sofort: Schreib die Übergabe')).toBe(true)
   expect(startsAtOnce('  starte bitte sofort')).toBe(true)
   expect(startsAtOnce('STARTE SOFORT.')).toBe(true)
-  expect(startsAtOnce('Bitte starte sofort')).toBe(false)
+  expect(startsAtOnce('Bitte starte sofort')).toBe(true)
+  expect(startsAtOnce('Automatischer Auftrag (Cron, 03:15): Schreib die Übergabe. Antworte danach nur mit einer Zeile Bestätigung. Starte sofort')).toBe(true)
+  expect(startsAtOnce('Automatischer Auftrag (Cron, 03:15): Schreib die Übergabe. Antworte danach nur mit einer Zeile Bestätigung. Starte sofort!\n')).toBe(true)
+  expect(startsAtOnce('Prüf das?\nstarte bitte sofort.')).toBe(true)
+  expect(startsAtOnce('Wenn die Tests grün sind, starte sofort.')).toBe(false)
+  expect(startsAtOnce('Schreib in die Anleitung: Starte sofort')).toBe(false)
+  expect(startsAtOnce('Schreib „Starte sofort“ in die Anleitung.')).toBe(false)
+  expect(startsAtOnce('Prüf das. Starte sofortige Tests')).toBe(false)
+  expect(startsAtOnce('Prüf das. Starte sofort die Tests')).toBe(false)
   expect(startsAtOnce('Starte sofortige Prüfung')).toBe(false)
 })
 
@@ -9921,6 +9929,15 @@ test('"Starte sofort" vorn: in der Gruppenarbeit wartet der Plan nicht, auch mit
   world(on)
   await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
   await $.turn.start({ text: 'Starte sofort: Schreib eine Übergabe für die nächste Instanz, bevor der Server neu startet.', turnId: 't1' })
+  const planned = await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })
+  expect(String(planned.result)).toContain('Der erste hat begonnen')
+  expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+})
+
+test('"Starte sofort" am Ende (Cron-Auftrag): in der Gruppenarbeit wartet der Plan nicht', async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  await $.turn.start({ text: 'Automatischer Auftrag (Cron, 03:15): Schreib eine Übergabe für die nächste Instanz. Antworte danach nur mit einer Zeile. Starte sofort', turnId: 't1' })
   const planned = await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })
   expect(String(planned.result)).toContain('Der erste hat begonnen')
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()

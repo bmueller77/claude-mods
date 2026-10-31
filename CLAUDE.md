@@ -195,8 +195,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   auf `ja`, `ok`, `Okay` oder `/modellwahl ja`; die Nachricht geht trotzdem an Claude. Die erste
   Nachricht eines neuen Chats wartet nicht, sie läuft mit dem Modell aus dem Menü los.
 - Leitstand seit 0.54.0, Gruppenarbeit und "Plan zuerst freigeben": Ein Prompt, der mit "Starte sofort"
-  beginnt, braucht keine Freigabe (Triggerwort, auch für Cron per tmux; zählt auch mit "bevor" oder
-  "nicht" im Satz). Herkunft `scheduled-trigger` (`/schedule`, Routine, `/loop`) startet nach 30 s wie
+  beginnt oder (seit 0.63.5.1) als letzter Satz endet, braucht keine Freigabe (Triggerwort, auch für Cron
+  per tmux; zählt auch mit "bevor" oder "nicht" im Satz). Herkunft `scheduled-trigger` (`/schedule`,
+  Routine, `/loop`) startet nach 30 s wie
   beim Autopiloten; `sdk` ohne Oberfläche (`claude -p`) startet sofort, sonst endete der Lauf vor dem
   Start. `plan_steps` hat `nurLesen`: solche Pläne starten ohne Freigabe, Write/Edit/MultiEdit/
   NotebookEdit sind für sie gesperrt (Bash nicht, bekannte Lücke).
