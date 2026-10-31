@@ -940,6 +940,57 @@ test('Bearbeiten: der Text laesst sich aendern, Enter fuehrt aus; Kopieren', asy
     }
 })
 
+test('Bearbeiten: das Feld ist mehrzeilig, Absaetze gehen so raus', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, clock)
+    await start($)
+    const absaetze = 'Mach die Login-Seite schneller.\n\nZiel: unter 1 s.\nNicht anfassen: das Design.\n\nFertig, wenn die Tests grün sind.'
+
+    for (const surface of FLAECHEN) {
+        b.eingang.length = 0
+        b.modell.length = 0
+        await befehl($, ORIGINAL)
+        await clock.settle()
+        const ui = await zeige($, surface)
+        await ui.press({ key: 'rest' })
+        await clock.settle()
+        await ui.press({ key: 'bearbeiten' })
+
+        const feld = await ui.find({ type: 'Input', key: 'entwurf' })
+        expect(feld?.props.value).toBe(UPGRADE)
+        expect(Number(feld?.props.rows)).toBeGreaterThanOrEqual(6)
+        expect(Number(feld?.props.rows)).toBeLessThanOrEqual(12)
+
+        // Erst tippen (change), dann der Wert im Feld mit allen Zeilenumbrüchen.
+        await tippeInsFeld(ui, 'entwurf', absaetze, 'change')
+        expect((await ui.find({ type: 'Input', key: 'entwurf' }))?.props.value).toBe(absaetze)
+
+        // Enter sendet den Text unverändert, Leerzeilen eingeschlossen.
+        await tippeInsFeld(ui, 'entwurf', absaetze)
+        expect(b.eingang).toEqual([{ text: absaetze, origin: 'plugin:prompt-upgrade', asUser: true }])
+        await ui.unmount()
+    }
+})
+
+test('Bearbeiten: Ausführen nach dem Tippen sendet die Absätze aus dem Entwurf', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, clock)
+    await start($)
+    const absaetze = 'Erster Absatz.\n\nZweiter Absatz,\nmit Umbruch.'
+    await befehl($, ORIGINAL)
+    await clock.settle()
+    const ui = await zeige($, 'desktop')
+    await ui.press({ key: 'rest' })
+    await clock.settle()
+    await ui.press({ key: 'bearbeiten' })
+    await tippeInsFeld(ui, 'entwurf', absaetze, 'change')
+    await ui.press({ key: 'ausfuehren' })
+    expect(b.eingang).toEqual([{ text: absaetze, origin: 'plugin:prompt-upgrade', asUser: true }])
+    await ui.unmount()
+})
+
 test('Eigene Antwort eintippen', async ($, on) => {
     const clock = mock.clock(on, { now: 1_000_000 })
     mock.store(on, {})

@@ -172,6 +172,8 @@ export const SYSTEM =
     'ein Nebeneffekt, den er nicht erwähnt, ein Abweichen von dem, was die Person vorher gesagt hat, ' +
     'oder ein Schritt, der nur behauptet und nicht geprüft wurde. Höchstens 160 Zeichen, nichts, was der Assistent selbst schon gesagt hat. ' +
     'Gibt es nichts dergleichen, steht in Zeile 2 nur das Wort NONE.\n' +
+    'Eine Zeile [Befehl] ist ein Slash-Befehl an die App oder einen Mod, kein Auftrag an den Assistenten; ' +
+    'nenne ihn nie als offen, vergessen oder nicht bearbeitet.\n' +
     'Kein Lob, keine Bewertung, keine Gedankenstriche.\n' +
     'Beispiel:\nLeiste in src/leiste.ts gebaut, Test in src/leiste.test.ts ergänzt, er läuft grün.\n' +
     'Der Test prüft nur das Terminal; ob die Leiste in der App gleich aussieht, ist ungeprüft.'
@@ -398,12 +400,40 @@ export function zeilenUmbruch(text: string, breite: number, anzahl: number): str
 
 // --- Die Zusammenfassung ---
 
+/** Ein getippter Befehl: `/name` am Anfang, dahinter Leerraum oder nichts (so bleibt `/etc/hosts` Text). */
+const BEFEHL_GETIPPT = /^\s*\/([A-Za-z0-9][\w:.-]*)(?=\s|$)/
+/** Ein Befehl, wie die Engine ihn speichert: `<command-name>/name</command-name>`, die Argumente in `<command-args>`. */
+const BEFEHL_GESPEICHERT = /<command-name>\s*\/([^<\s]+)\s*<\/command-name>/
+
+/**
+ * Der Name eines Slash-Befehls, wenn eine Nachricht der Person einer ist, sonst null.
+ *
+ * Ein Befehl ist kein Auftrag an den Assistenten: Ein Mod oder die App beantwortet ihn selbst
+ * (`/modellwahl <Aufgabe>` schlaegt nur ein Modell vor). Ob ein Befehl seinen Text als Prompt
+ * an den Assistenten weitergibt, sieht man der Nachricht nicht an; tut er es (Markdown-Befehl,
+ * Skill), steht der ausgefuehrte Text als eigene Nachricht im Verlauf.
+ */
+export function befehlsName(text: string): string | null {
+    return BEFEHL_GESPEICHERT.exec(text)?.[1] ?? BEFEHL_GETIPPT.exec(text)?.[1] ?? null
+}
+
+/** Eine Nachricht, wie das Modell sie sieht; ein Befehl der Person ohne seine Argumente. */
+function verlaufsZeile(m: { role: string; text: string }): string {
+    if (m.role === 'user') {
+        const name = befehlsName(m.text)
+        if (name !== null) {
+            return `[Befehl] /${name} (an die App oder einen Mod, kein Auftrag an den Assistenten)`
+        }
+    }
+    return `[${m.role === 'user' ? 'Person' : 'Assistent'}] ${m.text.slice(0, ZEICHEN_JE_NACHRICHT)}`
+}
+
 /** Die Nachrichten der Runde als Text, wie das Modell sie bekommt. */
 function verlauf(nachrichten: readonly { role: string; text: string }[], antwort: string, s: readonly Schritt[]): string {
     const zeilen = nachrichten
         .filter(m => m.text.trim() !== '')
         .slice(-NACHRICHTEN)
-        .map(m => `[${m.role === 'user' ? 'Person' : 'Assistent'}] ${m.text.slice(0, ZEICHEN_JE_NACHRICHT)}`)
+        .map(verlaufsZeile)
     const dateien = dateienAus(s).map(d => `${d.datei} +${d.plus} -${d.minus}`)
     return (
         `<verlauf>\n${zeilen.join('\n')}\n</verlauf>\n\n<letzte_antwort>\n${antwort.slice(0, 3000)}\n</letzte_antwort>` +

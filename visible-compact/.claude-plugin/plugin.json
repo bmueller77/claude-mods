@@ -1,7 +1,7 @@
 {
   "name": "visible-compact",
   "displayName": "Visible Compact",
-  "version": "0.6.2.1",
+  "version": "0.6.2.2",
   "description": "Zeigt nach jedem Verdichten (/compact) im Seitenfenster den Chat von vorher neben dem, was danach übrig ist, auf Wunsch auf Deutsch übersetzt. Hilfe: /visible-compact:hilfe. Grundlage: visible-compact von Sravan (MIT).",
   "author": {
     "name": "Sravan",

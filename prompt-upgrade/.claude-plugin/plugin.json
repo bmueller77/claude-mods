@@ -1,6 +1,6 @@
 {
   "name": "prompt-upgrade",
-  "version": "0.4.3.0",
+  "version": "0.4.3.1",
   "description": "Macht aus einer groben Nachricht an Claude einen klaren Prompt, bevor du sie sendest: bis zu drei Rückfragen im Seitenfenster, dann Original und Upgrade nebeneinander; gesendet wird erst mit Ausführen. Start mit /better [Prompt]; auf Wunsch hält die Automatik jede Nachricht an, die du am Rechner tippst, außer kurzen Antworten, Befehlen und Text mit > am Anfang. Hilfe: /prompt-upgrade:hilfe. Grundlage: die Prompting-Leitfäden von OpenAI und Anthropic (siehe README).",
   "author": {
     "name": "Björn Müller"

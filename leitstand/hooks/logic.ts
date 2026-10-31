@@ -454,6 +454,11 @@ export function isBusy(list: GlanceChecklist): boolean {
   return list.helpers.some(one => one.status === 'running')
 }
 
+/** A helper Claude started still runs; a background shell does not count, since it need never end. */
+export function hasRunningWorker(list: GlanceChecklist): boolean {
+  return list.helpers.some(one => one.kind === 'helper' && one.status === 'running')
+}
+
 /** A short "carry on" the person typed, in English, German or Greek: it continues the job instead of starting a new one. */
 export function isContinueWords(text: string): boolean {
   const words = text.trim().toLowerCase().replace(/[.!…,;:]+$/g, '').replace(/\s+/g, ' ')
@@ -676,7 +681,7 @@ export function askedMergeSha(answer: string): string | null {
  * A word as Bash passes it on, and whether Bash builds it at run time: from $…, `…`, a glob, {a,b}, ~ or =. `runs`
  * holds the code of an unquoted $(…) or `…` in it, which Bash runs first.
  */
-export type ShellWord = { text: string; isRunTime: boolean; runs?: string[] }
+export type ShellWord = { text: string; isRunTime: boolean; runs?: string[]; isOperator?: true }
 /** The words of one command, or of one line of a heredoc's body. */
 export type ShellPiece = { words: ShellWord[]; isBody: boolean }
 
@@ -862,7 +867,8 @@ export function shellPieces(command: string): ShellPiece[] {
       const heredoc = char === '<' ? HEREDOC.exec(command.slice(at)) : null
       const operator = command.startsWith('<<<', at) ? '<<<' : heredoc ? `<<${heredoc[1]}` : command.startsWith('>>', at) ? '>>' : char
       if (heredoc?.[3] !== undefined && operator !== '<<<') heredocs.push({ delimiter: heredoc[3], isTabbed: heredoc[1] === '-' })
-      words.push({ text: operator, isRunTime: false })
+      // Marked, so a quoted ">" (a word like any other) is never read as a redirection.
+      words.push({ text: operator, isRunTime: false, isOperator: true })
       at += operator.length - 1
     } else add(char)
   }
@@ -1205,6 +1211,359 @@ export function unsafePowerShellMerge(command: string, approvedSha: string | nul
   return null
 }
 
+// --- A plan that only reads (nurLesen): shell commands that write ---
+
+// Where output may go without making a file: the null devices, the terminal and the standard streams.
+const NO_FILE = /^(?:\/dev\/(?:null|stdout|stderr|tty|fd\/\d+)|nul|\$null)$/i
+// Commands that write whatever their arguments, lowercased and without .exe: Unix tools, and PowerShell's cmdlets with
+// their aliases (cmd's del, copy, move, md, rd and ren among them).
+const ALWAYS_WRITES = new Set(
+  (
+    'rm rmdir mv cp mkdir touch chmod chown chgrp ln truncate unlink shred ' +
+    'set-content sc add-content ac out-file new-item ni md remove-item ri del erase rd move-item mi move copy-item cpi copy ' +
+    'rename-item rni ren clear-content clc tee-object export-csv export-clixml expand-archive compress-archive start-bitstransfer'
+  ).split(' '),
+)
+const GIT_WRITES = new Set(
+  'add commit push pull merge rebase reset checkout switch restore clean cherry-pick revert am apply init clone rm mv gc prune format-patch bisect update-ref update-index'.split(' '),
+)
+const PACKAGE_WRITES = new Set('install i add remove rm uninstall un update up upgrade ci publish link unlink prune dedupe init create version'.split(' '))
+const PIP_WRITES = new Set(['install', 'uninstall', 'download', 'wheel'])
+// Options before a package manager's subcommand that take the next word as their value.
+const PACKAGE_VALUE_FLAGS = new Set(['--prefix', '-C', '--dir', '--cwd', '--filter', '-F', '-w', '--workspace'])
+
+/** The first word that is no option, past the values of `valued` options; undefined when there is none. */
+function subcommandOf(args: readonly string[], valued: ReadonlySet<string>): { sub: string | undefined; rest: readonly string[] } {
+  for (let at = 0; at < args.length; at++) {
+    const word = args[at] ?? ''
+    if (!word.startsWith('-')) return { sub: word, rest: args.slice(at + 1) }
+    if (valued.has(word)) at++
+  }
+  return { sub: undefined, rest: [] }
+}
+
+/** Whether git, run with these words, changes a repository, its working tree or its settings. */
+function gitWrites(args: readonly string[]): boolean {
+  const { sub, rest } = subcommandOf(args, new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path']))
+  if (sub === undefined) return false
+  if (GIT_WRITES.has(sub) || rest.some(one => one.startsWith('--output'))) return true
+  const positionals = rest.filter(one => !one.startsWith('-'))
+  switch (sub) {
+    // A bare git stash stashes; list and show only read.
+    case 'stash':
+      return !['list', 'show'].includes(rest[0] ?? '')
+    // A bare git tag, or one with -l, lists; anything else may make or delete one.
+    case 'tag':
+      return rest.length > 0 && !rest.some(one => one === '-l' || one === '--list')
+    // Deleting, moving or copying a branch, or making one (a name and no option).
+    case 'branch':
+      return (
+        rest.some(one => /^-[a-zA-Z]*[dDmMcC]/.test(one) || /^--(?:delete|move|copy|force|set-upstream|unset-upstream|edit-description)/.test(one)) ||
+        (rest.length > 0 && positionals.length === rest.length)
+      )
+    case 'worktree':
+      return ['add', 'remove', 'move', 'prune', 'repair', 'lock', 'unlock'].includes(rest[0] ?? '')
+    case 'remote':
+      return ['add', 'remove', 'rm', 'rename', 'set-url', 'set-head', 'set-branches', 'prune', 'update'].includes(rest[0] ?? '')
+    case 'notes':
+      return ['add', 'append', 'copy', 'edit', 'merge', 'remove', 'prune'].includes(rest[0] ?? '')
+    case 'submodule':
+      return !['status', 'summary'].includes(rest[0] ?? 'status')
+    // A name and a value set a setting; so do the options that edit.
+    case 'config':
+      return (
+        rest.some(one => /^--(?:add|unset|unset-all|replace-all|rename-section|remove-section|edit)$|^-e$/.test(one)) ||
+        (positionals.length >= 2 && !rest.some(one => one.startsWith('--get')))
+      )
+    default:
+      return false
+  }
+}
+
+/** Whether claude, run with these words, installs, removes or changes a mod or a catalogue; tests and checks only read. */
+function claudeWrites(args: readonly string[]): boolean {
+  const words = args.filter(one => !one.startsWith('-'))
+  if (words[0] !== 'plugin' && words[0] !== 'plugins') return false
+  if (words[1] === 'marketplace') return ['add', 'remove', 'rm', 'update'].includes(words[2] ?? '')
+  return ['install', 'i', 'uninstall', 'remove', 'update', 'enable', 'disable', 'configure'].includes(words[1] ?? '')
+}
+
+/**
+ * Whether an option that names where a download goes (the short one, glued to its value or apart, or the long one)
+ * points anywhere but a null device or the standard output.
+ */
+function downloadsTo(args: readonly string[], short: string, long: string): boolean {
+  for (let at = 0; at < args.length; at++) {
+    const word = args[at] ?? ''
+    const glued = new RegExp(`^-[a-zA-Z]*${short}(.*)$`).exec(word)
+    const longForm = word === long ? '' : word.startsWith(`${long}=`) ? word.slice(long.length + 1) : null
+    const value = longForm !== null ? (longForm === '' ? args[at + 1] : longForm) : glued ? (glued[1] === '' ? args[at + 1] : glued[1]) : null
+    if (value === null) continue
+    if (value === undefined || !(value === '-' || NO_FILE.test(value))) return true
+  }
+  return false
+}
+
+/**
+ * Whether a command, its name and the words after it as the shell passes them on, writes files or changes a
+ * repository, an install or a setting. Wrappers (env, sudo, xargs, timeout, …) count every word after them as the
+ * command they may run, and a shell's -c, eval, cmd /c and powershell -Command are read as commands of their own.
+ * shortcut: a fixed list; a script, an interpreter's inline code (python -c, node -e) or a tool not listed passes.
+ */
+function commandWrites(name: string, args: readonly string[]): boolean {
+  const lower = (name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1) || name).toLowerCase().replace(/\.exe$/, '')
+  if (ALWAYS_WRITES.has(lower)) return true
+  if (WRAPPERS.has(lower)) return args.some((one, at) => commandWrites(one, args.slice(at + 1)))
+  if (SHELLS.has(lower)) {
+    const flag = args.findIndex(one => /^-\w*c$/.test(one))
+    const script = flag < 0 ? undefined : args[flag + 1]
+    return script !== undefined && writesFiles(script, 'bash')
+  }
+  if (lower === 'powershell' || lower === 'pwsh') {
+    // An encoded command can't be read: it counts as writing.
+    if (args.some(one => /^-(?:e|ec|enc|encodedcommand)$/i.test(one))) return true
+    const flag = args.findIndex(one => /^-(?:c|command)$/i.test(one))
+    return flag >= 0 && writesFiles(args.slice(flag + 1).join(' '), 'powershell')
+  }
+  if (lower === 'cmd') {
+    // cmd's del, copy, move and > read as PowerShell's aliases and redirection do.
+    const flag = args.findIndex(one => /^\/+[ck]$/i.test(one))
+    return flag >= 0 && writesFiles(args.slice(flag + 1).join(' '), 'powershell')
+  }
+  if (lower === 'eval') return writesFiles(args.join(' '), 'bash')
+  switch (lower) {
+    case 'tee':
+      return args.some(one => !one.startsWith('-') && !NO_FILE.test(one))
+    case 'dd':
+      return args.some(one => one.startsWith('of='))
+    case 'sed':
+      return args.some(one => /^-[nErsuz]*[iI]/.test(one) || one.startsWith('--in-place'))
+    case 'perl':
+      return args.some(one => /^-[aclnpstuwWTU0-9]*i/.test(one))
+    case 'git':
+      return gitWrites(args)
+    case 'npm':
+    case 'pnpm':
+    case 'yarn': {
+      const { sub } = subcommandOf(args, PACKAGE_VALUE_FLAGS)
+      // A bare yarn installs.
+      return sub === undefined ? lower === 'yarn' : PACKAGE_WRITES.has(sub)
+    }
+    case 'pip':
+    case 'pip3':
+      return PIP_WRITES.has(subcommandOf(args, new Set()).sub ?? '')
+    case 'python':
+    case 'python3':
+    case 'py': {
+      const pip = args.findIndex((one, at) => one === '-m' && args[at + 1] === 'pip')
+      return pip >= 0 && PIP_WRITES.has(subcommandOf(args.slice(pip + 2), new Set()).sub ?? '')
+    }
+    case 'claude':
+      return claudeWrites(args)
+    case 'curl':
+      return (
+        downloadsTo(args, 'o', '--output') ||
+        args.some(one => /^-[a-zA-Z]*[ODc]/.test(one) || /^--(?:output-dir|remote-name|dump-header|cookie-jar)/.test(one) || /^-outfile$/i.test(one))
+      )
+    case 'wget':
+      return !args.includes('--spider') && (downloadsTo(args, 'O', '--output-document') || !args.some(one => /^-[a-zA-Z]*O|^--output-document/.test(one)))
+    case 'invoke-webrequest':
+    case 'iwr':
+    case 'invoke-restmethod':
+    case 'irm':
+      return args.some(one => /^-outfile$/i.test(one))
+    case 'find': {
+      if (args.some(one => /^-(?:delete|fprint0?|fprintf|fls)$/.test(one))) return true
+      // What -exec and its kin run, up to its ; or +.
+      return args.some((one, at) => {
+        if (!/^-(?:exec|execdir|ok|okdir)$/.test(one)) return false
+        const end = args.findIndex((word, after) => after > at && (word === ';' || word === '+'))
+        const run = args.slice(at + 1, end < 0 ? undefined : end)
+        return run[0] !== undefined && commandWrites(run[0], run.slice(1))
+      })
+    }
+    default:
+      return false
+  }
+}
+
+/** The code of every $(…) and `…` in a word as written: what Bash runs before the word, in double quotes too. */
+function substitutionsIn(text: string): string[] {
+  const found: string[] = []
+  for (let at = text.indexOf('$('); at >= 0; at = text.indexOf('$(', at + 2)) {
+    let depth = 0
+    for (let end = at + 1; end < text.length; end++) {
+      if (text[end] === '(') depth++
+      else if (text[end] === ')' && --depth === 0) {
+        found.push(text.slice(at + 2, end))
+        break
+      }
+    }
+  }
+  for (const quoted of text.matchAll(/`([^`]*)`/g)) found.push(quoted[1] ?? '')
+  return found
+}
+
+/** Bash: every piece, every subshell or process substitution and every $(…) is a command of its own. */
+function bashWrites(command: string): boolean {
+  // Duplicating or closing a stream (2>&1, >&2, <&0, >&-) names no file; &> and &>> write to one, as > does.
+  const code = command.replace(/\d*[<>]&(?:\d+-?|-)(?![\w./])/g, ' ').replace(/&>/g, ' >')
+  for (const { words, isBody } of shellPieces(code)) {
+    // A heredoc's lines are text that a command reads.
+    if (isBody) continue
+    if (words.some(word => word.isRunTime && substitutionsIn(word.text).some(bashWrites))) return true
+    const commands: ShellWord[][] = [[]]
+    for (let at = 0; at < words.length; at++) {
+      const word = words[at]!
+      if (word.isOperator && (word.text === '>' || word.text === '>>')) {
+        const target = words[at + 1]
+        if (target === undefined || target.isOperator === true || !NO_FILE.test(target.text)) return true
+        at++
+      } else if (word.isOperator && word.text.startsWith('<')) {
+        // What it reads from is no command; a process substitution, <(…), is, and is read next.
+        if (words[at + 1]?.isOperator !== true) at++
+      } else if (word.isOperator) {
+        // ( or ): a subshell or a process substitution runs a command of its own.
+        commands.push([])
+      } else commands[commands.length - 1]!.push(word)
+    }
+    for (const one of commands) {
+      // The command: its first word past ( { !, keywords and VAR=x.
+      const at = one.findIndex(word => !/[PA]/.test(wordClass(word)))
+      const head = one[at]
+      if (head === undefined) continue
+      const args = one.slice(at + 1).map(word => word.text)
+      // A command built at run time ($EXE, say) is unknown; its words still may not install or remove a mod.
+      if (head.isRunTime ? claudeWrites(args) : commandWrites(head.text, args)) return true
+    }
+  }
+  return false
+}
+
+type PowerShellToken = { text: string; isQuoted: boolean; isRedirect?: true; isMerge?: boolean }
+
+/**
+ * Reads PowerShell into pieces of words: ; | && || newlines and ( ) { } end a piece (a script block or a
+ * subexpression holds commands of its own), '…' is literal, "…" keeps its $(…) as code read on its own, ` escapes,
+ * # starts a comment, and > >> 2> *> are redirections (2>&1 merges a stream). `codes` collects the $(…) in "…".
+ * shortcut: a bounded lexer, not a parser; here-strings and <# #> comments are read as plain text.
+ */
+function powerShellPieces(command: string, codes: string[]): PowerShellToken[][] {
+  const pieces: PowerShellToken[][] = []
+  let tokens: PowerShellToken[] = []
+  let token: PowerShellToken | null = null
+  const endToken = () => {
+    if (token !== null) tokens.push(token)
+    token = null
+  }
+  const endPiece = () => {
+    endToken()
+    if (tokens.length > 0) pieces.push(tokens)
+    tokens = []
+  }
+  const add = (text: string, isQuoted = false) => {
+    token ??= { text: '', isQuoted }
+    token.text += text
+    token.isQuoted ||= isQuoted
+  }
+  for (let at = 0; at < command.length; at++) {
+    const char = command.charAt(at)
+    const next = command[at + 1] ?? ''
+    if (char === '`') {
+      at++
+      if (next !== '\n' && next !== '\r') add(next)
+    } else if (char === "'") {
+      let text = ''
+      for (at++; at < command.length; at++) {
+        if (command[at] === "'" && command[at + 1] === "'") text += command[++at]
+        else if (command[at] === "'") break
+        else text += command[at]
+      }
+      add(text, true)
+    } else if (char === '"') {
+      let text = ''
+      for (at++; at < command.length && command[at] !== '"'; at++) {
+        if (command[at] === '`') text += command[++at] ?? ''
+        else if (command.startsWith('$(', at)) {
+          let depth = 0
+          const from = at
+          for (; at < command.length; at++) {
+            if (command[at] === '(') depth++
+            else if (command[at] === ')' && --depth === 0) break
+          }
+          codes.push(command.slice(from + 2, at))
+          text += command.slice(from, at + 1)
+        } else text += command[at]
+      }
+      add(text, true)
+    } else if (char === '#' && token === null) {
+      const stop = command.indexOf('\n', at)
+      at = (stop < 0 ? command.length : stop) - 1
+    } else if (char === ' ' || char === '\t') endToken()
+    else if ('\r\n;|(){}'.includes(char) || (char === '&' && next === '&')) {
+      endPiece()
+      if (char === next && (char === '|' || char === '&')) at++
+    } else if (char === '&') {
+      // The call operator stands as a word of its own, glued to what it calls or not.
+      endToken()
+      tokens.push({ text: '&', isQuoted: false })
+    } else if (char === '>') {
+      // A stream number or * glued in front belongs to the redirection.
+      const stream = token !== null && /^[1-6*]$/.test((token as PowerShellToken).text) ? (token as PowerShellToken).text : ''
+      if (stream !== '') token = null
+      endToken()
+      const isAppend = next === '>'
+      if (isAppend) at++
+      const merge = /^&[1-6]/.exec(command.slice(at + 1))
+      if (merge) at += merge[0].length
+      tokens.push({ text: `${stream}${isAppend ? '>>' : '>'}`, isQuoted: false, isRedirect: true, isMerge: merge !== null })
+    } else add(char)
+  }
+  endPiece()
+  return pieces
+}
+
+/** PowerShell: .NET file calls, redirections into a file and the commands each piece runs. */
+function powerShellWrites(command: string): boolean {
+  if (/\[(?:system\.)?io\.(?:file|directory)\]::(?:write|append|create|delete|move|copy|replace|encrypt|decrypt|set|open(?!read|text))/i.test(command)) {
+    return true
+  }
+  const codes: string[] = []
+  for (const tokens of powerShellPieces(command, codes)) {
+    const words: PowerShellToken[] = []
+    for (let at = 0; at < tokens.length; at++) {
+      const token = tokens[at]!
+      if (token.isRedirect !== true) {
+        words.push(token)
+        continue
+      }
+      if (token.isMerge === true) continue
+      const target = tokens[at + 1]
+      if (target === undefined || target.isRedirect === true || !NO_FILE.test(target.text)) return true
+      at++
+    }
+    // & and . call what follows them; a quoted word anywhere else is a value, not a command.
+    const call = words[0]?.text === '&' || words[0]?.text === '.' ? 1 : 0
+    const head = words[call]
+    if (head === undefined || (head.isQuoted && call === 0)) continue
+    if (commandWrites(head.text, words.slice(call + 1).map(word => word.text))) return true
+  }
+  return codes.some(powerShellWrites)
+}
+
+/**
+ * Whether a Bash or PowerShell command writes files or changes a repository, an install or a setting, as a plan that
+ * only reads (nurLesen) may not: a redirection into a file, tee, rm, mv, cp, mkdir, touch, sed -i, git add or commit,
+ * npm install, claude plugin install, curl -o, wget, Set-Content, Remove-Item, Invoke-WebRequest -OutFile and their
+ * kin. Every command in a chain, a pipe, a subshell or a $(…) counts; quoted text is no command (grep "rm -rf" reads),
+ * and output to a null device or a stream (2>/dev/null, 2>&1, >$null) writes nothing.
+ * shortcut: a heuristic that refuses rather than lets a file be written, read without running anything; a script, an
+ * interpreter's inline code or a command built at run time is not looked into.
+ */
+export function writesFiles(command: string, shell: 'bash' | 'powershell'): boolean {
+  return shell === 'bash' ? bashWrites(command) : powerShellWrites(command)
+}
+
 export const MAX_QUESTION = 160
 
 /** The question Claude ended on, as one plain line: its last sentence, or the whole last paragraph when that sentence is a few words. */
@@ -1317,6 +1676,93 @@ export function buttonLines(groups: readonly number[], right: number, columns: n
   return { left, isRightBeside: right === 0 || (left.length <= 1 && used + (left.length === 0 ? 0 : 2) + right <= columns) }
 }
 
+// How the desktop app draws the band's row of buttons, in its cells (ch: the width of a 0 in the band's font, about
+// 8 px). Read in the app's script (4.4212, 2026-10-31): a cell is measureText("0"), and a button pads its label by
+// pad.md, half a rem (8 px, 1 ch), either side. Estimated: a letter about 0.8 ch, as the band's rows count them, and
+// an emoji, a family joined with U+200D too, at most 2.5 ch. band.ts counts every character a cell, an emoji 2 and
+// each person of a family on its own, and a button 3 more: for Leitstand's row a third too wide, at 80 columns three
+// lines of buttons where the app draws one.
+const APP_PAD = 1
+const APP_LETTER = 0.8
+const APP_EMOJI = 2.5
+
+/** The width of a text in the desktop app's cells: letters 0.8, an emoji (with its joined parts) 2.5, CJK 2. */
+export function appCells(text: string): number {
+  let cells = 0
+  let isJoined = false
+  for (const char of text) {
+    if (char === '‍') {
+      isJoined = true
+      continue
+    }
+    // Variation selectors and skin tones change the emoji before them, not its width.
+    if (/[︀-️\u{1f3fb}-\u{1f3ff}]/u.test(char)) continue
+    const isEmoji = /\p{Extended_Pictographic}/u.test(char)
+    if (!(isEmoji && isJoined)) cells += isEmoji ? APP_EMOJI : cellsOf(char) === 2 ? 2 : APP_LETTER
+    isJoined = false
+  }
+  return Math.round(cells * 100) / 100
+}
+
+/** The width of a part of the button row in the desktop app's cells: a Button, a Text, or a row of them. */
+function appWidthOf(element: unknown): number {
+  if (typeof element === 'string' || typeof element === 'number') return appCells(String(element))
+  if (element === null || typeof element !== 'object') return 0
+  const { type, props, children } = element as { type?: unknown; props?: Record<string, unknown>; children?: unknown }
+  if (type === 'Button') return 2 * APP_PAD + appCells(String(props?.label ?? ''))
+  const kids = childrenOf(Array.isArray(children) ? children.flat(Infinity) : children)
+  const gap = Number(props?.columnGap ?? props?.gap ?? 0) || 0
+  return kids.reduce<number>((sum, kid) => sum + appWidthOf(kid), 0) + (type === 'Box' ? gap * Math.max(0, kids.length - 1) : 0)
+}
+
+/**
+ * How many band rows (20 px) the desktop app gives Leitstand's row of buttons: `row` is the row as drawn, a wrapping
+ * row of boxes (the places on the left, the actions on the right) that each wrap their own buttons. Laid out as the
+ * app's flex rows do, greedily, with the widths of appWidthOf: a line of buttons one row, the row's marginTop and
+ * rowGap half a row each unit, as band.ts counts them.
+ */
+export function appButtonRows(row: unknown, columns: number): number {
+  if (row === null || typeof row !== 'object') return 0
+  const { props, children } = row as { props?: Record<string, unknown>; children?: unknown }
+  const half = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value * 0.5 : 0)
+  // Greedy lines of `widths` in `room` cells with `gap` between: how many.
+  const linesOf = (widths: number[], gap: number, room: number) => {
+    let lines = widths.length > 0 ? 1 : 0
+    let used = 0
+    for (const width of widths) {
+      if (used > 0 && used + gap + width > room) {
+        lines++
+        used = width
+      } else used = used === 0 ? width : used + gap + width
+    }
+    return lines
+  }
+  const groups = childrenOf(Array.isArray(children) ? children.flat(Infinity) : children).map(group => {
+    const own = (group ?? {}) as { props?: Record<string, unknown>; children?: unknown }
+    const items = childrenOf(Array.isArray(own.children) ? own.children.flat(Infinity) : own.children)
+    const gap = Number(own.props?.columnGap ?? own.props?.gap ?? 0) || 0
+    const widths = items.map(appWidthOf)
+    const lines = linesOf(widths, gap, columns)
+    return { width: Math.min(columns, appWidthOf(group)), height: lines + Math.max(0, lines - 1) * half(own.props?.rowGap ?? own.props?.gap) }
+  })
+  const rowGap = half(props?.rowGap ?? props?.gap)
+  const gap = Number(props?.columnGap ?? props?.gap ?? 0) || 0
+  // The groups side by side while they fit, each line of them as high as its highest.
+  const heights: number[] = []
+  let used = 0
+  for (const group of groups) {
+    if (heights.length > 0 && used + gap + group.width <= columns) {
+      heights[heights.length - 1] = Math.max(heights[heights.length - 1] ?? 0, group.height)
+      used += gap + group.width
+    } else {
+      heights.push(group.height)
+      used = group.width
+    }
+  }
+  const inner = heights.reduce((sum, one) => sum + one, 0) + Math.max(0, heights.length - 1) * rowGap
+  return Math.round((half(props?.marginTop ?? props?.marginY ?? props?.margin) + inner) * 1000) / 1000
+}
+
 export function liftButtons(tree: unknown, isWhole = true): { buttons: unknown[]; rest: unknown } {
   if (tree === null || typeof tree !== 'object') return { buttons: [], rest: tree }
   const { type, props, children } = tree as { type?: unknown; props?: { flexDirection?: unknown }; children?: unknown }
@@ -1381,7 +1827,6 @@ export function settle(tasks: GlanceTask[]): GlanceTask[] {
   return fixed.map((one, index) => (index === next ? { ...one, status: 'active' as const } : one))
 }
 
-/** Applies a progress report: earlier steps check off, 100 moves to the next. */
 /** The step a progress report means: the one it names, or without a name (a small model may leave it out) the one under way. */
 export function progressName(tasks: GlanceTask[], rawName: string): string {
   if (String(rawName ?? '').trim() === '') {
@@ -1392,7 +1837,12 @@ export function progressName(tasks: GlanceTask[], rawName: string): string {
   return cleanName(rawName)
 }
 
-export function applyProgress(tasks: GlanceTask[], rawName: string, rawPercent: number): GlanceTask[] {
+/**
+ * Applies a progress report: earlier steps check off, 100 moves to the next. `keepsEarlier`: helpers work on several
+ * steps side by side, so a report for a later step changes that step alone; the earlier ones stay open, and the
+ * earliest open step stays the active one.
+ */
+export function applyProgress(tasks: GlanceTask[], rawName: string, rawPercent: number, keepsEarlier = false): GlanceTask[] {
   const name = progressName(tasks, rawName)
   const percent = Math.min(100, Math.max(0, Math.round(Number(rawPercent) || 0)))
   let list = [...tasks]
@@ -1401,6 +1851,15 @@ export function applyProgress(tasks: GlanceTask[], rawName: string, rawPercent: 
     const active = list.findIndex(one => one.status === 'active')
     index = active === -1 ? list.length : active
     list.splice(index, 0, task(name, 'upcoming', `${name}#${list.length}`))
+  }
+  if (keepsEarlier) {
+    list = list.map((one, at) =>
+      at === index ? { ...one, status: percent >= 100 ? 'done' : 'upcoming', percent, hasReported: true } : one,
+    )
+    const earliest = list.findIndex(one => one.status !== 'done')
+    return list.map((one, at) =>
+      one.status === 'done' ? one : { ...one, status: at === earliest ? ('active' as const) : ('upcoming' as const) },
+    )
   }
   list = list.map((one, at) => {
     if (at < index) {

@@ -113,7 +113,7 @@ describe('messageText', () => {
     const m = message({
       role: 'assistant',
       text: 'Reading it.',
-      toolUses: [{ tool: 'Read', input: { file_path: '/a.ts' } }] as SessionMessage['toolUses'],
+      toolUses: [{ tool_use_id: 'tu1', tool: 'Read', input: { file_path: '/a.ts' } }] as SessionMessage['toolUses'],
     })
     expect(messageText(m)).toBe('Reading it.\n\n[Werkzeug: Read]\n```json\n{\n  "file_path": "/a.ts"\n}\n```')
   })

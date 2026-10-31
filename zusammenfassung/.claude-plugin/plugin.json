@@ -1,6 +1,6 @@
 {
   "name": "zusammenfassung",
-  "version": "0.7.4.0",
+  "version": "0.7.4.1",
   "description": "Nach jeder Runde zwei Zeilen über dem Eingabefeld: was Claude getan hat und was man leicht übersieht. Aufklappbar mit Erklärung und Dateiliste, dazu ein Replay, das jede Dateiänderung Schritt für Schritt zeigt. Hilfe: /zusammenfassung:hilfe. Grundlage für das Replay: Replay Theater von Anthropic (Apache-2.0).",
   "author": {
     "name": "Björn Müller",

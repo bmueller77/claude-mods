@@ -5,10 +5,11 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf } from '../hooks/logic'
+import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf, writesFiles, appButtonRows, appCells } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
-import { BAND_VERSION } from '../hooks/band'
+import { BAND_VERSION, zeilenVon } from '../hooks/band'
+import { FRAGE_ABGELEHNT } from '../hooks/autopilot/teil'
 
 /** A time on Berlin's wall clock as a moment: what the Leitstand shows on every machine, on UTC servers too. */
 const berlinZeit = (year: number, month: number, date: number, hours = 0, minutes = 0, seconds = 0) => {
@@ -2036,7 +2037,7 @@ async function bandWords($: Engine, surface: (typeof SURFACES)[number], props: o
 
 const SEVEN_STEPS = ['Notizen lesen', 'Tabelle bauen', 'Seite prüfen', 'Formular bauen', 'Fußzeile setzen', 'Menü bauen', 'Handys prüfen']
 
-test('Details folds a long plan as Simple does only when the band runs short of room', async ($, on) => {
+test('Details never folds a long plan: short of room it shows as many steps as fit', async ($, on) => {
   world(on)
   const heights: Record<string, { voll: number; klein: number }> = {}
   otherBandHeights(on, heights)
@@ -2055,17 +2056,19 @@ test('Details folds a long plan as Simple does only when the band runs short of 
     expect(roomy).not.toContain('3 Schritte fertig')
     expect(roomy).not.toContain('weitere Schritte')
 
-    // The summary and the next steps take much, and small they still leave too little: the finished steps fold into
-    // a line, and the ones after next too.
+    // The summary and the next steps take much, and small they still leave too little: nothing folds, the steps
+    // around the current one fill the rows left, and a line says how many are out of view.
     heights.statistik = { voll: 2, klein: 2 }
     heights.zusammenfassung = { voll: 4, klein: 1 }
     heights['naechste-schritte'] = { voll: 4, klein: 2 }
     const short = await bandWords($, surface, tall)
-    expect(short).toContain('3 Schritte fertig')
-    expect(short).toContain(surface === 'terminal' ? '2 weitere Schritte' : '2 weitere Schritte im Plan')
-    expect(short).toContain('Formular bauen')
-    expect(short).toContain('Fußzeile setzen')
-    for (const name of ['Notizen lesen', 'Tabelle bauen', 'Seite prüfen', 'Menü bauen', 'Handys prüfen']) expect(short).not.toContain(name)
+    expect(short).not.toContain('Schritte fertig')
+    expect(short).not.toContain('im Plan')
+    // The app's lines are a little taller than the terminal's rows: one step fewer fits there.
+    const shown = ['Seite prüfen', 'Formular bauen', 'Fußzeile setzen', 'Menü bauen', ...(surface === 'terminal' ? ['Handys prüfen'] : [])]
+    expect(short).toContain(surface === 'terminal' ? '2 davor' : '2 davor · 1 weiterer Schritt')
+    for (const name of shown) expect(short).toContain(name)
+    for (const name of SEVEN_STEPS.filter(one => !shown.includes(one))) expect(short).not.toContain(name)
   }
 })
 
@@ -2089,6 +2092,119 @@ test('the steps get the rows the other mods leave in the band, and say how many 
     expect(short).not.toContain('Menü zeigen')
     expect(short).toMatch(/\d weitere Schritte?/)
   }
+})
+
+// The row of buttons in the desktop app as Leitstand draws it at work in Gruppenarbeit: ten sign buttons, the family of
+// Gruppenarbeit among them, four bars, Plan and Verlauf on the left, Pause on the right.
+const APP_ROW = {
+  type: 'Box',
+  props: { key: 'actions', flexDirection: 'row', columnGap: 1, rowGap: 1.2, flexWrap: 'wrap', marginTop: 1.2 },
+  children: [
+    {
+      type: 'Box',
+      props: { flexDirection: 'row', columnGap: 0.5, rowGap: 1.2, flexWrap: 'wrap' },
+      children: [
+        ...['\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}', '\u{1F170}️', '|', '\u{1F4D6}', '\u{1F9CD}', '♨️', '\u{1FA9E}', '\u{1F9F9}', '|', '\u{1F4C2}', '|', '\u{1F512}', '\u{1F6E1}️', '|', 'Plan', 'Verlauf'].map(label =>
+          label === '|' ? { type: 'Text', props: { dimColor: true }, children: ['|'] } : { type: 'Button', props: { label, variant: 'secondary' } },
+        ),
+      ],
+    },
+    { type: 'Box', props: { flexDirection: 'row', columnGap: 0.5, rowGap: 1.2, flexWrap: 'wrap', flexGrow: 1 }, children: [{ type: 'Button', props: { label: 'Pause', variant: 'secondary' } }] },
+  ],
+}
+
+test('the desktop row of buttons is counted as the app draws it: one line at 80 columns, where band.ts counts three', () => {
+  // A sign button 1 + 2.5 + 1 ch, the family one glyph; Plan 2 + 3.2, Verlauf 2 + 5.6, a bar 0.8, half a cell between:
+  // the left 68.5 ch, with Pause (6) and the gap 75.5.
+  expect(appCells('\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}')).toBe(2.5)
+  expect(appCells('♨️')).toBe(2.5)
+  expect(appCells('Verlauf')).toBe(5.6)
+  expect(zeilenVon(APP_ROW as never, 'desktop', 80)).toBe(4.8)
+  // Over the row 0.6, a line of buttons 1, between two lines 0.6.
+  expect(appButtonRows(APP_ROW, 80)).toBe(1.6)
+  expect(appButtonRows(APP_ROW, 75)).toBe(3.2)
+  expect(appButtonRows(APP_ROW, 60)).toBe(4.8)
+})
+
+describe('Detailliert im engen Band: Schritte vor Helfern, der Rest in einer Zeile mit Zählzeichen', () => {
+  const EIGHT = ['Finde die Ursache', 'Baue die Seite', 'Schreib die Texte', 'Prüfe die Änderung', 'Schreib Tests', 'Lass Tests laufen', 'Prüfe die Doku', 'Melde das Ergebnis']
+  // Statistik a line under its rule, Nächste Schritte three lines (one, small), the summary its head line.
+  const USUAL = { statistik: { voll: 1.75, klein: 1.75 }, 'naechste-schritte': { voll: 4.95, klein: 1.75 }, zusammenfassung: { voll: 1.75, klein: 1.75 } }
+  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 80, scroll: { offset: 0, bodyRows } } })
+
+  /** Gruppenarbeit in Detailliert with Autopilot on: `steps` planned and started, four helpers at work on the first. */
+  const atWork = async ($: Engine, on: On, steps: string[], heights: Record<string, { voll: number; klein: number }>) => {
+    const clock = world(on)
+    otherBandHeights(on, heights)
+    let spawned = 0
+    on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `a${++spawned}` }) as never)
+    await detailsOn($)
+    await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+    await $.command.run({ command: 'autopilot', args: 'an' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps })
+    await endPlanTurn($)
+    await $.turn.start({ text: 'los', turnId: 't2' })
+    for (const [at, description] of ['Suche A', 'Suche B', 'Suche C', 'Suche D'].entries()) {
+      await $.agent.spawn({
+        tool_use_id: `tu${at}`, prompt: description, description, subagentType: 'leitstand:mittel',
+        provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false,
+      } as never)
+    }
+    return clock
+  }
+  const shownOn = async ($: Engine, bodyRows: number) => {
+    const ui = await $.ui.mount({ ...desk(bodyRows), surface: 'desktop' })
+    const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
+    const counts = (await ui.findAll({ type: 'Svg' })).filter(one => one.props.alt === 'Zusammengefasst').map(one => String(one.props.source))
+    await ui.unmount()
+    return { words, counts }
+  }
+
+  test('wie auf Björns Bild (8 Schritte, 4 Helfer, Autopilot, übliche Höhen): mehr als ein Schritt und eine Zeile mit Zählzeichen', async ($, on) => {
+    const written = publishedBandHeights(on)
+    const clock = await atWork($, on, EIGHT, USUAL)
+    // Budget 13, the others 1.75 + 1.75 (Nächste Schritte small) + 1.75 = 5.25: 7.75 rows for Leitstand. Its own rows:
+    // Autopilot 1, the rule 0.75, the header 1.05 and the buttons 1.6 (band.ts counted 4.8) = 4.4 (was 7.6). The steps
+    // get floor((7.75 - 4.4 + 0.05) / 1.05) = 3 lines of 1.05 (were floor(7.75 - 7.6 + 0.05) = 0, at least 1).
+    const { words, counts } = await shownOn($, 13)
+    expect(words).toContain('Finde die Ursache')
+    expect(words).toContain('Baue die Seite')
+    expect(words).not.toContain('Suche A')
+    expect(counts).toHaveLength(1)
+    expect(counts[0]).toContain('>+6<')
+    await clock.advance(1)
+    // Folded: the same 4.4 and six lines (the step, three helpers, the next step, the folded rest).
+    expect(written.at(-1)?.value).toEqual({ v: BAND_VERSION, voll: 15.95, klein: 10.7 })
+  })
+
+  test('ein wirklich enges Band zeigt den aktiven Schritt und die Zeile mit der Zahl der übrigen', async ($, on) => {
+    await atWork($, on, EIGHT, USUAL)
+    // Budget 12: floor((6.75 - 4.4 + 0.05) / 1.05) = 2 lines, the current step and the line that says what is left.
+    const { words, counts } = await shownOn($, 12)
+    expect(words).toContain('Finde die Ursache')
+    expect(words).toContain('7 weitere Schritte')
+    expect(words).not.toContain('Baue die Seite')
+    expect(words).not.toContain('Suche A')
+    expect(counts).toHaveLength(1)
+    expect(counts[0]).toContain('>+7<')
+  })
+
+  test('die Zeilen der Helfer fallen vor den Schritten weg', async ($, on) => {
+    const four = EIGHT.slice(0, 4)
+    // Statistik takes 3.6: 13 - 3.6 - 4.4 = 5 rows, four lines of 1.05 and a little; four steps and three helpers want 7.
+    await atWork($, on, four, { statistik: { voll: 3.6, klein: 3.6 } })
+    const { words, counts } = await shownOn($, 13)
+    for (const name of four) expect(words).toContain(name)
+    expect(words).not.toContain('weitere Schritte')
+    expect(words).not.toContain('Suche A')
+    expect(counts).toEqual([])
+    // One row more: the first helper under the current step comes back, the others stay out.
+    const roomier = await shownOn($, 14)
+    expect(roomier.words).toContain('Suche A')
+    expect(roomier.words).not.toContain('Suche B')
+    for (const name of four) expect(roomier.words).toContain(name)
+  })
 })
 
 test('Leitstand publishes its height in the band once per change, a tick after drawing, without a loop', async ($, on) => {
@@ -10023,12 +10139,306 @@ test('nurLesen: der Plan startet ohne Freigabe, schreibt aber keine Dateien; ein
   expect((await callTool($, { tool: 'Edit', file_path: '/work/preise.html', old_string: 'a', new_string: 'b' })).deny).toBeUndefined()
 })
 
+// Shell commands as a plan that only reads (nurLesen) sees them: [command, writes]. Lieber einmal zu viel abgelehnt als
+// eine Datei geschrieben; the reading ones are those a check or a search runs.
+const BASH_WRITES: [string, boolean][] = [
+  ['cat a.txt', false],
+  ['head -n 20 hooks/glance.tsx | tail -5', false],
+  ['grep -rn "rm -rf" hooks', false],
+  ["rg -n 'x > y' src", false],
+  ['ls -la && pwd', false],
+  ['find . -name "*.ts" -not -path "./node_modules/*"', false],
+  ['find . -name "*.ts" -exec grep -l foo {} \\;', false],
+  ['git status', false],
+  ['git log --oneline -5', false],
+  ['git diff --stat HEAD~1', false],
+  ['git -c core.autocrlf=false diff --stat', false],
+  ['git show HEAD:leitstand/hooks/band.ts', false],
+  ['git ls-files --eol leitstand', false],
+  ['git blame -L 10,20 hooks/logic.ts', false],
+  ['git branch -a', false],
+  ['git stash list', false],
+  ['git tag -l', false],
+  ['claude plugin test ./leitstand', false],
+  ['/c/Users/x/claude.exe plugin validate ./leitstand', false],
+  ['EXE=/c/x/claude.exe; "$EXE" plugin test ./leitstand', false],
+  ['npx --no-install -p typescript tsc -p tsconfig.json', false],
+  ['tsc --noEmit', false],
+  ['npm test', false],
+  ['npm run lint', false],
+  ['git status 2>/dev/null', false],
+  ['npm test 2>&1 | tail -20', false],
+  ['echo fertig >&2', false],
+  ['ls missing > /dev/null', false],
+  ['curl -s -o /dev/null -w "%{http_code}" https://example.com', false],
+  ['wget -qO- https://example.com', false],
+  ['echo "$(git rev-parse HEAD)"', false],
+  ['cat <<EOF\nrm -rf /\nEOF', false],
+  ['echo x > a.txt', true],
+  ['echo x >> a.txt', true],
+  ['echo x 2> fehler.log', true],
+  ['npm test &> log.txt', true],
+  ['echo x >| a.txt', true],
+  ['cat a | tee b', true],
+  ['rm -rf build', true],
+  ['rmdir old', true],
+  ['mv a b', true],
+  ['cp a b', true],
+  ['mkdir -p x/y', true],
+  ['touch a', true],
+  ['chmod +x run.sh', true],
+  ['ln -s a b', true],
+  ['truncate -s 0 log', true],
+  ['dd if=/dev/zero of=disk.img bs=1M count=1', true],
+  ["sed -i 's/a/b/' file", true],
+  ["sed -i.bak 's/a/b/' file", true],
+  ["perl -pi -e 's/a/b/' file", true],
+  ['git add .', true],
+  ['git commit -m "Fix"', true],
+  ['git push origin main', true],
+  ['git pull', true],
+  ['git checkout -- file', true],
+  ['git switch main', true],
+  ['git restore file', true],
+  ['git stash', true],
+  ['git tag v1', true],
+  ['git clean -fd', true],
+  ['git reset --hard', true],
+  ['git branch -D alt', true],
+  ['git branch -m neu', true],
+  ['git -C ../repo commit -am x', true],
+  ['npm install', true],
+  ['npm i lodash', true],
+  ['pnpm add x', true],
+  ['yarn', true],
+  ['pip install requests', true],
+  ['python -m pip install requests', true],
+  ['claude plugin install leitstand@bm-mods', true],
+  ['claude plugin uninstall leitstand@bm-mods', true],
+  ['claude plugin update leitstand@bm-mods', true],
+  ['claude plugin marketplace add bmueller77/claude-mods', true],
+  ['"$EXE" plugin marketplace remove bm-mods', true],
+  ['curl -o out.html https://example.com', true],
+  ['curl -sSLO https://example.com/a.zip', true],
+  ['curl --output=a.zip https://example.com', true],
+  ['wget https://example.com/a.zip', true],
+  ['ls && rm a', true],
+  ['ls; rm a', true],
+  ['false || rm a', true],
+  ['ls | xargs rm', true],
+  ['echo $(rm a)', true],
+  ['echo "$(touch a)"', true],
+  ['echo `rm a`', true],
+  ['(cd x && rm a)', true],
+  ['diff <(rm a) b', true],
+  ['bash -c "rm a"', true],
+  ["sh -c 'echo x > a'", true],
+  ['eval "rm a"', true],
+  ['sudo rm a', true],
+  ['env X=1 rm a', true],
+  ['timeout 60 npm install', true],
+  ['find . -name "*.tmp" -delete', true],
+  ['find . -name "*.tmp" -exec rm {} \\;', true],
+  ['cat > a.txt <<EOF\nx\nEOF', true],
+  ['powershell -Command "Remove-Item a"', true],
+]
+const POWERSHELL_WRITES: [string, boolean][] = [
+  ['Get-Content a.txt', false],
+  ['Get-ChildItem -Recurse | Select-String -Pattern "Remove-Item"', false],
+  ['git status 2>$null', false],
+  ['npm test > $null', false],
+  ['npm test *> $null', false],
+  ['Write-Output x | Out-Null', false],
+  ['git log 2>&1', false],
+  ['Select-String -Path a.ps1 -Pattern "Set-Content"', false],
+  ["& 'C:\\x\\claude.exe' plugin test ./leitstand", false],
+  ['Invoke-WebRequest https://example.com', false],
+  ['if ($a -gt 1) { Get-Item a }', false],
+  ['Set-Content a.txt x', true],
+  ['Add-Content a.txt x', true],
+  ['"x" | Out-File a.txt', true],
+  ['Get-Content a > b.txt', true],
+  ['Get-Content a >> b.txt', true],
+  ['New-Item -ItemType Directory foo', true],
+  ['Remove-Item x -Recurse -Force', true],
+  ['Move-Item a b', true],
+  ['Copy-Item a b', true],
+  ['Rename-Item a b', true],
+  ['Clear-Content a', true],
+  ['Get-ChildItem *.tmp | ForEach-Object { Remove-Item $_ }', true],
+  ['Invoke-WebRequest https://example.com -OutFile a.zip', true],
+  ['iwr https://example.com -OutFile a.zip', true],
+  ['git status; git add .', true],
+  ["& 'C:\\x\\claude.exe' plugin install leitstand@bm-mods", true],
+  ["&'C:\\x\\claude.exe' plugin install leitstand@bm-mods", true],
+  ["[IO.File]::WriteAllText('a', 'b')", true],
+  ['Write-Output "$(Remove-Item a)"', true],
+  ['cmd /c "del a"', true],
+  ['bash -c "rm a"', true],
+  ['del a', true],
+  ['mkdir neu', true],
+]
+
+test('writesFiles: lesende Befehle gehen durch, schreibende erkennt es in Bash und PowerShell', () => {
+  for (const [command, writes] of BASH_WRITES) expect({ command, writes: writesFiles(command, 'bash') }).toEqual({ command, writes })
+  for (const [command, writes] of POWERSHELL_WRITES) expect({ command, writes: writesFiles(command, 'powershell') }).toEqual({ command, writes })
+})
+
+test('nurLesen: Bash und PowerShell, die schreiben, sind gesperrt, auch für Helfer; lesende Befehle gehen durch', async ($, on) => {
+  world(on)
+  await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+  await $.turn.start({ text: 'Schau, warum die Tests scheitern', turnId: 't1' })
+  const read = await callTool($, { tool: PLAN, steps: ['Lies die Tests', 'Lass sie laufen', 'Berichte im Chat'], nurLesen: true })
+  expect(String(read.result)).toContain('nur lesen: Der Plan startet ohne Freigabe')
+  const written = await callTool($, { tool: 'Bash', command: 'echo x > a.txt' })
+  expect(written.deny).toContain('nur lesen')
+  expect(written.deny).toContain('ohne nurLesen')
+  expect((await callTool($, { tool: 'Bash', command: 'git status' })).deny).toBeUndefined()
+  expect((await callTool($, { tool: 'PowerShell', command: 'Get-Content a.txt' })).deny).toBeUndefined()
+  expect((await callTool($, { tool: 'PowerShell', command: 'Set-Content a.txt x' })).deny).toContain('nur lesen')
+  // A helper of the same job writes nothing either.
+  expect((await callTool($, { tool: 'Bash', command: 'rm a.txt', agentId: 'a1' })).deny).toContain('nur lesen')
+  expect((await callTool($, { tool: 'Bash', command: 'npm test', agentId: 'a1' })).deny).toBeUndefined()
+
+  // A plan to change things waits for Start; once it runs, its commands may write.
+  expect(String((await callTool($, { tool: PLAN, steps: ['Reparier die Tests'] })).result)).toContain('warte auf ihre Antwort')
+  await $.turn.start({ text: 'los', turnId: 't2' })
+  expect((await callTool($, { tool: 'Bash', command: 'echo x > a.txt' })).deny).toBeUndefined()
+})
+
 test('nurLesen im Auto-Modus ohne Plan-Freigabe ändert nichts: nichts wartet, nichts ist gesperrt', async ($, on) => {
   world(on)
   await $.turn.start({ text: 'Was steht in der Preisseite?', turnId: 't1' })
   const read = await callTool($, { tool: PLAN, steps: ['Lies die Preisseite', 'Antworte im Chat'], nurLesen: true })
   expect(String(read.result)).toContain('Der erste hat begonnen')
   expect((await callTool($, { tool: 'Edit', file_path: '/work/preise.html', old_string: 'a', new_string: 'b' })).deny).toBeUndefined()
+})
+
+describe('ein freigegebener Plan überlebt Helferberichte und Nachrichten mitten in der Runde', () => {
+  const HANDBACK =
+    'Another Claude session sent a message:\n<agent-message from="a1">\n[Subagent hand-back] Bericht\n  1. Ergebnis: erledigt.\n</agent-message>\n\nThat "other Claude session" is an agent working inside this same session.'
+
+  /** Group work: Claude lays out `steps` in turn t1, the person says "los" in turn t2, and the plan runs. */
+  async function approvedPlan($: Engine, steps: string[]) {
+    await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    expect(String((await callTool($, { tool: PLAN, steps })).result)).toContain('warte auf ihre Antwort')
+    await endPlanTurn($)
+    await $.turn.start({ text: 'los', turnId: 't2' })
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+  }
+
+  test('letzter Schritt offen, ein Helfer läuft, die Runde endet: der Plan bleibt offen, nach dem Bericht braucht der Rest keine Freigabe', async ($, on) => {
+    world(on)
+    on('classic.Stop', () => ({}) as never)
+    on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }) as never)
+    const steps = ['Finde die Ursache', 'Behebe den Fehler', 'Prüfe die Änderung']
+    await approvedPlan($, steps)
+    await callTool($, { tool: PROGRESS, task: 'Finde die Ursache', percent: 100 })
+    await callTool($, { tool: PROGRESS, task: 'Behebe den Fehler', percent: 100 })
+    await $.agent.spawn({
+      tool_use_id: 'tu1', prompt: 'Prüf es', description: 'Prüfe die Änderung', subagentType: 'leitstand:schnell',
+      provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false,
+    } as never)
+    await $.turn.complete({ answer: 'Der Arbeiter prüft gerade.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    const afterTurn = (await texts($, 'terminal')).join('\n')
+    expect(afterTurn).not.toContain('im Hintergrund')
+    expect(afterTurn).toContain('▶ \nPrüfe die Änderung')
+    // The helper ends, and its report wakes Claude.
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'h1', reason: 'answer', agentId: 'a1' } as never)
+    await $.turn.start({ text: HANDBACK, turnId: 't3' })
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+    expect(String((await callTool($, { tool: PLAN, steps })).result)).not.toContain('warte auf ihre Antwort')
+  })
+
+  test('zwei Schritte offen, ein Helfer läuft: nach seinem Bericht geht es ohne neue Freigabe weiter', async ($, on) => {
+    world(on)
+    on('classic.Stop', () => ({}) as never)
+    on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: 'a1' }) as never)
+    await approvedPlan($, ['Finde die Ursache', 'Behebe den Fehler', 'Prüfe die Änderung'])
+    await callTool($, { tool: PROGRESS, task: 'Finde die Ursache', percent: 100 })
+    await $.agent.spawn({
+      tool_use_id: 'tu1', prompt: 'Bau es', description: 'Behebe den Fehler', subagentType: 'leitstand:mittel',
+      provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false,
+    } as never)
+    await $.turn.complete({ answer: 'Der Arbeiter baut gerade.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'h1', reason: 'answer', agentId: 'a1' } as never)
+    await $.turn.start({ text: HANDBACK, turnId: 't3' })
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+  })
+
+  test('eine Nachricht der Person mitten in der Runde (Send now) verwirft den freigegebenen Plan nicht', async ($, on) => {
+    world(on)
+    on('prompt.submit', (_, e) => ({ text: e.text }))
+    await approvedPlan($, ['Finde die Ursache', 'Behebe den Fehler', 'Prüfe die Änderung', 'Lade hoch'])
+    const frage = 'Was wäre eigentlich, wenn im Prompt des Crons der Slash-Befehl stünde?'
+    // The engine ends the running turn as aborted to make way for the message, then starts a turn with it.
+    await $.prompt.submit({ text: frage, wait: false, turnId: 't2', origin: { kind: 'sdk' } } as never)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
+    await $.turn.start({ text: frage, turnId: 't3' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toBeUndefined()
+  })
+
+  test('eine Nachricht in die Runde, die den Plan anlegt: der Plan wartet weiter auf Start', async ($, on) => {
+    world(on)
+    on('prompt.submit', (_, e) => ({ text: e.text }))
+    await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Finde die Ursache', 'Behebe den Fehler'] })
+    await $.prompt.submit({ text: 'Wie lange dauert das?', wait: false, turnId: 't1', origin: { kind: 'sdk' } } as never)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't1', reason: 'aborted' })
+    await $.turn.start({ text: 'Wie lange dauert das?', turnId: 't2' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toContain('noch nicht freigegeben')
+    await $.turn.complete({ answer: 'Etwa zehn Minuten.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect((await texts($, 'terminal')).join('\n')).toContain('Start')
+    await $.turn.start({ text: 'los', turnId: 't3' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toBeUndefined()
+  })
+
+  test('echtes Esc ohne Nachricht, dann eine neue Anfrage: ein neuer Auftrag wie bisher', async ($, on) => {
+    world(on)
+    await approvedPlan($, ['Finde die Ursache', 'Behebe den Fehler', 'Prüfe die Änderung'])
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
+    expect((await texts($, 'terminal')).join('\n')).toContain('Gestoppt')
+    await $.turn.start({ text: 'Bau mir eine Kontaktseite', turnId: 't3' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toContain('Ruf zuerst')
+  })
+
+  test('eine Nachricht in die Runde aufgenommen, viel später echtes Esc: eine neue Anfrage ist ein neuer Auftrag', async ($, on) => {
+    const clock = world(on)
+    on('prompt.submit', (_, e) => ({ text: e.text }))
+    await approvedPlan($, ['Finde die Ursache', 'Behebe den Fehler', 'Prüfe die Änderung'])
+    await $.prompt.submit({ text: 'Nimm auch die Tests mit.', wait: false, turnId: 't2', origin: { kind: 'sdk' } } as never)
+    await clock.advance(60_000)
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
+    await $.turn.start({ text: 'Bau mir eine Kontaktseite', turnId: 't3' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toContain('Ruf zuerst')
+  })
+
+  test('Plan ganz abgehakt, dann die Nachricht eines anderen Agenten (peer): kein neuer Auftrag, nichts gesperrt', async ($, on) => {
+    world(on)
+    on('prompt.submit', (_, e) => ({ text: e.text }))
+    await approvedPlan($, ['Finde die Ursache', 'Behebe den Fehler'])
+    await callTool($, { tool: PROGRESS, task: 'Finde die Ursache', percent: 100 })
+    await callTool($, { tool: PROGRESS, task: 'Behebe den Fehler', percent: 100 })
+    await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    const bericht = 'Another Claude session sent a message: <agent-message from="x">Bericht</agent-message>'
+    await $.prompt.submit({ text: bericht, wait: false, origin: { kind: 'peer' } } as never)
+    await $.turn.start({ text: bericht, turnId: 't3' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toBeUndefined()
+  })
+
+  test('dieselbe Lage mit einem eigenen Auftrag der Person (sdk): ein neuer Auftrag wie bisher', async ($, on) => {
+    world(on)
+    on('prompt.submit', (_, e) => ({ text: e.text }))
+    await approvedPlan($, ['Finde die Ursache', 'Behebe den Fehler'])
+    await callTool($, { tool: PROGRESS, task: 'Finde die Ursache', percent: 100 })
+    await callTool($, { tool: PROGRESS, task: 'Behebe den Fehler', percent: 100 })
+    await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    await $.prompt.submit({ text: 'Bau mir eine Kontaktseite', wait: false, origin: { kind: 'sdk' } } as never)
+    await $.turn.start({ text: 'Bau mir eine Kontaktseite', turnId: 't3' })
+    expect((await callTool($, { tool: 'Grep', pattern: 'y' })).deny).toContain('Ruf zuerst')
+  })
 })
 
 /** Modellwahl as it draws its proposal: a keyed line with its words and its two buttons, over what is beneath. */
@@ -10246,5 +10656,126 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
     expect(seen.floor).toEqual([APP_WRAP])
     expect(await answer($, { items: ITEMS, scope: 'continuation' })).toBe('Von der App.')
     expect(seen.floor).toEqual([APP_WRAP, APP_PLAN])
+  })
+})
+
+describe('Autopilot, Zeitgeber, Berichte und Pause neben laufenden Helfern', () => {
+  const typeNightShift = ($: Engine, args = '') => $.command.run({ command: 'autopilot', args } as never)
+  const FRAGE = { tool: 'AskUserQuestion', questions: [{ question: 'Welche Datenbank?', header: 'DB', multiSelect: false, options: [] }] }
+  const bandText = async ($: Engine) => [...(await texts($, 'terminal')), ...(await texts($, 'desktop'))].join('\n')
+
+  /** Reads Leitstand's checklist from another plugin: /schritte answers with each step and its status. */
+  const CHECKLIST_READER = {
+    name: 'checklist-reader',
+    register(on: On) {
+      on('command.run', { command: 'schritte' }, async $ => {
+        const { value } = (await $.state.get({ plugin: 'leitstand', key: 'checklist' } as never)) as {
+          value?: { tasks: { name: string; status: string }[] } | null
+        }
+        return { text: (value?.tasks ?? []).map(one => `${one.name}: ${one.status}`).join('\n') }
+      })
+    },
+  }
+  const steps$ = async ($: Engine) => String((await $.command.run({ command: 'schritte', args: '' } as never)).text).split('\n')
+
+  test('Autopilot an: eine Rückfrage, die er ablehnt, zeigt nie Braucht dich; ohne Autopilot schon', VIEW_SIMPLE, async ($, on) => {
+    // What the band shows while a question waits for the person's answer: the call returns only after it.
+    let whileAsking: string | null = null
+    const answer = async (_: unknown, e: { tool?: string }) => {
+      if (e.tool === 'AskUserQuestion') whileAsking = await bandText($)
+      return { result: {} }
+    }
+    world(on, answer as unknown as () => unknown)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+    await typeNightShift($, 'an')
+    expect((await callTool($, FRAGE)).deny).toBe(FRAGE_ABGELEHNT)
+    expect(whileAsking).toBeNull()
+    expect(await bandText($)).not.toContain('Braucht dich')
+    await typeNightShift($, 'aus')
+    expect((await callTool($, FRAGE)).deny).toBeUndefined()
+    expect(whileAsking ?? '').toContain('Braucht dich')
+  })
+
+  test('eine Rückfrage, die weiter innen abgelehnt wird, nimmt Braucht dich wieder zurück', VIEW_SIMPLE, async ($, on) => {
+    world(on, () => ({ deny: 'Nicht jetzt.' }))
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Lies die Notizen', 'Baue die Tabelle'] })
+    expect((await callTool($, FRAGE)).deny).toBe('Nicht jetzt.')
+    expect(await bandText($)).not.toContain('Braucht dich')
+  })
+
+  for (const source of ['Autopilot', 'geplante Aufgabe'] as const) {
+    test(`${source}: die 30 s bis zum Start laufen ab dem Ende der Runde mit dem Plan, nicht ab plan_steps`, async ($, on) => {
+      const clock = world(on)
+      const sent: string[] = []
+      on('prompt.submit', (_, e) => {
+        sent.push(e.text)
+        return { text: e.text }
+      })
+      const auftrag = 'Schreib eine Übergabe für die nächste Instanz.'
+      await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+      if (source === 'Autopilot') await typeNightShift($, 'an')
+      else await $.prompt.submit({ text: auftrag, wait: false, origin: { kind: 'scheduled-trigger' } } as never)
+      await $.turn.start({ text: auftrag, turnId: 't1' })
+      expect(String((await callTool($, { tool: PLAN, steps: ['Lies den Stand', 'Schreib die Übergabe'] })).result)).toContain(
+        'in 30 Sekunden von selbst',
+      )
+      // Claude's message with the plan takes a while; nothing counts yet.
+      await clock.advance(20_000)
+      expect(sent.filter(one => one === START_TEXT)).toHaveLength(0)
+      await endPlanTurn($)
+      for (const surface of SURFACES) expect((await texts($, surface)).join('\n')).toContain('startet in 30 s')
+      await clock.advance(29_000)
+      expect(sent.filter(one => one === START_TEXT)).toHaveLength(0)
+      await clock.advance(1000)
+      expect(sent.filter(one => one === START_TEXT)).toHaveLength(1)
+    })
+  }
+
+  test('Gruppenarbeit: ein Bericht für einen späteren Schritt, während Arbeiter laufen, hakt die früheren nicht ab', { plugins: [CHECKLIST_READER] }, async ($, on) => {
+    world(on)
+    on('classic.Stop', () => ({}) as never)
+    let spawned = 0
+    on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `a${++spawned}` }) as never)
+    const steps = ['Finde die Ursache', 'Baue die Seite', 'Schreib die Texte', 'Prüfe die Änderung']
+    await $.command.run({ command: 'leitstand', args: 'modus gruppenarbeit' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps })
+    await endPlanTurn($)
+    await $.turn.start({ text: 'los', turnId: 't2' })
+    await callTool($, { tool: PROGRESS, task: 'Finde die Ursache', percent: 100 })
+    for (const [at, description] of ['Baue die Seite', 'Schreib die Texte'].entries()) {
+      await $.agent.spawn({
+        tool_use_id: `tu${at}`, prompt: description, description, subagentType: 'leitstand:mittel',
+        provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false,
+      } as never)
+    }
+    await callTool($, { tool: PROGRESS, task: 'Schreib die Texte', percent: 100 })
+    expect(await steps$($)).toEqual(['Finde die Ursache: done', 'Baue die Seite: active', 'Schreib die Texte: done', 'Prüfe die Änderung: upcoming'])
+    await callTool($, { tool: PROGRESS, task: 'Prüfe die Änderung', percent: 40 })
+    expect(await steps$($)).toEqual(['Finde die Ursache: done', 'Baue die Seite: active', 'Schreib die Texte: done', 'Prüfe die Änderung: upcoming'])
+
+    // The helpers are done: a report for the last step checks off the ones before, as models often skip them.
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'h1', reason: 'answer', agentId: 'a1' } as never)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'h2', reason: 'answer', agentId: 'a2' } as never)
+    await callTool($, { tool: PROGRESS, task: 'Prüfe die Änderung', percent: 50 })
+    expect(await steps$($)).toEqual(['Finde die Ursache: done', 'Baue die Seite: done', 'Schreib die Texte: done', 'Prüfe die Änderung: active'])
+  })
+
+  test('Pause hält die Hauptrunde an, auch wenn danach die Runde eines Helfers begann', async ($, on) => {
+    world(on)
+    let aborted = ''
+    on('turn.abort', (_, e) => {
+      aborted = e.turnId
+      return { value: undefined } as never
+    })
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    await $.turn.start({ text: 'Prüf die Seite', turnId: 'h1', agentId: 'a1' } as never)
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    await ui.press({ key: 'pause' })
+    await ui.unmount()
+    expect(aborted).toBe('t1')
   })
 })

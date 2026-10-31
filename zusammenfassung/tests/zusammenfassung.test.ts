@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement, SessionMessage } from 'claude-code'
 
 import { BAND_VERSION } from '../hooks/band'
-import { ALTE_BEFEHLE, BEFEHLE, KURZFORMEN, SYSTEM, SYSTEM_MEHR, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, modIdAus, relPfad, schrittArt, uebersicht, zeilenUmbruch } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, KURZFORMEN, SYSTEM, befehlsName, SYSTEM_MEHR, aenderungenText, diff, fehlerText, hilfeText, kuerze, leseBericht, modIdAus, relPfad, schrittArt, uebersicht, zeilenUmbruch } from '../hooks/register'
 
 const BAND = { plugin: 'zusammenfassung', component: 'AbovePrompt' } as const
 
@@ -64,7 +64,7 @@ function fensterProps() {
  * `antworten` ist, was das Modell nacheinander sagt; zurueck kommen die
  * gestellten Fragen und die geoeffneten Fenster, damit ein Test zaehlen kann.
  */
-function boden(on: On, antworten: string[], chat = { id: 'chat-a' }) {
+function boden(on: On, antworten: string[], chat = { id: 'chat-a' }, nachrichten: SessionMessage[] = VERLAUF) {
     on('session.start', (_$, e, _next) => ({ cwd: e.cwd }))
     on('session.id', (_$, _e, _next) => ({ value: chat.id }))
     on('session.cwd', (_$, _e, _next) => ({ value: '/projekt' }))
@@ -77,7 +77,7 @@ function boden(on: On, antworten: string[], chat = { id: 'chat-a' }) {
         angemeldet.push(e)
         return { value: { command: e.name } }
     })
-    on('session.messages', (_$, _e, _next) => ({ value: VERLAUF }))
+    on('session.messages', (_$, _e, _next) => ({ value: nachrichten }))
     const fenster: string[] = []
     on('ui.open', (_$, e, _next) => {
         fenster.push(e.id)
@@ -1006,6 +1006,35 @@ test('der Prompt an das Modell verlangt echte Umlaute und zeigt Beispiele mit Um
         expect(system).not.toMatch(/fuer|geaendert|hoechstens|Erklaere|Aufzaehl/)
     }
     expect(SYSTEM).toContain('ergänzt, er läuft grün')
+})
+
+test('ein Slash-Befehl ist kein Auftrag: seine Argumente gehen nicht als Bitte der Person an das Modell', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const nachrichten: SessionMessage[] = [
+        { role: 'user', text: '/modellwahl Baue die Preistabelle', toolUses: [] },
+        {
+            role: 'user',
+            text: '<command-name>/modellwahl</command-name>\n<command-message>modellwahl</command-message>\n<command-args>Baue die Preistabelle</command-args>',
+            toolUses: [],
+        },
+        { role: 'user', text: 'Bau mir die Leiste.', toolUses: [] },
+        { role: 'assistant', text: 'Gebaut, zwei Dateien geaendert.', toolUses: [] },
+    ]
+    const { fragen } = boden(on, [ANTWORT_MODELL], { id: 'chat-a' }, nachrichten)
+
+    await start($ as never)
+    await runde($ as never, 't1', 5_000, [EDIT])
+    await clock.advance(0)
+    expect(fragen).toHaveLength(1)
+    expect(fragen[0]).not.toContain('Preistabelle')
+    expect(fragen[0]).not.toContain('[Person] /modellwahl')
+    expect(fragen[0]).toContain('[Befehl] /modellwahl (an die App oder einen Mod, kein Auftrag an den Assistenten)')
+    // Eine echte Bitte bleibt eine Bitte, ebenso ein Pfad am Anfang.
+    expect(fragen[0]).toContain('[Person] Bau mir die Leiste.')
+    expect(befehlsName('/etc/hosts zeigen')).toBe(null)
+    expect(befehlsName('/modellwahl:zeigen')).toBe('modellwahl:zeigen')
+    expect(SYSTEM).toContain('kein Auftrag an den Assistenten')
 })
 
 // --- Platz im Band: wenig Platz klappt die Zusammenfassung auf ihre Kopfzeile zu (hooks/band.ts) ---

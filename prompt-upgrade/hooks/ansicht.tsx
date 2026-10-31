@@ -27,6 +27,12 @@ export const TITEL = 'PROMPT-UPGRADE'
 /** Ab dieser Breite stehen die beiden Karten nebeneinander, darunter untereinander. */
 export const NEBENEINANDER_AB = 72
 
+/**
+ * So viele Zeilen hoch ist das Feld von "Bearbeiten" (`rows` von `Input`, Terminal, Desktop, VS Code):
+ * genug fuer einen Prompt mit mehreren Absaetzen, ein laengerer scrollt im Feld. Das Fenster hat 30 Zeilen.
+ */
+export const FELD_ZEILEN = 10
+
 /** Die Bausteine der Oberflaeche, aus `$.ui.resolve(e)`. */
 export type Kit = {
     Box: ElementConstructor<BoxProps>
@@ -579,6 +585,7 @@ function pruefen(k: Kit, x: PromptUpgradeAblauf, breite: number, a: Aktionen): R
                         key="entwurf"
                         label="Upgrade"
                         value={text}
+                        rows={FELD_ZEILEN}
                         submitLabel="ausführen"
                         autoFocus
                         onInput={v => a.entwurf(v)}

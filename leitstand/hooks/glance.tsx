@@ -91,6 +91,7 @@ import {
   formatLeft,
   formatTokens,
   fragtNachHilfe,
+  hasRunningWorker,
   hasUnfinishedWork,
   headerDetails,
   isBusy,
@@ -139,6 +140,8 @@ import {
   runsPrMerge,
   unsafeMerge,
   unsafePowerShellMerge,
+  writesFiles,
+  appButtonRows,
 } from './logic'
 
 import type { ChatSettings, EinstellungenJetzt, SavedChecklist } from './logic'
@@ -346,7 +349,7 @@ const TICK_MS = 250
 // Calm mode redraws only to keep times current.
 const CALM_TICK_MS = 5000
 // With Autopilot on, nobody is there to press Start: a waiting plan starts by itself this long after it began to
-// wait with Autopilot on.
+// wait with Autopilot on and showed in the band (a plan laid out in a running turn shows once that turn has ended).
 const NIGHT_SHIFT_START_MS = 30_000
 // A job shorter than this finishes without a sound.
 const LONG_JOB_MS = 60_000
@@ -377,6 +380,9 @@ const SECRET_PASSES: ReadonlySet<string> = new Set([
   'observer',
   'observer-activity',
 ])
+// A helper's report or another agent's message, not the person's words: it never starts a new job. Prompt Upgrade
+// sends the person's own message as 'plugin', so that kind is not among them.
+const AGENT_MESSAGE_KINDS: ReadonlySet<string> = new Set(['task-notification', 'peer', 'peer-send-message', 'coordinator'])
 const LIMIT_WARN = 80
 const LIMIT_ALERT = 95
 // Up to 0.24 every chat's checklist sat under this one key; now each has its own (RESUME_PREFIX).
@@ -622,6 +628,13 @@ const noteMerge = (ran: { deny?: string; isError?: boolean }) => {
 // The main loop's running turn, for the Pause button; and whether a pause asked for its end.
 let runningTurn: string | undefined
 let isPausing = false
+// A message of the person's own sent into the running main turn (Send now in the app), its turn and when: the engine
+// then ends that turn as aborted, which is no Esc.
+let interjection: { turnId: string; at: number } | null = null
+// The main turn just ended to make way for such a message: the person's next turn carries the job on.
+let isMakingWay = false
+// How soon after the message the turn must end to count as making way; a message taken into the turn ends nothing.
+const INTERJECTION_MS = 10_000
 // A turn of the main loop runs (helpers' turns do not count): a command or message a mod sends now waits in the
 // engine's queue until the session is idle.
 let isMainTurnRunning = false
@@ -654,8 +667,8 @@ let promptKind: string | null = null
 // The running job came from a scheduled task (cron, routine, /loop): nobody is there to press Start, so its waiting
 // plan starts by itself after NIGHT_SHIFT_START_MS, as with Autopilot on.
 let isUnattendedJob = false
-// The job whose plan Claude laid out as reading only (nurLesen): it started without approval, and a tool that writes
-// files is refused for it until a plan of its own is approved.
+// The job whose plan Claude laid out as reading only (nurLesen): it started without approval, and a tool or a shell
+// command that writes files is refused for it until a plan of its own is approved.
 let readOnlyJob: string | null = null
 // The settings a new chat starts with, from the config menu (register sets them); and the settings work under way,
 // so the next waits for it.
@@ -2237,7 +2250,8 @@ const holdForApproval = async ($: $): Promise<boolean> => {
       ? { ...list, approval: 'waiting', phase: 'working', needsYouReason: null }
       : { ...list, approval: 'waiting', phase: 'needsYou', needsYouReason: APPROVE },
   )
-  // With Autopilot on, its count to Start begins now; the same plan laid out again keeps its count.
+  // With Autopilot on, its count to Start begins now, or once a veiled plan shows; the same plan laid out again keeps
+  // its count.
   await armNightStart($)
 
   return true
@@ -2311,6 +2325,11 @@ const armNightStart = async ($: $): Promise<string | null> => {
   if (plan === null) {
     // Started once holds for one wait: a plan that waits again later is counted again.
     nightStartedPlan = null
+    stopNightStart()
+    return null
+  }
+  // Still veiled, the plan shows to nobody yet: the count waits for the turn that laid it out to end.
+  if (await read($, planVeiledAtom)) {
     stopNightStart()
     return null
   }
@@ -3049,7 +3068,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
             type: 'boolean',
             description:
               'true, wenn der Plan nur sucht, liest, analysiert, recherchiert, überlegt oder im Chat antwortet und nichts anlegt, ' +
-              'ändert, löscht oder verschickt. Dann braucht er keine Freigabe; ein Tool, das Dateien schreibt, ist für ihn gesperrt.',
+              'ändert, löscht oder verschickt. Dann braucht er keine Freigabe; Tools, die Dateien schreiben, und Shell-Befehle, ' +
+              'die etwas schreiben oder ändern, sind für ihn gesperrt.',
           },
         },
         required: ['steps'],
@@ -3328,6 +3348,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   // aus" or "normal antworten" (or the old "stop adhd mode", "normal mode") off. A message held back changes nothing.
   on('prompt.submit', async ($, e, next) => {
     if (!e.isMeta && !e.command && !e.turnId) promptKind = e.origin.kind
+    // The person's own words sent into the running main turn: should that turn now end aborted, it made way for them.
+    if (!e.isMeta && !e.command && e.turnId !== undefined && isMainTurnRunning && /^(composer|sdk|bridge)$/.test(e.origin.kind)) {
+      interjection = { turnId: e.turnId, at: await now($) }
+    }
     const says = e.command ? (isAdhdCommand(e.command.name) ? true : null) : e.isMeta ? null : adhdSays(e.text)
     const send = async (sent: typeof e = e) => {
       const result = await next(sent)
@@ -3533,17 +3557,26 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       isMainTurnRunning = true
-      // A plan veiled in an earlier turn shows by now, even if that turn's end never arrived.
-      if (await read($, planVeiledAtom)) await update($, planVeiledAtom, () => false)
+      // A plan veiled in an earlier turn shows by now, even if that turn's end never arrived; its count to Start, with
+      // Autopilot on or for a scheduled task, begins as it shows.
+      if (await read($, planVeiledAtom)) {
+        await update($, planVeiledAtom, () => false)
+        await armNightStart($)
+      }
     }
     // No main turn runs during a compaction: one that starts means it is over.
     if (e.agentId === undefined && (await read($, compactingAtom))) await update($, compactingAtom, () => false)
     if (e.agentId === undefined) void readRemote($)
     // After /clear or a resume in this process the chat id changed: its settings follow.
     if (!e.agentId) void followSession($).catch(() => {})
-    runningTurn = e.turnId
+    // Pause and the stall check mean the main turn; a helper's turn must not take its place.
+    if (e.agentId === undefined) runningTurn = e.turnId
     noteSign($)
-    const text = ownWords(e.text)
+    // A helper's report or another agent's message is no request of the person's: its turn counts as one Claude starts
+    // by itself.
+    const isFromAgent = e.agentId === undefined && promptKind !== null && AGENT_MESSAGE_KINDS.has(promptKind)
+    if (isFromAgent) promptKind = null
+    const text = isFromAgent ? '' : ownWords(e.text)
     // A request of the person's own says whether its helpers run as Ultracode; a turn Claude starts by itself (a
     // helper finished) carries on the request before it.
     if (e.agentId === undefined && text) await update($, ultracodeAtom, () => /\bultracode\b/i.test(text))
@@ -3565,6 +3598,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       }
     }
     const current = await read($, checklistAtom)
+    // The turn before was cut short for this message, not stopped with Esc: the job it ran goes on.
+    const makesWay = e.agentId === undefined && isMakingWay
+    if (e.agentId === undefined) isMakingWay = false
     // A go-ahead in the message that starts the person's turn also approves a plan Claude makes in this turn. A
     // helper's turn starts with its brief, which is no go-ahead of the person's: it leaves the main chat's alone.
     // A clear request to carry out work, worded any way ("setz b) um"), approves too: a plan that waits for Start, or
@@ -3603,6 +3639,18 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         stopKind: null,
         stuckReason: null,
         needsYouReason: null,
+        finishedAt: null,
+        isCollapsed: false,
+      }))
+    } else if (makesWay && current !== null && text && !text.startsWith('/') && current.phase === 'stopped' && current.stopKind === 'esc') {
+      // A message sent into the running turn (Send now): the engine ended that turn for it. The same job carries on,
+      // its plan approved or waiting as before; the message is the person's word in it, not a new request.
+      await change($, list => ({
+        ...list,
+        phase: 'working',
+        needsYouReason: null,
+        stopKind: null,
+        stuckReason: null,
         finishedAt: null,
         isCollapsed: false,
       }))
@@ -3712,10 +3760,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       await change($, list => {
         // Without a step name the report is about the step under way, not a new "Arbeitet daran".
         const name = progressName(list.tasks, rawName)
+        // Without helpers, a report for a later step checks off the earlier ones (models often skip reporting them).
+        // With helpers at work, steps run side by side: an earlier step may still be in a helper's hands. Which helper
+        // works on which step is unknown here, since helpers started together all count for the step active then.
 
         return {
           ...list,
-          tasks: applyProgress(list.tasks, rawName, percent).map(one =>
+          tasks: applyProgress(list.tasks, rawName, percent, hasRunningWorker(list)).map(one =>
             summary !== null && one.name.toLowerCase() === name.toLowerCase() ? { ...one, summary } : one,
           ),
           activity: percent === 100 ? null : list.activity,
@@ -3725,12 +3776,18 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       return { result: `Fortschritt notiert: ${percent}%.` }
     }
 
-    // A plan that started without approval as reading only writes no files, and neither do its helpers.
-    if (FILE_TOOLS[tool] && readOnlyJob !== null && readOnlyJob === (await read($, checklistAtom))?.jobId) {
-      return {
-        deny:
-          'Dieser Plan ist als nur lesen angemeldet und lief ohne Freigabe los. Zum Anlegen oder Ändern leg mit plan_steps ' +
-          'einen neuen Plan ohne nurLesen an; er wartet auf die Freigabe der Person.',
+    // A plan that started without approval as reading only writes no files, and neither do its helpers: no file tool,
+    // and no shell command that writes (logic.ts, writesFiles).
+    const isShell = tool === 'Bash' || tool === 'PowerShell'
+    if ((FILE_TOOLS[tool] || isShell) && readOnlyJob !== null && readOnlyJob === (await read($, checklistAtom))?.jobId) {
+      const command = isShell ? String((e as unknown as { command?: unknown }).command ?? '') : ''
+      if (!isShell || writesFiles(command, tool === 'PowerShell' ? 'powershell' : 'bash')) {
+        return {
+          deny:
+            'Dieser Plan ist als nur lesen angemeldet und lief ohne Freigabe los. ' +
+            (isShell ? 'Dieser Befehl schreibt oder ändert etwas (Dateien, Git, Pakete oder Einstellungen). ' : '') +
+            'Zum Anlegen oder Ändern leg mit plan_steps einen neuen Plan ohne nurLesen an; er wartet auf die Freigabe der Person.',
+        }
       }
     }
 
@@ -3797,7 +3854,12 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       }
     }
 
-    if (tool === 'AskUserQuestion') {
+    // A real question returns only once the person has answered, so Needs you shows before it runs. Autopilot, a part
+    // of this mod whose hook runs inside this one, refuses the model's questions while it has a run: nobody is asked
+    // then, and Needs you stays off. A refusal from elsewhere further in brings back the state before the question.
+    const isAsking = tool === 'AskUserQuestion' && !(next.origin.plugin === 'engine' && (await isNightShiftOn($)))
+    const beforeAsking = isAsking && list !== null ? { phase: list.phase, needsYouReason: list.needsYouReason, question: list.question } : null
+    if (isAsking) {
       await setNeedsYou($, QUESTION)
     } else if (list?.phase === 'needsYou') {
       await setWorking($)
@@ -3832,6 +3894,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     }
 
     if (ran.deny !== undefined) {
+      if (beforeAsking !== null) {
+        await change($, current =>
+          current.phase === 'needsYou' && current.needsYouReason === QUESTION ? { ...current, ...beforeAsking } : current,
+        )
+      }
       return ran
     }
     // The person said no at the permission dialog.
@@ -3977,7 +4044,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     isMainTurnRunning = false
     // The turn that laid out a waiting plan has ended, aborted or not: from here on the band shows Needs you and Start.
     const wasVeiled = await read($, planVeiledAtom)
-    if (wasVeiled) await update($, planVeiledAtom, () => false)
+    if (wasVeiled) {
+      await update($, planVeiledAtom, () => false)
+      // The count to Start begins now, as the plan shows: the person gets the full time to read it.
+      await armNightStart($)
+    }
     void readRemote($)
     const finished = await now($)
     if (isStalled) {
@@ -3992,6 +4063,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     hasAskedInBox = false
     const wasPaused = isPausing
     isPausing = false
+    // Ended aborted right after the person sent a message into this turn: the engine made way for it, nobody pressed
+    // Esc. A message long before an abort was taken into the turn, and the abort is a real Esc.
+    const mark = interjection
+    interjection = null
+    isMakingWay = e.reason === 'aborted' && !wasPaused && mark !== null && mark.turnId === e.turnId && finished - mark.at <= INTERJECTION_MS
     // Ship it's merge request: the exact head commit asked about stays pending until the person replies, and an
     // approval lasts only for the turn it started. A declining turn ends Ship it, even if Claude asks again in it;
     // Esc ends it too, Pause does not.
@@ -4003,6 +4079,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
 
     if (list !== null) {
       await change($, current => (current.activity === null ? current : { ...current, activity: null }))
+      // A helper still at work on the last open step: its report carries the plan on, so the plan is not done yet.
+      const isWaitingForWorker = hasRunningWorker(list) && list.tasks.some(one => one.status !== 'done')
       if (wasPaused) {
         await change($, current => ({
           ...current,
@@ -4022,7 +4100,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         // Keep the explanation of why Claude paused.
       } else if (e.reason === 'aborted') {
         await change($, current => ({ ...current, phase: 'stopped', stopKind: 'esc', needsYouReason: null, finishedAt: finished }))
-      } else if (list.hasPlan && hasUnfinishedWork(list.tasks)) {
+      } else if (list.hasPlan && (hasUnfinishedWork(list.tasks) || isWaitingForWorker)) {
         // A helper still running means Claude waits for it, not for the person. A plan laid out in this turn waits for
         // Start all the same, as it did before its Needs you waited for the turn's end.
         const asked = questionOf(e.answer ?? '')
@@ -4992,17 +5070,22 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // Leitstand's own part of the band, as it is measured for the other mods (hooks/band.ts): the held message, the
     // Autopilot's line (a part of Leitstand), the line over the band and the tree. Modellwahl measures its own line,
     // and the mods drawn under it theirs.
-    const ownRows = (tree: RenderElement): number =>
-      zeilenVon(
+    // In the desktop app the row of buttons is counted by appButtonRows (logic.ts), which knows how wide the app draws a
+    // button; band.ts would count it a third too wide, and the steps lost the rows it took (two at 80 columns).
+    const ownRows = (tree: RenderElement): number => {
+      const { rest, taken } = e.surface === 'desktop' ? takeOut(tree, 'actions') : { rest: tree, taken: null }
+      const rows = zeilenVon(
         <Box flexDirection="column">
           {heldLine}
           {autopilotLine as RenderElement | null}
           {rule}
-          {tree}
+          {rest as RenderElement | null}
         </Box>,
         e.surface,
         e.props.bodyColumns,
       )
+      return taken === null ? rows : Math.round((rows + appButtonRows(taken, Math.max(20, e.props.bodyColumns))) * 1000) / 1000
+    }
     // Every way out publishes Leitstand's height: the tree as drawn, or, for the checklist, its rows in full and folded,
     // measured whole (never as windowed to the room, which follows from them).
     const withBeneath = (tree: RenderElement, heights?: { voll: number; klein: number }): RenderElement => {
@@ -6196,30 +6279,66 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // whole), at least one.
     const plan = plane(bandBudget(e.surface, e.props), e.surface, { ...(await bandHeightsOf($, e.surface)), leitstand: { v: BAND_VERSION, voll, klein } })
     logBandStage($, bandMemo, e.surface, plan)
-    const lines = !isDetailed || plan.leitstandFalten ? foldedLines : fullLines
-    const room = Math.max(1, Math.floor(plan.rest - ownRows(checklistOf([])) + 0.05))
+    // Detailed never folds: short of room it shows as many steps as fit (the windowing below), the rest on one line.
+    const lines = fullLines
+    // In the app a line is a little taller than a row (its marks are 21 px): the room counts lines of the tallest.
+    const lineRows = Math.max(1, ...lines.map(one => zeilenVon(<Box flexDirection="column" width={columns}>{one.element}</Box>, e.surface, e.props.bodyColumns)))
+    const room = Math.max(1, Math.floor((plan.rest - ownRows(checklistOf([])) + 0.05) / lineRows))
 
-    // Window the lines so the current step (and what runs under it) stays in view,
-    // and say how many steps are out of view.
-    const focus = Math.max(0, lines.findIndex(one => one.isActive))
-    // One line of context above the current step when there is room for it.
-    const windowAt = (size: number) => Math.min(Math.max(0, focus - (size > 2 ? 1 : 0)), Math.max(0, lines.length - size))
-    const stepsIn = (from: number, to: number) =>
-      lines.slice(from, to).reduce((sum, one) => sum + (one.key.startsWith('task-') ? (one.steps ?? 1) : 0), 0)
-    const isCut = stepsIn(0, windowAt(room)) + stepsIn(windowAt(room) + room, lines.length) > 0
-    // The "more steps" line needs a row of its own; with a single row the current step wins.
-    const shown = isCut && room > 1 ? room - 1 : room
-    const first = windowAt(shown)
-    const above = stepsIn(0, first)
-    const below = stepsIn(first + shown, lines.length)
-    const rows = lines.slice(first, first + shown).map(one => one.element)
-    if (above + below > 0 && shown < room) {
+    // Short of room, steps come first: the lines under a step (its helpers; on the terminal what Claude is doing and
+    // what a step got done) give way before any step does. The steps are windowed so the current one stays in view,
+    // and a line says how many are out of view.
+    const isStep = (one: BandLine) => one.key.startsWith('task-')
+    const stepLines = lines.filter(isStep)
+    // The step each line belongs to: itself, or the last step above it.
+    const ownerOf = lines.map((_, at) => {
+      let back = at
+      while (back >= 0 && !isStep(lines[back] as BandLine)) back--
+      return back
+    })
+    const activeAt = lines.findIndex(one => one.isActive && isStep(one))
+    const focusLine = ownerOf[activeAt >= 0 ? activeAt : Math.max(0, lines.findIndex(one => one.isActive))] ?? -1
+    const stepsOf = (part: BandLine[]) => part.reduce((sum, one) => sum + (one.steps ?? 1), 0)
+    let shownLines = lines
+    let above = 0
+    let below = 0
+    if (lines.length > room && stepLines.length <= room) {
+      // Every step has its line; the rows left go to the lines under the current step first, then to the others.
+      const kept = lines
+        .map((one, at) => ({ one, at }))
+        .filter(({ one }) => !isStep(one))
+        .sort((a, b) => Number(ownerOf[b.at] === focusLine) - Number(ownerOf[a.at] === focusLine))
+        .slice(0, room - stepLines.length)
+        .map(({ at }) => at)
+      shownLines = lines.filter((one, at) => isStep(one) || kept.includes(at))
+    } else if (lines.length > room) {
+      // The "more steps" line needs a row of its own; with a single row the current step wins. One step of context
+      // above the current one when there is room for it.
+      const shown = room > 1 ? room - 1 : room
+      const focus = Math.max(0, stepLines.indexOf(lines[focusLine] as BandLine))
+      const first = Math.min(Math.max(0, focus - (shown > 2 ? 1 : 0)), Math.max(0, stepLines.length - shown))
+      shownLines = stepLines.slice(first, first + shown)
+      if (shown < room) {
+        above = stepsOf(stepLines.slice(0, first))
+        below = stepsOf(stepLines.slice(first + shown))
+      }
+    }
+    const rows = shownLines.map(one => one.element)
+    if (above + below > 0) {
       const more = [above > 0 ? `${above} davor` : '', below > 0 ? `${below} ${below === 1 ? 'weiterer Schritt' : 'weitere Schritte'}` : '']
         .filter(Boolean)
         .join(' · ')
       rows.push(
         vector ? (
-          under('more', more)
+          // A summary of steps, as the folded lines: its own quiet mark, how many steps are out of view.
+          step(
+            'more',
+            kit.count(above + below, 'Zusammengefasst'),
+            <Text dimColor wrap="truncate-end">
+              {fitted(more, '', roomFor(0)).name}
+            </Text>,
+            '',
+          )
         ) : (
           <Text key="more" dimColor wrap="truncate-end">
             {`  … ${more}`}

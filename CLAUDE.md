@@ -200,7 +200,18 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Routine, `/loop`) startet nach 30 s wie
   beim Autopiloten; `sdk` ohne Oberfläche (`claude -p`) startet sofort, sonst endete der Lauf vor dem
   Start. `plan_steps` hat `nurLesen`: solche Pläne starten ohne Freigabe, Write/Edit/MultiEdit/
-  NotebookEdit sind für sie gesperrt (Bash nicht, bekannte Lücke).
+  NotebookEdit sind für sie gesperrt, seit 0.63.5.2 auch Bash- und PowerShell-Befehle, die erkennbar
+  schreiben (`writesFiles` in `logic.ts`, Heuristik; Skripte, `python -c` und Befehle über eine Variable
+  prüft sie nicht).
+- Leitstand seit 0.63.5.2, Plan überlebt Arbeiter und Einschübe: Solange ein Arbeiter (`kind === 'helper'`,
+  keine Hintergrund-Shell) läuft, hakt `turn.complete` einen Plan mit offenem Schritt nicht ab, und ein
+  Bericht für einen späteren Schritt ändert nur diesen (`applyProgress` mit `keepsEarlier`). Runden mit
+  Herkunft `task-notification`, `peer`, `peer-send-message` oder `coordinator` zählen als von Claude selbst
+  begonnen, nie als neuer Auftrag (`AGENT_MESSAGE_KINDS`; `plugin` nicht, Prompt Upgrade schickt so Björns
+  Nachricht). "Send now" der App bricht die laufende Runde ab wie Esc; ein `prompt.submit` mit `turnId`
+  der laufenden Runde bis 10 s vor dem Abbruch macht daraus einen Einschub, und der Auftrag läuft weiter
+  (live ungeprüft). Der 30-s-Start (Autopilot, geplante Aufgabe) zählt erst ab sichtbarem Plan. Detailliert
+  faltet nie, sondern zeigt so viele Schritte, wie Platz haben, und eine Zeile mit Zählzeichen.
 - Computersteuerung: Das Fenster der Claude-App selbst darf sie nicht bedienen (`request_access` für
   "Claude" wird grundsätzlich abgelehnt). Live-Tests im Band macht Björn; ohne Fenster prüft Claude mit
   `claude -p` und liest den Verlauf unter `~/.claude/projects/<ordner>/<sitzung>.jsonl`.
@@ -253,18 +264,20 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Nein am Rechner; `ja`/`ok` vom Handy; geplante Aufgabe nach 30 s.
 2. Leitstand: Im Test-Chat (Haiku) stand das Band Minuten nach Rundenende noch auf "Arbeitet" mit
    "Nutzt eine verbundene App". Im Nachbau zeigt es nach Rundenende richtig "Braucht dich". Ursache
-   offen (Helfer als laufend gezählt? `turn.complete` nicht angekommen?); beobachten.
+   offen; am wahrscheinlichsten (Untersuchung 2026-10-31): ein MCP-Werkzeug der Hauptschleife kam nie
+   zurück, `activity` steht vor `next`, und die 3-Minuten-Erkennung schweigt, weil auch Ereignisse der
+   Helfer `noteSign` rufen. Nicht nachgestellt; beobachten.
 3. Schild 🛡️ (`/leitstand-geheimnisse-sichern`): Björns Test an einer anderen Instanz steht aus.
 4. Instanzen mit `UPDATE.md` aktualisieren (Björn). Alle haben seit 2026-10-27 Zugang zum Repo.
-5. Kleinkram: „Bearbeiten" in Prompt Upgrade ist einzeilig; tsc-Altfehler in visible-compact (1)
-   und filetree (3). Die Zusammenfassung las das Argument von `/modellwahl <Aufgabe>` als Auftrag
-   und meldete, er sei "nicht bearbeitet" worden.
+5. Kleinkram: tsc-Altfehler in filetree (3); der Mod steht nicht mehr im Katalog, sein Code im Leitstand
+   ist sauber. Behoben am 2026-10-31: "Bearbeiten" in Prompt Upgrade ist zehn Zeilen hoch (0.4.3.1), der
+   tsc-Fehler in visible-compact (0.6.2.2), und die Zusammenfassung gibt Slash-Befehle nur noch als
+   `[Befehl] /name` ohne Argumente ans Modell (0.7.4.1; ob es die Regel befolgt, ist live ungeprüft).
 6. Live-Test ausstehend: leitstand 0.57.0 (🪞 Selbstkritik mit Fenster, Regel-Fenster nach einer Korrektur
    (seit 0.63.2.0), 📂 Dateien, 🅰️ Autopilot, alles jetzt im Leitstand) und statistik 0.18.0 (Schwamm räumt mit
    Sicherungspunkt auf, `/statistik:letzter-stand-zeigen`). Das Fenster Dateien öffnet sich, wie bei
-   Filetree, bei jedem Sitzungsstart. Gesehen, nicht behoben: Der Leitstand setzt "Braucht dich" schon,
-   bevor der Autopilot eine Rückfrage ablehnt (glance.tsx, Rückfrage-Werkzeug); es bleibt bis zum nächsten
-   Werkzeug stehen.
+   Filetree, bei jedem Sitzungsstart. Behoben in 0.63.5.2: "Braucht dich" kam, bevor der Autopilot eine
+   Rückfrage ablehnte, und Pause traf nach einer Helfer-Runde den Helfer (`runningTurn`).
 7. Die READMEs von reflect und modellwahl haben keine Installationszeile; `claude plugin validate`
    schlägt `/plugin install <mod> --marketplace bmueller77/claude-mods` vor.
 8. Live-Test ausstehend: leitstand 0.61.0 im echten Terminal (Breite der Zeichen, ob ❓ zwei Zellen zählt,
@@ -276,6 +289,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Der Teil zum Passwortschutz ist behoben in leitstand 0.62.0: Berichte von Helfern gehen durch, eine
    zurückgehaltene Nachricht steht im Band mit Trotzdem senden und Verwerfen (`/trotzdem-senden`,
    `/nachricht-verwerfen`). Ungeprüft: ob die Desktop-App ein `$.prompt.submit` mit `asUser` annimmt.
+   Das Abhaken ist behoben in 0.63.5.2 (siehe Fachliches). Nach einem Neustart der App ist der Plan weg,
+   und der Rest braucht eine neue Freigabe (gesehen 2026-10-31).
 10. Hilfe und Einstellungen (2026-10-29, Commit 56d3892): Zwei Runden mit Prüfern ohne Vorwissen
    (Explore-Helfer, die einzigen ohne CLAUDE.md; `claude -p` aus der App heraus ist nicht angemeldet).
    Leitfaden: gleiche Abschnitte je `/<mod>:hilfe`, Standard für neue Chats per "Sag Claude" oder
@@ -289,5 +304,11 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Detailliert mit allen Schritten, App-Liste nur am Ende (erreicht `$.mcp.call` den Server `ccd_turn`?),
    Antwort-Buttons in Nächste Schritte, IPs/Hostnamen im Schloss. Dazu die Platz-Regel (leitstand 0.63.5.0,
    statistik 0.19.5.0, zusammenfassung 0.7.4.0, naechste-schritte 0.4.5.0, modellwahl 0.3.4.0) und die
-   Ja/Nein-Buttons. Risiko: `zeilenVon` schätzt die Button-Reihe des Leitstands am Desktop eher zu hoch
-   (bei 80 Spalten 4,8 Zeilen); faltet Detailliert ohne Not, die Breitenschätzung in `band.ts` eichen.
+   Ja/Nein-Buttons. Die Button-Reihe des Leitstands am Desktop misst seit 0.63.5.2 `appButtonRows` in
+   `logic.ts` (Buchstabe 0,8 ch, Emoji 2,5 ch, geschätzt; `zeilenVon` in `band.ts` zählte 4,8 Zeilen bei 80
+   Spalten, jetzt eine). Live prüfen, ob das Band dann noch überläuft oder Platz verschenkt.
+12. Live-Test ausstehend (2026-10-31, leitstand 0.63.5.2, prompt-upgrade 0.4.3.1, zusammenfassung 0.7.4.1):
+   Einschub per "Send now" (kommt `prompt.submit` mit `turnId` vor dem Abbruch?), Berichte von Arbeitern
+   ohne neue Freigabe, Bash-Sperre in Lese-Plänen, Detailliert im engen Band, Bearbeiten-Feld im Fenster
+   von Prompt Upgrade. Gesehen, nicht geklärt: `mcp__ccd_turn__update_plan` mit `advance` antwortete einmal
+   "every step is done" nach dem ersten von acht Schritten.
