@@ -58,6 +58,8 @@ export const SYSTEM = [
     '- schwierige, lange, mehrstufige Arbeit: opus, xhigh',
     '- die härtesten Probleme: fable, high oder xhigh',
     '- max nur bei wirklich harten Problemen.',
+    'Ist die Aufgabe nur eine kurze Antwort im laufenden Chat (ja, weiter, eine Rückfrage, eine Korrektur), ' +
+        'setzt sie die Arbeit aus den letzten Nachrichten fort: Schätze dann diese Arbeit ein, nicht die Kürze der Nachricht.',
     'Antworte nur mit JSON, ohne weiteren Text: {"modell":"…","aufwand":"…","grund":"…"}.',
     'grund auf Deutsch, höchstens sechs Wörter.',
 ].join('\n')

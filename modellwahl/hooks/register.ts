@@ -798,8 +798,9 @@ export const register: Register = (on, options) => {
                 return next(e)
             }
             // Nur ein Rat in der Statuszeile, nebenher: Die Nachricht wartet nicht darauf.
+            // Mit den letzten Nachrichten: Ein kurzes "ja" setzt die laufende Arbeit fort.
             const sid = z.sid
-            void schaetze($, e.text, []).then(r => {
+            void verlauf($).then(v => schaetze($, e.text, v)).then(r => {
                 if (r.ok && z.sid === sid) {
                     z.tipp = r.wahl
                     zeigeStatus($)
