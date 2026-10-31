@@ -258,6 +258,8 @@ type Zustand = {
     basisAufwand: Aufwand | number | undefined | null
     /** Der offene Vorschlag, wie in `$.state`; nur `setzeVorschlag` schreibt ihn. */
     offen: Vorschlag | null
+    /** Der Rat zur letzten Nachricht: nur in der Statuszeile, gilt nie von selbst (Björn, 2026-10-31). */
+    tipp: Einschaetzung | null
     /** Der Takt des Countdowns, solange ein Vorschlag am Rechner laeuft. */
     uhr: { cancel: () => void } | null
     /** Was die Hauptschleife von sich aus schickt: zuletzt gesehen oder seit einem Modellwechsel. */
@@ -280,6 +282,7 @@ const z: Zustand = {
     wahl: null,
     basisAufwand: null,
     offen: null,
+    tipp: null,
     uhr: null,
     letztesModell: null,
     letzterAufwand: null,
@@ -325,13 +328,18 @@ async function speichereWahl($: EngineInterface): Promise<void> {
     }
 }
 
-/** Die Statuszeile: ein offener Vorschlag, sonst die Wahl, solange sie gilt; sonst nichts. */
+/**
+ * Die Statuszeile: ein offener Vorschlag, sonst der Rat zur letzten Nachricht, sonst die Wahl,
+ * solange sie gilt; sonst nichts. Das Modell, das wirklich antwortet, zeigt die App daneben.
+ */
 function zeigeStatus($: EngineInterface): void {
     try {
         $.ui.status(
             z.offen
                 ? `Modellwahl: Vorschlag ${wahlText(z.offen.wahl)}`
-                : z.wahl && !z.wahl.zurueckgezogen
+                : z.tipp
+                  ? `Modellwahl rät: ${wahlText(z.tipp)}`
+                  : z.wahl && !z.wahl.zurueckgezogen
                   ? `Modellwahl: ${wahlText(z.wahl)}`
                   : undefined,
         )
@@ -354,6 +362,7 @@ async function sitzung($: EngineInterface): Promise<void> {
     // Eine gespeicherte Wahl gilt ueber turn.step weiter.
     z.wahl = istWahl(w) ? w : null
     z.basisAufwand = null
+    z.tipp = null
     await setzeVorschlag($, null)
     const a =(await $.store.get(SPEICHER_AUTO + id).catch(() => undefined)) as AutoSchalter | undefined
     if (a && typeof a.isOn === 'boolean') {
@@ -785,6 +794,17 @@ export const register: Register = (on, options) => {
         z.neu = false
         z.wartet = false
         if (!soll) {
+            if (!auto) {
+                return next(e)
+            }
+            // Nur ein Rat in der Statuszeile, nebenher: Die Nachricht wartet nicht darauf.
+            const sid = z.sid
+            void schaetze($, e.text, []).then(r => {
+                if (r.ok && z.sid === sid) {
+                    z.tipp = r.wahl
+                    zeigeStatus($)
+                }
+            })
             return next(e)
         }
         const r = await schaetze($, e.text, [])
@@ -992,5 +1012,6 @@ async function nachClear($: EngineInterface): Promise<void> {
     z.wahl = null
     z.wartet = false
     z.basisAufwand = null
+    z.tipp = null
     await setzeVorschlag($, null)
 }

@@ -246,9 +246,26 @@ test('neuer Chat: die erste Nachricht schlägt vor und läuft sofort; nach 15 s 
     // Der Subagent bleibt, wie er ist.
     expect(b.schritte[2]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium', agentId: 'agent-7' })
 
-    // Die zweite Nachricht waehlt nicht noch einmal.
+    // Die zweite Nachricht waehlt nicht noch einmal; sie holt nur einen Rat fuer die Statuszeile.
     await sende($, 'Und jetzt die Tests.')
-    expect(b.anfragen).toHaveLength(1)
+    expect(b.anfragen).toHaveLength(2)
+    expect(b.toasts.at(-1)).toBe('Modellwahl: Opus · Hoch übernommen.')
+})
+
+test('jede weitere Nachricht: ein Rat in der Statuszeile, der nie von selbst gilt', async ($, on) => {
+    const clock = mock.clock(on, { now: 1_000_000 })
+    mock.store(on, {})
+    const b = boden(on, { antworten: [wahlJson('opus', 'high'), wahlJson('haiku', 'low', 'kurze Frage')] })
+    await start($, 'startup', false)
+    await sende($, 'Bau das Login auf OAuth um.')
+    await clock.advance(UEBERNAHME_MS)
+    await sende($, 'Wie heißt die Datei noch mal?')
+    await clock.settle()
+    expect(b.status.at(-1)).toBe('Modellwahl rät: Haiku · Niedrig')
+    await clock.advance(UEBERNAHME_MS)
+    await schritt($)
+    // Gewählt bleibt Opus · Hoch: der Rat stellt nichts um.
+    expect(b.schritte.at(-1)).toEqual({ model: 'opus', effort: 'high' })
 })
 
 test('Desktop-App: kein /model und kein /effort; die Auswahl der App zieht die Wahl nicht zurück', async ($, on) => {
@@ -291,9 +308,10 @@ test('fortgesetzter Chat: keine automatische Wahl; eine gespeicherte gilt weiter
     mock.store(on, { 'wahl:sitzung-1': { modell: 'fable', aufwand: 'xhigh', grund: 'harter Fehler', at: 900_000, zurueckgezogen: false } })
     const b = boden(on, { antworten: [wahlJson('haiku', 'low')], turns: 4 })
     await start($, 'resume')
-    await sende($, 'Weiter.')
-    expect(b.anfragen).toHaveLength(0)
     expect(b.status.at(-1)).toBe('Modellwahl: Fable · Extra hoch')
+    await sende($, 'Weiter.')
+    // Keine neue Wahl, nur der Rat für die Statuszeile.
+    expect(b.anfragen).toHaveLength(1)
     await schritt($)
     expect(b.schritte[0]).toEqual({ model: 'fable', effort: 'xhigh' })
 })
