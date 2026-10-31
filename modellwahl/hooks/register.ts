@@ -336,11 +336,11 @@ function zeigeStatus($: EngineInterface): void {
     try {
         $.ui.status(
             z.offen
-                ? `Modellwahl: Vorschlag ${wahlText(z.offen.wahl)}`
+                ? `Modellvorschlag: ${wahlText(z.offen.wahl)}`
                 : z.tipp
-                  ? `Modellwahl rät: ${wahlText(z.tipp)}`
+                  ? `Modellvorschlag: ${wahlText(z.tipp)}`
                   : z.wahl && !z.wahl.zurueckgezogen
-                  ? `Modellwahl: ${wahlText(z.wahl)}`
+                  ? `Gewählt: ${wahlText(z.wahl)}`
                   : undefined,
         )
     } catch {

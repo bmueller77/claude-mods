@@ -214,7 +214,7 @@ test('ein alter Name wie /modellwahl-zeigen nennt nur den neuen und tut sonst ni
     // Auch ein offener Vorschlag bleibt offen.
     await befehl($, 'modellwahl')
     expect(await befehl($, 'modellwahl-uebernehmen')).toBe('Der Befehl heißt jetzt /modellwahl:uebernehmen.')
-    expect(b.status.at(-1)).toBe('Modellwahl: Vorschlag Opus · Hoch')
+    expect(b.status.at(-1)).toBe('Modellvorschlag: Opus · Hoch')
     expect(b.angemeldet.find(k => k.name.startsWith('modellwahl-'))).toBeUndefined()
 })
 
@@ -232,13 +232,13 @@ test('neuer Chat: die erste Nachricht schlägt vor und läuft sofort; nach 15 s 
     expect(b.anfragen[0]?.prompt).toContain('Login-Dialog')
     // Der Hinweis an Claude: genau ein kurzer Satz vorweg.
     expect(b.eingang[0]?.context.join('\n')).toContain('"Modellwahl schlägt Opus · Hoch vor; gilt in 15 Sekunden, wenn du nicht Nein drückst."')
-    expect(b.status.at(-1)).toBe('Modellwahl: Vorschlag Opus · Hoch')
+    expect(b.status.at(-1)).toBe('Modellvorschlag: Opus · Hoch')
     // Die Nachricht wartet nicht: der erste Schritt geht mit dem Modell aus dem Menü.
     await schritt($)
     expect(b.schritte[0]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
 
     await clock.advance(UEBERNAHME_MS)
-    expect(b.status.at(-1)).toBe('Modellwahl: Opus · Hoch')
+    expect(b.status.at(-1)).toBe('Gewählt: Opus · Hoch')
     expect(b.toasts.at(-1)).toBe('Modellwahl: Opus · Hoch übernommen.')
     await schritt($)
     await schritt($, 'claude-sonnet-5-5', 'medium', 'agent-7')
@@ -261,7 +261,7 @@ test('jede weitere Nachricht: ein Rat in der Statuszeile, der nie von selbst gil
     await clock.advance(UEBERNAHME_MS)
     await sende($, 'Wie heißt die Datei noch mal?')
     await clock.settle()
-    expect(b.status.at(-1)).toBe('Modellwahl rät: Haiku · Niedrig')
+    expect(b.status.at(-1)).toBe('Modellvorschlag: Haiku · Niedrig')
     await clock.advance(UEBERNAHME_MS)
     await schritt($)
     // Gewählt bleibt Opus · Hoch: der Rat stellt nichts um.
@@ -285,7 +285,7 @@ test('Desktop-App: kein /model und kein /effort; die Auswahl der App zieht die W
     expect(await befehl($, 'modellwahl:zeigen')).toContain('Zurückgezogen: nein, Modellwahl stellt Modell und Aufwand ein.')
     await schritt($, 'claude-opus-5-5', 'xhigh')
     expect(b.schritte.at(-1)).toEqual({ model: 'haiku', effort: 'low' })
-    expect(b.status.at(-1)).toBe('Modellwahl: Haiku · Niedrig')
+    expect(b.status.at(-1)).toBe('Gewählt: Haiku · Niedrig')
 })
 
 test('Terminal: nur turn.step, kein /model; der Vorschlag gilt nach 15 s wie in der App', async ($, on) => {
@@ -308,7 +308,7 @@ test('fortgesetzter Chat: keine automatische Wahl; eine gespeicherte gilt weiter
     mock.store(on, { 'wahl:sitzung-1': { modell: 'fable', aufwand: 'xhigh', grund: 'harter Fehler', at: 900_000, zurueckgezogen: false } })
     const b = boden(on, { antworten: [wahlJson('haiku', 'low')], turns: 4 })
     await start($, 'resume')
-    expect(b.status.at(-1)).toBe('Modellwahl: Fable · Extra hoch')
+    expect(b.status.at(-1)).toBe('Gewählt: Fable · Extra hoch')
     await sende($, 'Weiter.')
     // Keine neue Wahl, nur der Rat für die Statuszeile.
     expect(b.anfragen).toHaveLength(1)
@@ -323,7 +323,7 @@ test('ohne SessionStart: Rückfall auf die Zahl der Runden', async ($, on) => {
     await start($, null)
     await sende($, 'Was heißt Haus auf Englisch?')
     expect(b.anfragen).toHaveLength(1)
-    expect(b.status.at(-1)).toBe('Modellwahl: Vorschlag Haiku · Niedrig')
+    expect(b.status.at(-1)).toBe('Modellvorschlag: Haiku · Niedrig')
 })
 
 test('Befehle, Meta-Prompts und Anstöße von Plugins wählen nicht', async ($, on) => {
@@ -353,7 +353,7 @@ test('/clear: der neue Chat wählt neu', async ($, on) => {
     expect(b.schritte[0]).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
     await sende($, 'Kurze Frage.')
     expect(b.anfragen).toHaveLength(2)
-    expect(b.status.at(-1)).toBe('Modellwahl: Vorschlag Haiku · Niedrig')
+    expect(b.status.at(-1)).toBe('Modellvorschlag: Haiku · Niedrig')
 })
 
 test('Zeitüberschreitung: alles bleibt, kurze Meldung', async ($, on) => {
@@ -461,7 +461,7 @@ test('vom Handy: ja, ok oder Okay übernehmen; die Nachricht geht trotzdem an Cl
     await sende($, 'Okay!', 'bridge')
     expect(b.eingang.at(-1)?.text).toBe('Okay!')
     expect(b.eingang.at(-1)?.context.join('\n')).toContain('"Modellwahl: Haiku · Niedrig übernommen."')
-    expect(b.status.at(-1)).toBe('Modellwahl: Haiku · Niedrig')
+    expect(b.status.at(-1)).toBe('Gewählt: Haiku · Niedrig')
     await schritt($, 'claude-opus-5-5', 'xhigh')
     expect(b.schritte.at(-1)).toEqual({ model: 'haiku', effort: 'low' })
     // Ohne offenen Vorschlag ist ein ja nur ein ja.
@@ -509,7 +509,7 @@ test('Band in der App: Vorschlag mit Countdown, Übernehmen per Klick', async ($
     const spaeter = (await sicht.ui.findAll({ type: 'Text' })).map(t => t.text)
     expect(spaeter).toContain('Modellwahl schlägt Opus · Hoch vor · gilt in 10 s')
     await sicht.ui.press({ key: 'modellwahl-ja' })
-    expect(b.status.at(-1)).toBe('Modellwahl: Opus · Hoch')
+    expect(b.status.at(-1)).toBe('Gewählt: Opus · Hoch')
     expect((await sicht.ui.findAll({ type: 'Button' })).length).toBe(0)
     await sicht.ui.unmount()
     await schritt($)
@@ -569,7 +569,7 @@ test('/modellwahl im leeren Chat: ohne Aufgabe bei der nächsten Nachricht, mit 
     expect(await befehl($, 'modellwahl')).toBe('Modellwahl: Ich schlage bei deiner nächsten Nachricht vor.')
     await sende($, 'Neue Aufgabe.')
     expect(b.anfragen).toHaveLength(2)
-    expect(b.status.at(-1)).toBe('Modellwahl: Vorschlag Opus · Mittel')
+    expect(b.status.at(-1)).toBe('Modellvorschlag: Opus · Mittel')
 })
 
 test('Modell von Hand gewechselt (App): zurückgezogen, nichts mehr überschrieben', async ($, on) => {
