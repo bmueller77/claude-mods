@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderNode, RenderSurface, SessionMessage } from 'claude-code'
 
-import type { Aufwand, AutoSchalter, BandHoehe, Einschaetzung, Kalibrierung, Vorschlag, Wahl } from '../types'
+import type { Aufwand, AutoSchalter, BandHoehe, Einschaetzung, Kalibrierung, Modell, Vorschlag, Wahl } from '../types'
 import { BAND_VERSION, zeilenVon } from './band'
 import {
     AUFWAENDE,
@@ -329,20 +329,27 @@ async function speichereWahl($: EngineInterface): Promise<void> {
 }
 
 /**
- * Die Statuszeile: ein offener Vorschlag, sonst der Rat zur letzten Nachricht, sonst die Wahl,
- * solange sie gilt; sonst nichts. Das Modell, das wirklich antwortet, zeigt die App daneben.
+ * Die Statuszeile: was antwortet, solange eine Wahl gilt, dahinter der offene Vorschlag oder
+ * der Rat zur letzten Nachricht, wenn er davon abweicht. Die Auswahl der App folgt der Wahl nicht.
  */
+export function statusText(
+    wahl: { modell: Modell; aufwand: Aufwand; zurueckgezogen: boolean } | null,
+    vorschlag: { modell: Modell; aufwand: Aufwand } | null,
+): string | undefined {
+    const gilt = wahl && !wahl.zurueckgezogen ? wahl : null
+    const teile: string[] = []
+    if (gilt) {
+        teile.push(`Antwortet: ${wahlText(gilt)}`)
+    }
+    if (vorschlag && !(gilt && gilt.modell === vorschlag.modell && gilt.aufwand === vorschlag.aufwand)) {
+        teile.push(`${gilt ? 'Vorschlag' : 'Modellvorschlag'}: ${wahlText(vorschlag)}`)
+    }
+    return teile.length > 0 ? teile.join(' · ') : undefined
+}
+
 function zeigeStatus($: EngineInterface): void {
     try {
-        $.ui.status(
-            z.offen
-                ? `Modellvorschlag: ${wahlText(z.offen.wahl)}`
-                : z.tipp
-                  ? `Modellvorschlag: ${wahlText(z.tipp)}`
-                  : z.wahl && !z.wahl.zurueckgezogen
-                  ? `Antwortet: ${wahlText(z.wahl)}`
-                  : undefined,
-        )
+        $.ui.status(statusText(z.wahl, z.offen ? z.offen.wahl : z.tipp))
     } catch {
         // Ohne Statuszeile geht es auch.
     }

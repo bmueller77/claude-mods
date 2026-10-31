@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import { statusText } from '../hooks/register'
 
 import {
     LEERE_KALIBRIERUNG,
@@ -100,4 +101,13 @@ test('Zahlen deutsch', () => {
     expect(tokenText(950)).toBe('950')
     expect(tokenText(120_400)).toBe('120k')
     expect(tokenText(1_240_000)).toBe('1,2 Mio.')
+})
+
+test('Statuszeile: was antwortet, dahinter ein abweichender Vorschlag', () => {
+    const opus = { modell: 'opus' as const, aufwand: 'high' as const, zurueckgezogen: false }
+    expect(statusText(opus, null)).toBe('Antwortet: Opus · Hoch')
+    expect(statusText(opus, { modell: 'opus', aufwand: 'high' })).toBe('Antwortet: Opus · Hoch')
+    expect(statusText(opus, { modell: 'haiku', aufwand: 'low' })).toBe('Antwortet: Opus · Hoch · Vorschlag: Haiku · Niedrig')
+    expect(statusText({ ...opus, zurueckgezogen: true }, { modell: 'haiku', aufwand: 'low' })).toBe('Modellvorschlag: Haiku · Niedrig')
+    expect(statusText(null, null)).toBeUndefined()
 })

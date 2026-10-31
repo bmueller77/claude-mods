@@ -261,7 +261,7 @@ test('jede weitere Nachricht: ein Rat in der Statuszeile, der nie von selbst gil
     await clock.advance(UEBERNAHME_MS)
     await sende($, 'Wie heißt die Datei noch mal?')
     await clock.settle()
-    expect(b.status.at(-1)).toBe('Modellvorschlag: Haiku · Niedrig')
+    expect(b.status.at(-1)).toBe('Antwortet: Opus · Hoch · Vorschlag: Haiku · Niedrig')
     await clock.advance(UEBERNAHME_MS)
     await schritt($)
     // Gewählt bleibt Opus · Hoch: der Rat stellt nichts um.
@@ -569,7 +569,7 @@ test('/modellwahl im leeren Chat: ohne Aufgabe bei der nächsten Nachricht, mit 
     expect(await befehl($, 'modellwahl')).toBe('Modellwahl: Ich schlage bei deiner nächsten Nachricht vor.')
     await sende($, 'Neue Aufgabe.')
     expect(b.anfragen).toHaveLength(2)
-    expect(b.status.at(-1)).toBe('Modellvorschlag: Opus · Mittel')
+    expect(b.status.at(-1)).toBe('Antwortet: Fable · Hoch · Vorschlag: Opus · Mittel')
 })
 
 test('Modell von Hand gewechselt (App): zurückgezogen, nichts mehr überschrieben', async ($, on) => {
