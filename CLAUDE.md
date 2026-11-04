@@ -330,14 +330,29 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    `logic.ts` (Buchstabe 0,8 ch, Emoji 2,5 ch, geschätzt; `zeilenVon` in `band.ts` zählte 4,8 Zeilen bei 80
    Spalten, jetzt eine). Live prüfen, ob das Band dann noch überläuft oder Platz verschenkt.
 12. Live-Test ausstehend (2026-10-31, leitstand 0.63.5.2, prompt-upgrade 0.4.3.1, zusammenfassung 0.7.4.1):
-   Einschub per "Send now" (kommt `prompt.submit` mit `turnId` vor dem Abbruch?), Berichte von Arbeitern
+   Einschub per "Send now": am 2026-11-04 bestanden, aber anders als gedacht. Die App brach die Runde nicht
+   ab, sondern schob den laufenden Befehl in den Hintergrund, und die Nachricht kam als `queued_command`
+   in die laufende Runde (`remove` mit `reason: "absorbed_mid_turn"` im Verlauf); Plan und Werkzeuge
+   blieben. Die Erkennung über `turnId` und Abbruch griff dabei nicht ein. Offen: Berichte von Arbeitern
    ohne neue Freigabe, Bash-Sperre in Lese-Plänen, Detailliert im engen Band, Bearbeiten-Feld im Fenster
    von Prompt Upgrade. Gesehen, nicht geklärt: `mcp__ccd_turn__update_plan` mit `advance` antwortete einmal
    "every step is done" nach dem ersten von acht Schritten.
-13. Live-Test ausstehend (2026-11-04, leitstand 0.63.6.0, statistik 0.19.6.0, naechste-schritte 0.4.6.0,
-   sorgfalt 0.1.0.0): Nächste Schritte als ganze Buttons untereinander (Breite der Kürzung `knopfText`,
-   ob zwei Leerzeichen im Button stehen bleiben); "mach weiter" am Ende nach einem Neustart; Schleifen-Melder
-   und ob Claude die `context`-Zeile sieht; `/uebergabe-schreiben` mitten in einer Runde; Vorschlag "Alle
-   Projekte" im Fenster Regeln; ob die Compact-Zusammenfassung den Abschnitt "Was nicht geklappt hat" hat;
-   ob `debuggen` und `belegen` von selbst greifen. Der Test-Chat für den Einschub (Offen 12) wartet seit
-   2026-10-31 auf Björns "start".
+13. Live-Test 2026-11-04 am PC (leitstand 0.63.6.0, statistik 0.19.6.0, naechste-schritte 0.4.6.0,
+   sorgfalt 0.1.0.0). Bestanden: Schleifen-Melder (die `context`-Zeile kam nach dem fünften gleichen Aufruf
+   bei Claude an; die Zeile im Band hat Björn nicht gesehen); Einschub (siehe Offen 12); Pause, dann "Kurz
+   unterbrochen. Mach bitte weiter": derselbe Auftrag mit Plan und Freigabe; die Hintergrund-Zeile wird mit
+   dem Rundenende nach dem Ende des Befehls abgehakt; `/uebergabe-schreiben` (alle Abschnitte samt "Stand
+   laut Leitstand") und `/uebergabe-zeigen` (Eingabefeld); Nächste Schritte als ganze Buttons untereinander;
+   `sorgfalt:debuggen` griff bei unerwartetem Verhalten. Gefunden und behoben: Das Schloss verdeckte
+   "Version 1.1.0.0" (0.63.6.1) und "Versionen wie 1.1.0.0", wobei `cleanName` die Nummer aus der
+   Schritt-Zusammenfassung warf (0.63.6.2). Gesehen, offen:
+   - Lange Pausen (`Start-Sleep 150`) sperrt die Umgebung. Als Zeitfenster für Björns Eingriffe dienen
+     die Tests aller Mods nacheinander (etwa 115 s); vorher auf sein "bereit" warten.
+   - Ein "ja" gab einen Plan nicht frei, als nach der Frage noch eine Stand-Zeile kam (Kurzfassen schreibt
+     den Stand ans Ende); der Leitstand sieht die Frage nur am Ende der Antwort.
+   - Nächste Schritte: Ein einzelner Backtick bleibt im Vorschlag stehen (`leseVorschlaege` schneidet nur
+     am Rand).
+   - Die Aufgabenliste der App zählte nach einem neuen Plan "Schritt 3, 4 von 7" bei sechs Schritten.
+   - Schrittnamen über 40 Zeichen kürzt `cleanName` mit "…".
+   Noch nicht gesehen: Abschnitt "Was nicht geklappt hat" im Compact, Vorschlag "Alle Projekte" im Fenster
+   Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
