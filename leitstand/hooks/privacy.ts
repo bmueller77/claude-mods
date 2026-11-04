@@ -130,11 +130,12 @@ const isOpenHost = (raw: string) => {
 
 const isIpv4 = (host: string) => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
 
-// A version word right before a number on the same line, then at most : or =, quotes, blanks and one of von, from,
-// auf, to, nach: "auf Version 1.1.0.0", "version": "1.2.0.0", "updated to 1.3.0.0". The word must stand right before
-// the number, so "Update: Server 10.0.0.5" and "Release-Server 10.0.0.5" stay addresses.
+// A version word right before a number on the same line, then at most : or =, quotes, blanks and up to two of von,
+// from, auf, to, nach, wie, etwa: "auf Version 1.1.0.0", "version": "1.2.0.0", "updated to 1.3.0.0", "Versionen wie
+// 1.1.0.0". The word must stand right before the number, so "Update: Server 10.0.0.5" and "Release-Server 10.0.0.5"
+// stay addresses.
 const VERSION_BEFORE =
-  /(?:\b(?:version|versionen|versions|release|tag|update|updates|updated|aktualisiert|upgrade|upgraded)|\bver\.|["']version["'])\s*[:=]?\s*["']?\s*(?:(?:von|from|auf|to|nach)\s+["']?)?$/i
+  /(?:\b(?:version|versionen|versions|release|tag|update|updates|updated|aktualisiert|upgrade|upgraded)|\bver\.|["']version["'])\s*[:=]?\s*["']?\s*(?:(?:von|from|auf|to|nach|wie|etwa)\s+["']?){0,2}$/i
 
 // The next link of a chain after a version: the earlier number, then blanks and auf, to, nach, bis (zu), →, -> or -
 // ("Version 1.1.0.0 auf 1.2.0.0", "Version 1.1.0.0 → 1.2.0.0"). Group 1 is the earlier number.
