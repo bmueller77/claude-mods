@@ -1276,7 +1276,9 @@ async function verdichte(
             // Ob der eigene Hook diesen Aufruf sieht, ist nicht sicher: die Anweisung gleich mitgeben.
             const punkt = await sicherungspunktVon($).catch(() => null)
             const wartend = punkt && punkt.verdichtet === undefined ? punkt : null
-            const r = await $.session.compact(wartend ? { instructions: behalteAnweisung(wartend.notiz) } : undefined)
+            const r = await $.session.compact({
+                instructions: wartend ? `${behalteAnweisung(wartend.notiz)}\n\n${ANWEISUNG_FEHLWEGE}` : ANWEISUNG_FEHLWEGE,
+            })
             if (r.skip === undefined) {
                 if (!hookHatProtokolliert) {
                     await protokolliere($, r)
@@ -1396,6 +1398,21 @@ async function mitSicherungspunkt($: EngineInterface, e: SessionCompactInput): P
     }
     const anweisung = behalteAnweisung(punkt.notiz)
     return { ...e, instructions: e.instructions?.trim() ? `${e.instructions.trim()}\n\n${anweisung}` : anweisung }
+}
+
+/**
+ * Die eingebaute Zusammenfassung hat Abschnitte zu Auftrag, Dateien, Fehlern, Offenem und
+ * naechstem Schritt, aber keinen ueber gescheiterte oder verworfene Wege. Diese Anweisung
+ * kostet nichts extra, die Zusammenfassung entsteht ohnehin.
+ */
+export const ANWEISUNG_FEHLWEGE = 'Halte in der Zusammenfassung ausdrücklich in einem eigenen Abschnitt fest, was nicht geklappt hat: Ansätze, die gescheitert sind oder verworfen wurden, jeweils mit dem Grund, damit sie nach der Verdichtung nicht wiederholt werden. Gibt es keine, lass den Abschnitt weg.'
+
+/** Jede Verdichtung soll festhalten, was nicht geklappt hat; steht die Anweisung schon drin, bleibt alles. */
+export function mitFehlwegen(e: SessionCompactInput): SessionCompactInput {
+    if (e.instructions?.includes(ANWEISUNG_FEHLWEGE)) {
+        return e
+    }
+    return { ...e, instructions: e.instructions?.trim() ? `${e.instructions.trim()}\n\n${ANWEISUNG_FEHLWEGE}` : ANWEISUNG_FEHLWEGE }
 }
 
 /**
@@ -2011,7 +2028,7 @@ const HILFE = [
     '',
     'So arbeitest du damit',
     '- Schau auf die Leiste. In der App zeigt jeder Ring Einzelheiten, wenn du mit der Maus darüberfährst.',
-    '- Wird der Kontext rot, drück 🧽 (Aufräumen): Claude schreibt erst einen Sicherungspunkt (Ziel, Erledigtes, Offenes, nächster Schritt), dann verdichtet er den Chat und behält den Sicherungspunkt. Verdichten (/compact) heißt: Claude fasst den Chat zusammen und arbeitet mit der Zusammenfassung weiter. 🔻 verdichtet ohne Sicherungspunkt. Beide Buttons warten erst 10 Sekunden (🔟 bis 1️⃣); "Abbrechen" daneben oder derselbe Button noch einmal stoppt das.',
+    '- Wird der Kontext rot, drück 🧽 (Aufräumen): Claude schreibt erst einen Sicherungspunkt (Ziel, Erledigtes, Offenes, nächster Schritt), dann verdichtet er den Chat und behält den Sicherungspunkt. Verdichten (/compact) heißt: Claude fasst den Chat zusammen und arbeitet mit der Zusammenfassung weiter. Jede Verdichtung hält zusätzlich fest, was nicht geklappt hat. 🔻 verdichtet ohne Sicherungspunkt. Beide Buttons warten erst 10 Sekunden (🔟 bis 1️⃣); "Abbrechen" daneben oder derselbe Button noch einmal stoppt das.',
     '- Machst du eine Pause und willst danach im selben Chat weiter, drück 🔥 (Warmhalten), solange der Cache warm ist. ✖️ schaltet es wieder aus.',
     '- /statistik ohne Argument zeigt alles als Text, auch was ein kalter Cache und ein Ping gerade kosten. 📊 zeigt den Kontext im Detail (/context).',
     `- Nach dem Aufräumen zeigt /statistik:letzter-stand-zeigen den Sicherungspunkt, nach jedem Verdichten /statistik:zusammenfassung-zeigen die Zusammenfassung im Fenster "${TITEL_ZUSAMMENFASSUNG}". Im Chat steht dann nur eine Zeile.`,
@@ -2379,8 +2396,9 @@ export const register: Register = (on, options) => {
         if (e.agentId) {
             return next(e)
         }
-        // Wartet ein Sicherungspunkt vom Aufraeumen, soll die Verdichtung ihn behalten.
-        const r = await next(await mitSicherungspunkt($, e))
+        // Wartet ein Sicherungspunkt vom Aufraeumen, soll die Verdichtung ihn behalten,
+        // und jede haelt fest, was nicht geklappt hat.
+        const r = await next(mitFehlwegen(await mitSicherungspunkt($, e)))
         if (r.skip !== undefined) {
             return r
         }

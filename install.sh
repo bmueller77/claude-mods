@@ -9,7 +9,7 @@ MARKET="${1:-bmueller77/claude-mods}"
 # catch-me-up, replay-theater, blast-radius) sind seit 2026-10-18 nicht mehr im Katalog; wo sie
 # noch installiert sind, entfernt man sie mit "claude plugin uninstall <mod>@bjoern-mods".
 # Reflect, Filetree und Autopilot stecken seit 2026-10-26 im Leitstand.
-PLUGINS="leitstand statistik naechste-schritte zusammenfassung visible-compact prompt-upgrade modellwahl kurzfassen i-have-adhd"
+PLUGINS="leitstand statistik naechste-schritte zusammenfassung visible-compact prompt-upgrade modellwahl kurzfassen sorgfalt i-have-adhd"
 EINGEBAUT="reflect filetree autopilot"
 
 # Den Namen nur als ganzes Wort suchen, nicht als Teil eines Pfads.

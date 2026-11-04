@@ -1,0 +1,7 @@
+{
+  "name": "sorgfalt",
+  "version": "0.1.0.0",
+  "description": "Zwei Skills für sorgfältige Arbeit: debuggen sucht erst die Ursache eines Fehlers und belegt sie, bevor Claude etwas repariert; belegen verlangt eine frisch ausgeführte Prüfung, bevor Claude etwas als fertig, behoben oder bestanden meldet. Beide greifen von selbst. Hilfe: /sorgfalt:hilfe. Grundlage: Superpowers von Jesse Vincent (MIT).",
+  "author": { "name": "Björn Müller" },
+  "license": "MIT"
+}

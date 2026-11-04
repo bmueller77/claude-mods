@@ -96,6 +96,11 @@ import {
   headerDetails,
   isBusy,
   isContinueWords,
+  endsWithContinue,
+  handoffFacts,
+  callSignature,
+  loopNote,
+  LOOP_CALLS,
   isFinished,
   isGermanText,
   isLatinText,
@@ -406,6 +411,7 @@ const germanDay = (day: string) => day.split('-').reverse().join('.')
 
 const DENIED = 'Du hast einen Schritt abgelehnt, deshalb hat Claude pausiert'
 const FAILING = 'Ein Schritt scheitert immer wieder, Claude versucht es anders'
+const LOOPING = 'Claude wiederholt denselben Schritt'
 const STALLED = 'Seit 3 Minuten nichts Neues. Drück Esc, um Claude zu stoppen, oder gib ihm noch etwas Zeit'
 // No sign of life from Claude (a piece of its reply, a tool starting or ending) for this long while it works.
 const STALL_MS = 3 * 60_000
@@ -483,9 +489,16 @@ const START_TEXT = 'Der Plan sieht gut aus. Leg bitte los.'
 /** The band's state while the main chat is compacted. */
 const COMPACTING = 'Räumt auf…'
 const HANDOFF_PROMPT = `Schreib eine Übergabenotiz, damit ein ganz neuer Chat diese Arbeit ohne dieses Gespräch fortsetzen kann.
-Nenne kurz: das Ziel; was schon erledigt ist; was noch offen ist, der Reihe nach; getroffene Entscheidungen und warum; die
-Dateien, Befehle oder Links, auf die es ankommt; und den allernächsten Schritt. Auf Deutsch, unter 300 Wörtern, ohne Einleitung.
-Beginne genau mit: "Fortsetzung aus einem früheren Chat. So ist der Stand:"`
+Auf Deutsch, unter 400 Wörtern, ohne Einleitung. Beginne genau mit: "Fortsetzung aus einem früheren Chat. So ist der Stand:"
+Dann diese Abschnitte, jeder mit seiner Überschrift, knapp und konkret:
+Ziel: was am Ende stehen soll.
+Erledigt: was schon fertig ist.
+Offen, der Reihe nach: was noch zu tun ist.
+Was nicht geklappt hat und warum: Wege, die gescheitert sind, mit dem Grund, damit der neue Chat sie nicht noch einmal versucht.
+Entscheidungen und warum: was festgelegt wurde und weshalb.
+Dateien, Befehle und Links, auf die es ankommt.
+Genauer nächster Schritt: die erste Handlung, so genau, dass der neue Chat sie ausführen kann, ohne erst zu suchen.
+Gibt es zu einem Abschnitt nichts, schreib dort "nichts". Folgt unten ein Stand laut Leitstand, gleich ihn mit dem Gespräch ab.`
 
 // What Ship it sends, as the person's own words: the close-out a finished job needs on GitHub, so the chat archives.
 const SHIP_PROMPT = `Die Arbeit ist fertig. Liefere sie auf GitHub aus, der Reihe nach, und hör beim ersten Schritt auf, der scheitert:
@@ -590,6 +603,23 @@ let othersTimer: Timer | undefined
 let hasEnded = false
 let isRefreshing = false
 let failuresInARow = 0
+// The main loop's last successful call and how often in a row it was made with the same input (see callSignature).
+let lastCallSig: string | null = null
+let sameCallsInARow = 0
+
+/** A failure, a refusal or the person's own message: the main loop's run of identical calls starts over. */
+const resetLoop = () => {
+  lastCallSig = null
+  sameCallsInARow = 0
+}
+
+/** The main loop's call went through: how often in a row it has now been made with the same input. */
+const countCall = (call: Record<string, unknown>) => {
+  const signature = callSignature(call)
+  sameCallsInARow = signature === lastCallSig ? sameCallsInARow + 1 : 1
+  lastCallSig = signature
+  return sameCallsInARow
+}
 // A message held back for a password: memory only, never stored, for Trotzdem senden and to let the same one through on
 // a resend. heldSecretAtom says the band has a line for it, with the same `at`.
 let heldMessage: { text: string; at: number } | null = null
@@ -1205,24 +1235,36 @@ const pressHandoff = async ($: $) => {
   await pressTwice($, 'handoff', () => startFreshChat($))
 }
 
+/**
+ * Writes the handoff note over this chat, with what the Leitstand knows of it (plan and files) beside the prompt, and
+ * keeps it for /leitstand:uebergabe-zeigen. The note, or why there is none (a reason in brackets, or nothing).
+ */
+const writeHandoff = async ($: $): Promise<{ note: string } | { failed: string }> => {
+  const facts = handoffFacts(await read($, checklistAtom))
+  const reply = await $.model.fork({ prompt: facts === '' ? HANDOFF_PROMPT : `${HANDOFF_PROMPT}\n\n${facts}` })
+  if (!reply.isAnswered || !reply.text.trim()) return { failed: reply.isAnswered ? '' : ` (${reply.reason})` }
+  const note = reply.text.trim()
+  await $.store.set(HANDOFF_KEY, { at: await now($), note })
+  return { note }
+}
+
 /** Writes a handoff note over this chat, clears it, and sends the note as the fresh chat's first message. */
 const startFreshChat = async ($: $) => {
   await update($, handoffAtom, () => 'working')
   try {
     $.ui.toast('Schreibe die Übergabenotiz für den neuen Chat…')
-    const reply = await $.model.fork({ prompt: HANDOFF_PROMPT })
-    if (!reply.isAnswered || !reply.text.trim()) {
-      $.ui.toast(`Die Übergabenotiz ließ sich nicht schreiben${reply.isAnswered ? '' : ` (${reply.reason})`}. Es wurde nichts geleert.`)
+    // Kept in case anything below fails: /leitstand:uebergabe-zeigen puts it back in the prompt box.
+    const written = await writeHandoff($)
+    if ('failed' in written) {
+      $.ui.toast(`Die Übergabenotiz ließ sich nicht schreiben${written.failed}. Es wurde nichts geleert.`)
       return
     }
-    const note = reply.text.trim()
-    // Kept in case anything below fails: /leitstand handoff note puts it back in the prompt box.
-    await $.store.set(HANDOFF_KEY, { at: await now($), note })
+    const note = written.note
     try {
       noteQueued($, queuedCommandWords('clear'))
       await $.command.run({ command: 'clear', args: '' })
     } catch {
-      $.ui.toast("Der Chat ließ sich nicht leeren. Schreib /leitstand handoff note, um die Übergabenotiz zu holen.")
+      $.ui.toast('Der Chat ließ sich nicht leeren. Schreib /leitstand:uebergabe-zeigen, um die Übergabenotiz zu holen.')
       return
     }
     const isSent = await sendAsUser($, note, async () => {
@@ -2800,7 +2842,25 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
       }
       if ((await read($, handoffAtom)) === 'working') return 'Die Übergabenotiz wird schon geschrieben.'
       danach($, () => startFreshChat($))
-      return `Starte einen neuen Chat mit Übergabenotiz…${isPhone ? ' Kommt danach nichts, schreib /leitstand handoff note.' : ''}`
+      return `Starte einen neuen Chat mit Übergabenotiz…${isPhone ? ' Kommt danach nichts, schreib /leitstand:uebergabe-zeigen.' : ''}`
+    case 'leitstand:uebergabe-schreiben': {
+      if ((await read($, handoffAtom)) === 'working') return 'Die Übergabenotiz wird schon geschrieben.'
+      await update($, handoffAtom, () => 'working')
+      try {
+        const written = await writeHandoff($)
+        return 'failed' in written ? `Die Übergabenotiz ließ sich nicht schreiben${written.failed}.` : written.note
+      } finally {
+        await update($, handoffAtom, () => 'idle')
+      }
+    }
+    case 'leitstand:uebergabe-zeigen': {
+      const saved = (await $.store.get(HANDOFF_KEY)) as { note?: string } | undefined
+      if (!saved?.note) return 'Noch keine Übergabenotiz gespeichert. Schreiben kannst du eine mit /leitstand:uebergabe-schreiben.'
+      // The phone (Remote Control) shows no prompt box: there the note is the command's answer.
+      if (isPhone) return saved.note
+      await $.prompt.fill({ text: saved.note })
+      return 'Die letzte Übergabenotiz steht im Eingabefeld.'
+    }
     case 'leitstand:abschliessen':
       if (!(await read($, hasGithubAtom))) return 'Dieses Projekt liegt nicht auf GitHub, darum gibt es hier keinen Push.'
       if (!istJa(args)) {
@@ -3266,19 +3326,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         void continueJob($)
         return { text: 'Mache weiter…' }
       }
-      if (arg === 'handoff note') {
-        const saved = (await $.store.get(HANDOFF_KEY)) as { note?: string } | undefined
-        if (!saved?.note) return { text: 'Noch keine Übergabenotiz gespeichert.' }
-        // The phone (Remote Control) shows no prompt box: there the note is the command's answer.
-        if (e.origin.kind === 'bridge') return { text: saved.note }
-        await $.prompt.fill({ text: saved.note })
-        return { text: 'Die letzte Übergabenotiz steht im Eingabefeld.' }
-      }
+      // The old English name of /leitstand:uebergabe-zeigen only says the new one.
+      if (arg === 'handoff note') return { text: neuerName('leitstand:uebergabe-zeigen') }
       if (arg === 'handoff') {
         void startFreshChat($)
         // On the phone neither the toasts nor the prompt box show where the note went should sending it fail.
         return {
-          text: `Starte einen neuen Chat mit Übergabenotiz…${e.origin.kind === 'bridge' ? ' Kommt danach nichts, schreib /leitstand handoff note.' : ''}`,
+          text: `Starte einen neuen Chat mit Übergabenotiz…${e.origin.kind === 'bridge' ? ' Kommt danach nichts, schreib /leitstand:uebergabe-zeigen.' : ''}`,
         }
       }
       if (arg.startsWith('details')) {
@@ -3607,6 +3661,8 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // one Claude makes in reply to its own question or choice. A new request out of the blue does not, so its plan waits.
     const isMainTurn = e.agentId === undefined
     if (isMainTurn) {
+      // The person spoke: the calls before no longer count as one loop.
+      if (text) resetLoop()
       // A question in the box counts for the turn it was asked in only.
       hasAskedInBox = false
       if (!knowsLastAnswer) {
@@ -3631,8 +3687,14 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       await change($, list => ({ ...list, approval: 'approved', phase: 'working', needsYouReason: null, isCollapsed: false }))
       // The plan runs: Start is gone, and nothing is on its way any more.
       await update($, startingAtom, () => null)
-    } else if (current !== null && (text === CONTINUE_TEXT || (isContinueWords(text) && !isFinished(current)))) {
-      // The Continue button, or "continue" typed: the same job picks up again.
+    } else if (
+      current !== null &&
+      (text === CONTINUE_TEXT ||
+        (isContinueWords(text) && !isFinished(current)) ||
+        (current.phase === 'stopped' && endsWithContinue(text) && !isFinished(current)))
+    ) {
+      // The Continue button, or "continue" typed, alone or as the last sentence of a message to a paused job (after a
+      // restart, say): the same job picks up again, its plan and approval as they were.
       await change($, list => ({
         ...list,
         phase: 'working',
@@ -3893,7 +3955,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       if (typeof ask === 'string' && ask.trim() !== '') hasAskedInBox = true
     }
 
+    // The app's own turn tools (update_plan, wrap_up) neither count toward a loop nor break one.
+    const countsTowardLoop = !tool.startsWith('mcp__ccd_turn__')
     if (ran.deny !== undefined) {
+      if (countsTowardLoop) resetLoop()
       if (beforeAsking !== null) {
         await change($, current =>
           current.phase === 'needsYou' && current.needsYouReason === QUESTION ? { ...current, ...beforeAsking } : current,
@@ -3904,12 +3969,14 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     // The person said no at the permission dialog.
     if (ran.isError && /doesn't want to proceed|user (has )?(rejected|denied|declined)/i.test(String(ran.text ?? ''))) {
       failuresInARow = 0
+      if (countsTowardLoop) resetLoop()
       await setStuck($, DENIED)
 
       return ran
     }
     if (ran.isError) {
       failuresInARow += 1
+      if (countsTowardLoop) resetLoop()
       if (failuresInARow >= 3) {
         await setStuck($, FAILING)
       }
@@ -3918,7 +3985,16 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     }
 
     failuresInARow = 0
-    await setWorking($)
+    // The same call over and over, each going through: Claude may be going round in circles. Stuck says so (its sound
+    // only as it starts), and every fifth time Claude reads a note beside the result.
+    const repeats = countsTowardLoop ? countCall(e as unknown as Record<string, unknown>) : 0
+    if (repeats >= LOOP_CALLS) {
+      await setStuck($, LOOPING)
+    } else if (countsTowardLoop || sameCallsInARow < LOOP_CALLS) {
+      // The app's turn tools between the repeats leave the loop's Stuck as it is, so it does not sound again.
+      await setWorking($)
+    }
+    const loopContext = repeats >= LOOP_CALLS && repeats % LOOP_CALLS === 0 ? [loopNote(repeats)] : []
     if (filePath !== '') {
       await noteFile($, filePath, isNewFile)
     }
@@ -3981,7 +4057,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       }))
     }
 
-    return ran
+    return loopContext.length === 0 ? ran : { ...ran, context: [...(ran.context ?? []), ...loopContext] }
   })
 
   // The desktop app draws Claude's update_plan as a list in the chat, the band draws the same plan: while the band is

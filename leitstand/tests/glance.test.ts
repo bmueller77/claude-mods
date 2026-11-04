@@ -5,7 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
-import { FACTORY_SETTINGS, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf, writesFiles, appButtonRows, appCells } from '../hooks/logic'
+import { FACTORY_SETTINGS, endsWithContinue, handoffFacts, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf, writesFiles, appButtonRows, appCells } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
 import { BAND_VERSION, zeilenVon } from '../hooks/band'
@@ -3069,7 +3069,7 @@ test('Fresh chat asks for a second press, then clears the chat and sends a hando
   expect((await texts($, 'terminal')).join('\n')).toContain('↻ Neuer Chat')
 })
 
-test('Neuer Chat vom Handy: die Antwort nennt /leitstand handoff note, und das gibt die Notiz als Antwort aus, nicht ins Eingabefeld', async ($, on) => {
+test('Neuer Chat vom Handy: die Antwort nennt /leitstand:uebergabe-zeigen, und das gibt die Notiz als Antwort aus, nicht ins Eingabefeld', async ($, on) => {
   const NOTE = 'Fortsetzung aus einem früheren Chat. So ist der Stand: Das Menü ist repariert.'
   const clock = mock.clock(on, { now: 1_000_000 })
   mock.store(on)
@@ -3088,15 +3088,19 @@ test('Neuer Chat vom Handy: die Antwort nennt /leitstand handoff note, und das g
   await $.turn.start({ text: 'Fix the menu', turnId: 't1' })
 
   const started = await $.command.run({ command: 'leitstand', args: 'handoff', origin: { kind: 'bridge' } } as never)
-  expect(started.text).toBe('Starte einen neuen Chat mit Übergabenotiz… Kommt danach nichts, schreib /leitstand handoff note.')
+  expect(started.text).toBe('Starte einen neuen Chat mit Übergabenotiz… Kommt danach nichts, schreib /leitstand:uebergabe-zeigen.')
   await clock.advance(5000)
   const before = filled.length
-  const note = await $.command.run({ command: 'leitstand', args: 'handoff note', origin: { kind: 'bridge' } } as never)
+  const note = await $.command.run({ command: 'leitstand:uebergabe-zeigen', args: '', origin: { kind: 'bridge' } } as never)
   expect(note.text).toBe(NOTE)
+  expect(filled).toHaveLength(before)
+  // The old English name only says the new one, and puts nothing in the prompt box.
+  const old = await $.command.run({ command: 'leitstand', args: 'handoff note', origin: { kind: 'composer' } } as never)
+  expect(old.text).toBe('Der Befehl heißt jetzt /leitstand:uebergabe-zeigen, kurz /uebergabe-zeigen.')
   expect(filled).toHaveLength(before)
 
   // At the computer the note goes in the prompt box as before, and the answer to /leitstand handoff stays short.
-  const typed = await $.command.run({ command: 'leitstand', args: 'handoff note', origin: { kind: 'composer' } } as never)
+  const typed = await $.command.run({ command: 'uebergabe-zeigen', args: '', origin: { kind: 'composer' } } as never)
   expect(typed.text).toBe('Die letzte Übergabenotiz steht im Eingabefeld.')
   expect(filled.at(-1)).toBe(NOTE)
   const atDesk = await $.command.run({ command: 'leitstand', args: 'handoff', origin: { kind: 'composer' } } as never)
@@ -5486,6 +5490,144 @@ test('a resumed chat gets its checklist back, paused, and Continue picks it up',
   expect(shown).not.toContain('Pausiert')
   expect(shown).toContain('Check it')
   expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+})
+
+describe('mach weiter am Ende einer längeren Nachricht', () => {
+  const MESSAGE = 'Entschuldige, ich musste dringend den Rechner ausschalten, da meine Wasserkühlung ein Leck hatte. Mach bitte weiter'
+  const step = (name: string, status: string) => ({
+    id: name, name, status, percent: status === 'done' ? 100 : 40, hasReported: true, size: 'M', summary: status === 'done' ? 'Hat die Seite geschrieben' : null,
+    tokens: 0, cachedTokens: 0, startedAt: 1_000_000, finishedAt: status === 'done' ? 1_060_000 : null,
+  })
+  // Saved mid-work, its plan approved: a restart brings it back paused.
+  const savedList = {
+    title: 'Baue die Preisseite', phase: 'working', tasks: [step('Schreib die Seite', 'done'), step('Prüf die Seite', 'active')],
+    needsYouReason: null, stuckReason: null, startedAt: 1_000_000, finishedAt: null, isCollapsed: false, hasPlan: true, jobId: 'job-1',
+    planAt: 1_000_000, plannedCount: 2, extraTokens: 0, extraCachedTokens: 0, stopKind: null, approval: 'approved', costAtStart: null, paceMs: null,
+    activity: null, helpers: [],
+  }
+  type Kept = { list: { jobId: string; approval: string; phase: string; tasks: { name: string; status: string }[] } }
+
+  test('nach einem Neustart setzt "Mach bitte weiter" als letzter Satz denselben Auftrag fort, mit Plan und Freigabe', VIEW_SIMPLE, async ($, on) => {
+    const { clock, store } = resumeWorld(on, { 'resume:chat-1': { at: 1_100_000, list: savedList } })
+    await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
+    expect((await texts($, 'terminal')).join('\n')).toContain('Pausiert')
+
+    await $.turn.start({ text: MESSAGE, turnId: 't2' })
+    const shown = (await texts($, 'terminal')).join('\n')
+    expect(shown).not.toContain('Pausiert')
+    expect(shown).toContain('Prüf die Seite')
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+    await clock.advance(1500)
+    const kept = store.get('resume:chat-1') as Kept
+    expect(kept.list.jobId).toBe('job-1')
+    expect(kept.list.approval).toBe('approved')
+    expect(kept.list.phase).toBe('working')
+    expect(kept.list.tasks.map(one => `${one.name}:${one.status}`)).toEqual(['Schreib die Seite:done', 'Prüf die Seite:active'])
+  })
+
+  test('nur der letzte Satz zählt, als ganzer Satz, ohne Frage und ohne Anführungszeichen', () => {
+    expect(endsWithContinue(MESSAGE)).toBe(true)
+    expect(endsWithContinue('Der Rechner war aus. Weiter!')).toBe(true)
+    expect(endsWithContinue('Sorry, kurz weg gewesen.\nmach weiter.')).toBe(true)
+    expect(endsWithContinue('Mach weiter. Bau dann noch X ein')).toBe(false)
+    expect(endsWithContinue('Mach nicht weiter')).toBe(false)
+    expect(endsWithContinue('Der Rechner war aus. Machst du weiter?')).toBe(false)
+    expect(endsWithContinue('Schreib in die Anleitung: "Mach bitte weiter."')).toBe(false)
+  })
+
+  for (const text of ['Mach weiter. Bau dann noch X ein', 'Mach nicht weiter']) {
+    test(`nach einem Neustart beginnt "${text}" einen neuen Auftrag`, VIEW_SIMPLE, async ($, on) => {
+      const { clock, store } = resumeWorld(on, { 'resume:chat-1': { at: 1_100_000, list: savedList } })
+      await $.session.start({ cwd: '/work', surface: 'terminal' } as never)
+      expect(endsWithContinue(text)).toBe(false)
+      await $.turn.start({ text, turnId: 't2' })
+      expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('Ruf zuerst')
+      await clock.advance(1500)
+      expect((store.get('resume:chat-1') as Kept).list.jobId).toBe('t2')
+    })
+  }
+})
+
+describe('Schleifen-Melder: derselbe erfolgreiche Aufruf immer wieder', () => {
+  const LOOPING = 'Claude wiederholt denselben Schritt'
+  const SAME = { tool: 'Bash', command: 'gh pr checks 12', description: 'Prüfe die Checks' }
+  type Ran = { deny?: string; result?: unknown; context?: readonly string[] }
+  /** The person asks for work, Claude plans it: the main loop may now call tools. */
+  async function planned($: Engine) {
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Schreib die Seite', 'Prüf die Seite'] })
+  }
+  const shown = async ($: Engine) => (await texts($, 'terminal')).join('\n')
+
+  test('fünfmal derselbe Aufruf: Hängt fest, und beim fünften und zehnten liest Claude den Hinweis', VIEW_SIMPLE, async ($, on) => {
+    world(on)
+    await planned($)
+    const runs: Ran[] = []
+    for (let at = 0; at < 10; at += 1) {
+      // The same input with its keys in another order is the same call.
+      runs.push((await callTool($, at % 2 === 0 ? SAME : { description: SAME.description, command: SAME.command, tool: 'Bash' })) as Ran)
+      if (at === 3) expect(await shown($)).not.toContain(LOOPING)
+    }
+    expect(runs.map(one => one.context?.length ?? 0)).toEqual([0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    expect(runs[4]?.context?.[0]).toContain('fünfmal hintereinander mit derselben Eingabe')
+    expect(runs[9]?.context?.[0]).toContain('zehnmal hintereinander')
+    expect(await shown($)).toContain(LOOPING)
+    // Another call afterwards: working again.
+    await callTool($, { tool: 'Bash', command: 'ls' })
+    expect(await shown($)).not.toContain(LOOPING)
+  })
+
+  test('viermal derselbe und dann ein anderer: nichts; der andere zählt von eins', VIEW_SIMPLE, async ($, on) => {
+    world(on)
+    await planned($)
+    const OTHER = { ...SAME, command: 'gh pr checks 13' }
+    const runs: Ran[] = []
+    for (let at = 0; at < 4; at += 1) runs.push((await callTool($, SAME)) as Ran)
+    runs.push((await callTool($, OTHER)) as Ran)
+    expect(runs.every(one => one.context === undefined)).toBe(true)
+    expect(await shown($)).not.toContain(LOOPING)
+    for (let at = 0; at < 3; at += 1) expect(((await callTool($, OTHER)) as Ran).context).toBeUndefined()
+    expect(await shown($)).not.toContain(LOOPING)
+    expect(((await callTool($, OTHER)) as Ran).context?.[0]).toContain('fünfmal')
+    expect(await shown($)).toContain(LOOPING)
+  })
+
+  test('ein Fehlschlag dazwischen zählt neu, eine Nachricht der Person auch', VIEW_SIMPLE, async ($, on) => {
+    let fails = false
+    world(on, () => (fails ? { isError: true, result: 'kaputt', text: 'kaputt' } : { result: {} }))
+    await planned($)
+    for (let at = 0; at < 4; at += 1) await callTool($, SAME)
+    fails = true
+    await callTool($, SAME)
+    fails = false
+    const after: Ran[] = []
+    for (let at = 0; at < 4; at += 1) after.push((await callTool($, SAME)) as Ran)
+    expect(after.every(one => one.context === undefined)).toBe(true)
+    expect(await shown($)).not.toContain(LOOPING)
+    // The person says something: the four before no longer count.
+    await $.turn.start({ text: 'Warte noch kurz auf die Checks', turnId: 't2' })
+    const next = (await callTool($, SAME)) as Ran
+    expect(next.context).toBeUndefined()
+    expect(await shown($)).not.toContain(LOOPING)
+    // Counted from that message on, the fifth is a loop again.
+    for (let at = 0; at < 3; at += 1) await callTool($, SAME)
+    expect(((await callTool($, SAME)) as Ran).context?.[0]).toContain('fünfmal')
+    expect(await shown($)).toContain(LOOPING)
+  })
+
+  test('Aufrufe von Helfern zählen nicht, die Liste der App unterbricht nicht', VIEW_SIMPLE, async ($, on) => {
+    world(on)
+    await planned($)
+    for (let at = 0; at < 6; at += 1) expect(((await callTool($, { ...SAME, agentId: 'a1' })) as Ran).context).toBeUndefined()
+    expect(await shown($)).not.toContain(LOOPING)
+    const runs: Ran[] = []
+    for (let at = 0; at < 5; at += 1) {
+      runs.push((await callTool($, SAME)) as Ran)
+      await callTool($, { tool: 'mcp__ccd_turn__update_plan', advance: true })
+    }
+    expect(runs[4]?.context?.[0]).toContain('fünfmal')
+    expect(await shown($)).toContain(LOOPING)
+  })
 })
 
 test("each chat keeps its checklist under its own key; the old shared key moves over and only the 20 most recent stay", async ($, on) => {
@@ -9559,7 +9701,7 @@ describe('Eigene Befehle /leitstand-…', () => {
 
     const names = LEITSTAND_BEFEHLE.map(one => one.name)
     // Die des Leitstands selbst und die seiner Teile (Selbstkritik und Regeln, Dateien, Autopilot), jeder mit Kurzform.
-    expect(names).toHaveLength(50 + TEIL_BEFEHLE.length)
+    expect(names).toHaveLength(52 + TEIL_BEFEHLE.length)
     expect(new Set(names).size).toBe(names.length)
     const short = registered.find(one => one.name === 'leitstand')
     expect(short).toBeDefined()
@@ -9587,7 +9729,7 @@ describe('Eigene Befehle /leitstand-…', () => {
       }
     }
     // Short forms without leitstand: in front: the same command, the menu names the mod.
-    expect(LEITSTAND_KURZFORMEN.size).toBe(46 + TEIL_BEFEHLE.length)
+    expect(LEITSTAND_KURZFORMEN.size).toBe(48 + TEIL_BEFEHLE.length)
     for (const name of ['an', 'aus', 'hilfe', 'vermenschlichen']) expect(registered.find(one => one.name === name)).toBeUndefined()
     for (const [kurz, name] of LEITSTAND_KURZFORMEN) {
       const one = LEITSTAND_BEFEHLE.find(befehl => befehl.name === name)
@@ -9878,6 +10020,104 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(forks).toHaveLength(1)
     expect(runs).toEqual(['clear'])
     expect(sent).toEqual([NOTE])
+  })
+
+  test('Übergabe schreiben: die Antwort ist die Notiz, der Chat bleibt, und der Fork kennt Plan und Dateien', async ($, on) => {
+    const clock = world(on)
+    const NOTE = 'Fortsetzung aus einem früheren Chat. So ist der Stand: Die Preisseite steht.'
+    const forks: string[] = []
+    const runs: string[] = []
+    const sent: string[] = []
+    const filled: string[] = []
+    let answer: () => Promise<unknown> = async () => ({ value: { isAnswered: true, text: `  ${NOTE}\n`, usage: {} } })
+    on('model.fork', async (_, e) => {
+      forks.push(String((e as { prompt: string }).prompt))
+      return (await answer()) as never
+    })
+    on('command.run', (_, e) => {
+      runs.push(e.command)
+      return { text: '' }
+    })
+    on('prompt.submit', (_, e) => {
+      sent.push(e.text)
+      return { text: e.text }
+    })
+    on('prompt.fill', (_, e) => {
+      filled.push(String((e as unknown as { text: string }).text))
+      return { isFilled: true } as never
+    })
+    // hilfe explains it and writes nothing.
+    expect((await run($, 'leitstand:uebergabe-schreiben', 'hilfe')).startsWith('/leitstand:uebergabe-schreiben · ')).toBe(true)
+    expect((await run($, 'uebergabe-zeigen', 'hilfe')).startsWith('/leitstand:uebergabe-zeigen · ')).toBe(true)
+    expect(forks).toEqual([])
+    expect(await run($, 'leitstand:uebergabe-zeigen')).toBe('Noch keine Übergabenotiz gespeichert. Schreiben kannst du eine mit /leitstand:uebergabe-schreiben.')
+
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await callTool($, { tool: PLAN, steps: ['Schreib die Seite', 'Prüf die Seite', 'Räum auf'] })
+    await callTool($, { tool: 'Write', file_path: '/work/preise.html', content: 'x' })
+    await callTool($, { tool: PROGRESS, task: 'Schreib die Seite', percent: 100, summary: 'Hat die Preisseite geschrieben' })
+
+    expect(await run($, 'uebergabe-schreiben')).toBe(NOTE)
+    await settle(clock)
+    expect(forks).toHaveLength(1)
+    expect(forks[0]).toContain('Fortsetzung aus einem früheren Chat. So ist der Stand:')
+    expect(forks[0]).toContain('Was nicht geklappt hat und warum')
+    expect(forks[0]).toContain('Genauer nächster Schritt')
+    expect(forks[0]).toContain('\n\nStand laut Leitstand:\n')
+    expect(forks[0]).toContain('- erledigt: Schreib die Seite. Hat die Preisseite geschrieben')
+    expect(forks[0]).toContain('- läuft: Prüf die Seite')
+    expect(forks[0]).toContain('- offen: Räum auf')
+    expect(forks[0]).toMatch(/preise\.html/)
+    // Nothing cleared, nothing sent: the chat stays as it is.
+    expect(runs).toEqual([])
+    expect(sent).toEqual([])
+    // The note is kept: /leitstand:uebergabe-zeigen brings it back, from the phone as the answer.
+    expect(await run($, 'leitstand:uebergabe-zeigen', '', 'bridge')).toBe(NOTE)
+    expect(filled).toEqual([])
+    expect(await run($, 'leitstand:uebergabe-zeigen')).toBe('Die letzte Übergabenotiz steht im Eingabefeld.')
+    expect(filled).toEqual([NOTE])
+
+    // While one is being written, a second only says so.
+    let release: () => void = () => {}
+    answer = () => new Promise(done => (release = () => done({ value: { isAnswered: true, text: 'Zweite Notiz', usage: {} } })))
+    const first = run($, 'leitstand:uebergabe-schreiben')
+    await settle()
+    expect(await run($, 'leitstand:uebergabe-schreiben')).toBe('Die Übergabenotiz wird schon geschrieben.')
+    release()
+    expect(await first).toBe('Zweite Notiz')
+    // A fork without an answer says why.
+    answer = async () => ({ value: { isAnswered: false, reason: 'nothing-to-fork', usage: {} } })
+    expect(await run($, 'leitstand:uebergabe-schreiben')).toBe('Die Übergabenotiz ließ sich nicht schreiben (nothing-to-fork).')
+  })
+
+  test('der Block für die Übergabe: Schritte mit Zustand und Zusammenfassung, Dateien einmal; ohne beides keiner', () => {
+    const step = (name: string, status: 'done' | 'active' | 'upcoming', summary: string | null, files?: { path: string; isNew: boolean }[]) => ({
+      id: name, name, status, percent: 0, hasReported: false, size: 'M' as const, summary, tokens: 0, cachedTokens: 0, startedAt: null, finishedAt: null, ...(files ? { files } : {}),
+    })
+    const list = {
+      title: 'Baue die Preisseite', hasPlan: true,
+      tasks: [
+        step('Schreib die Seite', 'done', 'Hat die Seite geschrieben', [{ path: 'preise.html', isNew: true }, { path: 'style.css', isNew: false }]),
+        step('Prüf die Seite', 'active', null, [{ path: 'style.css', isNew: false }]),
+        step('Räum auf', 'upcoming', null),
+      ],
+    }
+    expect(handoffFacts(list as never)).toBe(
+      [
+        'Stand laut Leitstand:',
+        'Schritte des Plans "Baue die Preisseite":',
+        '- erledigt: Schreib die Seite. Hat die Seite geschrieben',
+        '- läuft: Prüf die Seite',
+        '- offen: Räum auf',
+        'In diesem Chat geschriebene oder geänderte Dateien:',
+        '- preise.html (neu)',
+        '- style.css',
+      ].join('\n'),
+    )
+    // Before a plan the placeholder steps are no plan; the files still count.
+    expect(handoffFacts({ ...list, hasPlan: false } as never)).toBe('Stand laut Leitstand:\nIn diesem Chat geschriebene oder geänderte Dateien:\n- preise.html (neu)\n- style.css')
+    expect(handoffFacts({ ...list, hasPlan: false, tasks: [step('Verstehe deine Anfrage', 'active', null)] } as never)).toBe('')
+    expect(handoffFacts(null)).toBe('')
   })
 
   test('Abschließen: ohne ja passiert nichts, mit ja geht der Auftrag wie mit Push an GitHub', async ($, on) => {

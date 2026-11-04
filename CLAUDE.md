@@ -12,7 +12,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Ein Ordner je Mod: `.claude-plugin/plugin.json` (mit Version), `hooks/`, `types/`, `tests/`.
 - `.claude-plugin/marketplace.json` ist der Katalog. `i-have-adhd` ist fremd und kommt direkt aus
   `ayghri/i-have-adhd`. Seit 2026-10-28 gibt es davon die deutsche Fassung `kurzfassen` (eigener Mod, nur
-  ein Skill, Björn mag den Namen ADHS nicht); i-have-adhd bleibt im Katalog.
+  ein Skill, Björn mag den Namen ADHS nicht); i-have-adhd bleibt im Katalog. Seit 2026-11-04 gibt es
+  `sorgfalt` (nur Skills `debuggen` und `belegen`, deutsche Fassung aus obra/superpowers, MIT); Superpowers
+  und Everything Claude Code selbst installiert Björn nicht, sie stritten mit dem Leitstand um die Führung.
 - Befehle heißen seit 2026-10-26 `/<mod>:<funktion>[-<wert>]` (Anthropics Schreibweise), `/<mod>:hilfe`
   listet sie. Jeder Mod hat dafür `<mod>/commands/<funktion>.md`; die App setzt `<mod>:` davor, der
   `command.run`-Hook des Mods beantwortet `e.command === '<mod>:<funktion>'`. Registriert
@@ -212,6 +214,20 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   der laufenden Runde bis 10 s vor dem Abbruch macht daraus einen Einschub, und der Auftrag läuft weiter
   (live ungeprüft). Der 30-s-Start (Autopilot, geplante Aufgabe) zählt erst ab sichtbarem Plan. Detailliert
   faltet nie, sondern zeigt so viele Schritte, wie Platz haben, und eine Zeile mit Zählzeichen.
+- Leitstand seit 0.63.6.0 (Ideen aus Superpowers und Everything Claude Code, 2026-11-04): Ein angehaltener
+  Auftrag (Pause, Esc, nach einem Neustart als pausiert zurückgeholt) läuft weiter, wenn der letzte Satz der
+  Nachricht "mach weiter" ist (`endsWithContinue`), mit Plan und Freigabe. Fünfmal derselbe erfolgreiche
+  Aufruf der Hauptschleife (`callSignature`, `LOOP_CALLS`) setzt "Claude wiederholt denselben Schritt" und
+  gibt Claude bei jedem fünften eine Zeile über `context` des Werkzeugergebnisses ("nur zur Info");
+  `mcp__ccd_turn__*` zählt nicht. Die Übergabenotiz (Neuer Chat) hat feste Abschnitte, darunter "Was nicht
+  geklappt hat", und bekommt Plan und geänderte Dateien des Auftrags mit (`handoffFacts`);
+  `/leitstand:uebergabe-schreiben` schreibt sie ohne zu leeren, `/leitstand:uebergabe-zeigen` ersetzt
+  `/leitstand handoff note`. Regeln: Steht eine Regel schon als Projektregel in einem anderen Projekt,
+  schlägt das Fenster "Alle Projekte" vor (`auchIn`). Statistik seit 0.19.6.0: Jede Verdichtung der
+  Hauptschleife bekommt die Anweisung, festzuhalten, was nicht geklappt hat (`mitFehlwegen`, auch beim
+  direkten Compact im Terminal). Ein Sicherungspunkt vor jedem automatischen Compact wurde verworfen: Die
+  eingebaute Zusammenfassung deckt Ziel, Fehler, Offenes und nächsten Schritt schon ab, ein Fork kostete
+  jedes Mal den vollen Chat.
 - Computersteuerung: Das Fenster der Claude-App selbst darf sie nicht bedienen (`request_access` für
   "Claude" wird grundsätzlich abgelehnt). Live-Tests im Band macht Björn; ohne Fenster prüft Claude mit
   `claude -p` und liest den Verlauf unter `~/.claude/projects/<ordner>/<sitzung>.jsonl`.
@@ -292,16 +308,17 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Der Teil zum Passwortschutz ist behoben in leitstand 0.62.0: Berichte von Helfern gehen durch, eine
    zurückgehaltene Nachricht steht im Band mit Trotzdem senden und Verwerfen (`/trotzdem-senden`,
    `/nachricht-verwerfen`). Ungeprüft: ob die Desktop-App ein `$.prompt.submit` mit `asUser` annimmt.
-   Das Abhaken ist behoben in 0.63.5.2 (siehe Fachliches). Nach einem Neustart der App ist der Plan weg,
-   und der Rest braucht eine neue Freigabe (gesehen 2026-10-31).
+   Das Abhaken ist behoben in 0.63.5.2 (siehe Fachliches). Nach einem Neustart der App kam der Plan als
+   pausiert zurück, aber nur ein bloßes "weiter" setzte ihn fort; eine längere Nachricht mit "Mach bitte
+   weiter" am Ende begann einen neuen Auftrag (gesehen 2026-10-31). Behoben in 0.63.6.0 (`endsWithContinue`).
 10. Hilfe und Einstellungen (2026-10-29, Commit 56d3892): Zwei Runden mit Prüfern ohne Vorwissen
    (Explore-Helfer, die einzigen ohne CLAUDE.md; `claude -p` aus der App heraus ist nicht angemeldet).
    Leitfaden: gleiche Abschnitte je `/<mod>:hilfe`, Standard für neue Chats per "Sag Claude" oder
    `claude plugin configure <mod>@bm-mods --values-stdin`, `hilfe` an jedem Befehl ändert nichts.
    Noten zuletzt 2 bis 3,5. Offen, weil Feature statt Text: vom Handy erfährt man "Claude braucht dich"
    nicht (nur Leiste am Rechner); Statistik-Leiste, Nächste Schritte und das Fenster von Visible
-   Compact lassen sich je Chat nicht abschalten; `/leitstand handoff note` ist noch ein alter
-   englischer Befehl. Live-Test ausstehend: die neuen Texte und 2 px Luft unter den Buttons der
+   Compact lassen sich je Chat nicht abschalten (`/leitstand handoff note` heißt seit leitstand 0.63.6.0
+   `/leitstand:uebergabe-zeigen`). Live-Test ausstehend: die neuen Texte und 2 px Luft unter den Buttons der
    Zusammenfassung (`marginTop={0.2}`).
 11. Live-Test ausstehend (2026-10-31): Warteschlangen-Toasts, "Braucht dich" erst nach der Plan-Nachricht,
    Detailliert mit allen Schritten, App-Liste nur am Ende (erreicht `$.mcp.call` den Server `ccd_turn`?),
@@ -315,3 +332,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    ohne neue Freigabe, Bash-Sperre in Lese-Plänen, Detailliert im engen Band, Bearbeiten-Feld im Fenster
    von Prompt Upgrade. Gesehen, nicht geklärt: `mcp__ccd_turn__update_plan` mit `advance` antwortete einmal
    "every step is done" nach dem ersten von acht Schritten.
+13. Live-Test ausstehend (2026-11-04, leitstand 0.63.6.0, statistik 0.19.6.0, naechste-schritte 0.4.6.0,
+   sorgfalt 0.1.0.0): Nächste Schritte als ganze Buttons untereinander (Breite der Kürzung `knopfText`,
+   ob zwei Leerzeichen im Button stehen bleiben); "mach weiter" am Ende nach einem Neustart; Schleifen-Melder
+   und ob Claude die `context`-Zeile sieht; `/uebergabe-schreiben` mitten in einer Runde; Vorschlag "Alle
+   Projekte" im Fenster Regeln; ob die Compact-Zusammenfassung den Abschnitt "Was nicht geklappt hat" hat;
+   ob `debuggen` und `belegen` von selbst greifen. Der Test-Chat für den Einschub (Offen 12) wartet seit
+   2026-10-31 auf Björns "start".

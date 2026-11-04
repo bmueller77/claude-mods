@@ -221,6 +221,8 @@ export type ReflectFund = {
   rule: string
   /** Der Ort, den das Modell vorschlaegt; "merke:" schlaegt global vor. */
   scope: 'global' | 'project'
+  /** Steht sie schon als Projektregel in einem anderen Projekt, dessen Ordner; dann schlägt der Mod Alle Projekte vor. */
+  auchIn?: string
   /** Das Projekt (Sitzungswurzel), in dem sie gesagt wurde. */
   project: string
   /** Wie oft sie gesagt wurde (Wiederholungen zaehlen auf derselben Zeile). */

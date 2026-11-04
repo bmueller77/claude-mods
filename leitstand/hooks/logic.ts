@@ -530,6 +530,18 @@ function saysStart(text: string): boolean {
   })
 }
 
+/**
+ * A longer message whose last sentence is a "carry on" alone: "Entschuldige, der Rechner war aus. Mach bitte weiter".
+ * Sentences split as saysStart splits them; quoted words do not count, and a question is no carry on.
+ */
+export function endsWithContinue(text: string): boolean {
+  const said = text.replace(QUOTED_WORDS, ' ')
+  const sentences = (said.match(/[^.!?…\n]+[.!?…\n]*/g) ?? []).filter(chunk => chunk.replace(/[.!?…\s]+/g, '') !== '')
+  const last = sentences.at(-1)
+  if (last === undefined || /\?[.!?…\s]*$/.test(last)) return false
+  return isContinueWords(last.replace(/[.!?…\n]+$/, ''))
+}
+
 // Words that may open a clause before a work instruction: "dann setze bitte b) um", "ok, füg den Test hinzu".
 const DO_LEAD_IN = String.raw`(?:(?:also|dann|jetzt|nun|gut|super|prima|okay|ok|ja|und|einfach|bitte|übrigens|außerdem|danach|anschließend)\s*,?\s+)*`
 // A clause starts at the start of a sentence or after , : ; or a dash.
@@ -1897,6 +1909,57 @@ export const noticeBody = (list: GlanceChecklist) =>
 /** A job that ended: All done, or finished with a question for the person (Needs you, with a finish time). */
 export const isFinished = (list: GlanceChecklist) => list.phase === 'done' || (list.phase === 'needsYou' && list.finishedAt !== null)
 
+const HANDOFF_STEP_WORDS: Record<GlanceTask['status'], string> = { done: 'erledigt', active: 'läuft', upcoming: 'offen' }
+
+/**
+ * What the Leitstand knows of this chat, for the handoff note's prompt: the plan's steps with their state and what each
+ * got done, and the files Claude wrote or edited. Empty when it knows neither.
+ */
+export function handoffFacts(list: GlanceChecklist | null): string {
+  if (list === null) return ''
+  const steps = list.hasPlan
+    ? list.tasks.map(one => `- ${HANDOFF_STEP_WORDS[one.status]}: ${one.name}${one.summary ? `. ${one.summary}` : ''}`)
+    : []
+  const files = list.tasks.flatMap(one => one.files ?? [])
+  const paths = [...new Map(files.map(one => [one.path, one])).values()].map(one => `- ${one.path}${one.isNew ? ' (neu)' : ''}`)
+  if (steps.length === 0 && paths.length === 0) return ''
+  return [
+    'Stand laut Leitstand:',
+    ...(steps.length === 0 ? [] : [`Schritte des Plans "${list.title}":`, ...steps]),
+    ...(paths.length === 0 ? [] : ['In diesem Chat geschriebene oder geänderte Dateien:', ...paths]),
+  ].join('\n')
+}
+
+/** From this many identical calls in a row on, the main loop counts as going round in circles. */
+export const LOOP_CALLS = 5
+
+// The keys tool.call carries beside a tool's own input: not part of what the call asks for.
+const CALL_ENVELOPE: ReadonlySet<string> = new Set(['tool', 'tool_use_id', 'consent'])
+
+/** A value with every object's keys sorted, so the same input reads the same however its keys were ordered. */
+const sortedKeys = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(sortedKeys)
+    : value !== null && typeof value === 'object'
+      ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sortedKeys((value as Record<string, unknown>)[key])]))
+      : value
+
+/** A tool call's signature: the tool's name and its input as stable JSON, without the envelope's keys. */
+export function callSignature(call: Record<string, unknown>): string {
+  const input = Object.fromEntries(Object.entries(call).filter(([key]) => !CALL_ENVELOPE.has(key)))
+  return `${String(call.tool)} ${JSON.stringify(sortedKeys(input))}`
+}
+
+const TIMES_WORDS: Record<number, string> = { 5: 'fünfmal', 10: 'zehnmal', 15: 'fünfzehnmal', 20: 'zwanzigmal' }
+
+/** What Claude reads beside the result of the same call made `count` times in a row. */
+export function loopNote(count: number): string {
+  return (
+    `Hinweis vom Leitstand, nur zur Info: Diesen Aufruf hast du jetzt ${TIMES_WORDS[count] ?? `${count}-mal`} hintereinander mit derselben Eingabe gemacht. ` +
+    'Prüf, ob du in einer Schleife steckst, und versuch einen anderen Weg oder frag die Person. Wartest du absichtlich auf etwas, mach einfach weiter.'
+  )
+}
+
 /** Why the person is needed: what Claude asked, when it ended on a question, else the general reason. */
 export const needsText = (list: GlanceChecklist) =>
   (list.question && (list.needsYouReason === WAITING || list.needsYouReason === QUESTION) ? list.question : list.needsYouReason) ?? null
@@ -2224,10 +2287,26 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
     'Auftrag',
     'leitstand:neuer-chat',
     'Neuer Chat mit Übergabenotiz (mit ja)',
-    'Claude schreibt eine Übergabenotiz über diesen Chat, leert ihn dann mit /clear und schickt die Notiz als erste Nachricht in den neuen Chat. /clear allein leert nur. Das Schreiben der Notiz ist ein Modellaufruf, der den ganzen Chat liest.',
+    'Claude schreibt eine Übergabenotiz über diesen Chat, leert ihn dann mit /clear und schickt die Notiz als erste Nachricht in den neuen Chat. /clear allein leert nur. Das Schreiben der Notiz ist ein Modellaufruf, der den ganzen Chat liest. /leitstand:uebergabe-schreiben schreibt dieselbe Notiz, ohne den Chat zu leeren.',
     `Button: Neuer Chat unten rechts; am Rechner, sobald ein Auftrag fertig oder angehalten ist. ${ZWEIMAL}`,
     'einmal',
     { ...ja('leitstand:neuer-chat'), giltText: 'einmal, sofort; leert diesen Chat und ändert keine Einstellung.' },
+  ),
+  befehl(
+    'Auftrag',
+    'leitstand:uebergabe-schreiben',
+    'Übergabenotiz schreiben, ohne den Chat zu leeren',
+    'Claude schreibt eine Übergabenotiz über diesen Chat: Ziel, Erledigtes, Offenes, was nicht geklappt hat, Entscheidungen, wichtige Dateien und Befehle und den nächsten Schritt; dazu kommen die Schritte des Plans und die geänderten Dateien, die der Leitstand kennt. Die Antwort ist die Notiz selbst, auch vom Handy; du kannst sie in einen anderen Chat oder auf einen Server mitnehmen. Der Chat bleibt, wie er ist. Das Schreiben ist ein Modellaufruf, der den ganzen Chat liest. /leitstand:uebergabe-zeigen holt die Notiz später wieder.',
+    'Button: keiner. Neuer Chat unten rechts schreibt dieselbe Notiz und leert den Chat danach.',
+    'einmal',
+  ),
+  befehl(
+    'Auftrag',
+    'leitstand:uebergabe-zeigen',
+    'Die letzte Übergabenotiz zeigen',
+    'Holt die zuletzt geschriebene Übergabenotiz (von Neuer Chat oder /leitstand:uebergabe-schreiben): am Rechner ins Eingabefeld, vom Handy als Antwort. Gibt es noch keine, sagt der Befehl das.',
+    'Button: keiner.',
+    'einmal',
   ),
   befehl(
     'Auftrag',

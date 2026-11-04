@@ -4,6 +4,7 @@ import type { On, RenderElement, SessionContextBreakdown } from 'claude-code'
 
 import {
     ALTE_BEFEHLE,
+    ANWEISUNG_FEHLWEGE,
     BEFEHLE,
     FENSTER_OHNE_ZUSAMMENFASSUNG,
     KURZFORMEN,
@@ -17,6 +18,7 @@ import {
     hilfeText,
     istVeraltet,
     leseDauer,
+    mitFehlwegen,
     restUhr,
     sicherungspunktAbschnitt,
     tokenMenge,
@@ -2108,7 +2110,7 @@ test('die Verdichtung nach dem Aufräumen behält den Sicherungspunkt; danach st
 
     // Die Engine fuehrt das eingereihte /compact aus, hier mit Text, den die Person dahinter schrieb.
     await $.session.compact({ trigger: 'manual', instructions: 'Fokus auf die Tests', messages: VERLAUF_KURZ } as never)
-    expect(anweisungen).toEqual([`Fokus auf die Tests\n\n${behalteAnweisung(SICHERUNG)}`])
+    expect(anweisungen).toEqual([`Fokus auf die Tests\n\n${behalteAnweisung(SICHERUNG)}\n\n${ANWEISUNG_FEHLWEGE}`])
     expect(behalteAnweisung(SICHERUNG)).toBe(`Behalte alles aus diesem Sicherungspunkt; die Arbeit braucht ihn, um weiterzugehen.\n\n${SICHERUNG}`)
     expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am: 1_000_000, notiz: SICHERUNG, verdichtet: 1_000_000 })
     expect(await abschnitte($ as never)).toEqual([{ id: 'statistik:sicherungspunkt', text: sicherungspunktAbschnitt(SICHERUNG), scope: 'session' }])
@@ -2117,10 +2119,10 @@ test('die Verdichtung nach dem Aufräumen behält den Sicherungspunkt; danach st
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
 
-    // Eine spaetere Verdichtung bekommt ihn nicht noch einmal gesagt; im Systemprompt bleibt er.
+    // Eine spaetere Verdichtung bekommt ihn nicht noch einmal gesagt, nur die Fehlwege; im Systemprompt bleibt er.
     await $.session.compact({ trigger: 'auto', messages: VERLAUF_KURZ } as never)
     expect(anweisungen).toHaveLength(2)
-    expect(anweisungen[1]).toBeUndefined()
+    expect(anweisungen[1]).toBe(ANWEISUNG_FEHLWEGE)
     expect(await abschnitte($ as never)).toHaveLength(1)
 
     // Nach /clear ist es ein neuer Chat, ohne Sicherungspunkt.
@@ -2142,7 +2144,7 @@ test('im Terminal zwischen zwei Runden verdichtet der Schwamm direkt, mit der An
     expect(b.sicherungen).toHaveLength(1)
     // Kein /compact eingereiht, kein anderer Mod: die Sitzung verdichtet selbst.
     expect(b.befehle).toEqual([])
-    expect(anweisungen).toEqual([behalteAnweisung(SICHERUNG)])
+    expect(anweisungen).toEqual([`${behalteAnweisung(SICHERUNG)}\n\n${ANWEISUNG_FEHLWEGE}`])
     const am = 1_000_000 + COUNTDOWN
     expect(speicher.get('statistik.sicherungspunkt:sitzung-1')).toEqual({ am, notiz: SICHERUNG, verdichtet: am })
     // Eine Zeile zum Compact, der Text der Zusammenfassung steht nicht im Verlauf.
@@ -2151,6 +2153,40 @@ test('im Terminal zwischen zwei Runden verdichtet der Schwamm direkt, mit der An
         'Verdichtet: von 40k auf 8,0k Tokens, 80 % weniger. Zusammenfassung: /statistik:zusammenfassung-zeigen',
     ])
     expect((await ui.find({ type: 'Button', key: 'wischen' }))?.props.label).toBe('🧽')
+})
+
+// --- Fehlwege in jeder Verdichtung ---
+
+test('mitFehlwegen haengt die Anweisung an, ohne und mit vorhandener, und nie doppelt', () => {
+    const ohne = { trigger: 'auto', messages: VERLAUF_KURZ } as never
+    expect(mitFehlwegen(ohne).instructions).toBe(ANWEISUNG_FEHLWEGE)
+    const mit = { trigger: 'manual', instructions: 'Fokus auf die Tests', messages: VERLAUF_KURZ } as never
+    const einmal = mitFehlwegen(mit)
+    expect(einmal.instructions).toBe(`Fokus auf die Tests\n\n${ANWEISUNG_FEHLWEGE}`)
+    expect(mitFehlwegen(einmal)).toBe(einmal)
+    for (const trigger of ['manual', 'auto', 'plugin', 'precompute'] as const) {
+        expect(mitFehlwegen({ trigger, messages: VERLAUF_KURZ } as never).instructions).toBe(ANWEISUNG_FEHLWEGE)
+    }
+    expect(ANWEISUNG_FEHLWEGE).toBe('Halte in der Zusammenfassung ausdrücklich in einem eigenen Abschnitt fest, was nicht geklappt hat: Ansätze, die gescheitert sind oder verworfen wurden, jeweils mit dem Grund, damit sie nach der Verdichtung nicht wiederholt werden. Gibt es keine, lass den Abschnitt weg.')
+})
+
+test('jede Verdichtung der Hauptschleife haelt fest, was nicht geklappt hat; die eines Subagenten bleibt, wie sie ist', async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    eigenerSpeicher(on, new Map())
+    boden(on, STAND)
+    const anweisungen = verdichtungMitAnweisung(on)
+    await start($ as never)
+    await runde($ as never)
+    await $.session.compact({ trigger: 'auto', messages: VERLAUF_KURZ } as never)
+    await $.session.compact({ trigger: 'manual', instructions: 'Fokus auf die Tests', messages: VERLAUF_KURZ } as never)
+    await $.session.compact({ trigger: 'auto', agentId: 'helfer-1', messages: VERLAUF_KURZ } as never)
+    await $.session.compact({ trigger: 'manual', agentId: 'helfer-1', instructions: 'Nur der Helfer', messages: VERLAUF_KURZ } as never)
+    expect(anweisungen).toEqual([
+        ANWEISUNG_FEHLWEGE,
+        `Fokus auf die Tests\n\n${ANWEISUNG_FEHLWEGE}`,
+        undefined,
+        'Nur der Helfer',
+    ])
 })
 
 /** Ein Sicherungspunkt am 15. Juli 2026 um 12:05 UTC: 14:05 in Berlin. */

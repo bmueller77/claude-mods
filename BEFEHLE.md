@@ -52,6 +52,8 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:weiter` | Claude weitermachen lassen |
 | `/leitstand:plan-zeigen` | Den ganzen Plan zeigen |
 | `/leitstand:neuer-chat [ja]` | Neuer Chat mit Übergabenotiz (mit ja) |
+| `/leitstand:uebergabe-schreiben` | Übergabenotiz schreiben, ohne den Chat zu leeren |
+| `/leitstand:uebergabe-zeigen` | Die letzte Übergabenotiz zeigen |
 | `/leitstand:abschliessen [ja]` | Auf GitHub abschließen: Commit, Pull Request, Merge (mit ja) |
 
 ### Verlauf und Berichte
@@ -250,6 +252,16 @@ Kurzfassen als Skill, die deutsche Fassung von i-have-adhd: zuerst die nächste 
 | Befehl | Was er tut |
 |---|---|
 | `/kurzfassen:hilfe` | Was Kurzfassen tut, wie du es ein- und ausschaltest |
+
+## Sorgfalt
+
+Zwei Skills, die von selbst greifen, deutsche Fassung aus Superpowers von Jesse Vincent: debuggen sucht bei einem Fehler erst die Ursache und belegt sie, belegen verlangt eine frisch ausgeführte Prüfung vor jeder Fertig-Meldung. Von Hand rufen sie die beiden Skill-Befehle.
+
+| Befehl | Was er tut |
+|---|---|
+| `/sorgfalt:debuggen` | Den aktuellen Fehler systematisch untersuchen: erst die Ursache belegen, dann reparieren |
+| `/sorgfalt:belegen` | Den Stand frisch prüfen und mit Beleg melden |
+| `/sorgfalt:hilfe` | Was Sorgfalt tut, wann die Skills greifen, wie du sie abschaltest |
 
 ## i-have-adhd
 

@@ -1,6 +1,6 @@
 {
   "name": "statistik",
-  "version": "0.19.5.0",
+  "version": "0.19.6.0",
   "description": "Zeigt über dem Eingabefeld eine Leiste mit Chatlänge, Kontext, Cache-Uhr und deinen Nutzungslimits, dazu Buttons, die den Cache warm halten, den Chat verdichten oder ihn mit Sicherungspunkt aufräumen. Hilfe: /statistik:hilfe.",
   "author": {
     "name": "Björn Müller",

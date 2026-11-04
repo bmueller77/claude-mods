@@ -22,6 +22,7 @@ import {
   SAME,
   SYSTEM,
   anAus,
+  auchInHinweis,
   auftragAus,
   checkPrompt,
   cleanRule,
@@ -30,6 +31,7 @@ import {
   grund,
   isTrivial,
   looksSecret,
+  ordnerName,
   parseVerdict,
   reflexionsPrompt,
   similarity,
@@ -181,14 +183,21 @@ async function record($: EngineInterface, v: Verdict, root: string, isExplicit: 
     await saveFunde($, list)
     return
   }
-  const target = await readText($, await fileFor($, v.scope, root))
+  // Steht dieselbe Regel schon als Projektregel in einem anderen Projekt, gilt sie wohl überall: Vorschlag Alle Projekte.
+  // Die CLAUDE.md jenes Projekts bleibt, wie sie ist.
+  const anderswo = list.find(
+    l => l.status === 'saved' && l.scope === 'project' && l.project !== root && similarity(l.rule, v.rule) >= SAME,
+  )
+  const scope = anderswo === undefined ? v.scope : 'global'
+  const target = await readText($, await fileFor($, scope, root))
   const isKnown = target
     .split('\n')
     .some(line => /^\s*[-*] /.test(line) && similarity(line.replace(/^\s*[-*]\s+/, ''), v.rule) >= SAME)
   list.push({
     id: `r${now.toString(36)}${Math.floor(Math.random() * 46656).toString(36)}`,
     rule: v.rule,
-    scope: v.scope,
+    scope,
+    ...(anderswo === undefined ? {} : { auchIn: anderswo.project }),
     project: root,
     count: 1,
     firstAt: now,
@@ -631,7 +640,7 @@ async function befehlRegeln($: EngineInterface, v: Verweise, e: Pick<CommandRunI
   else {
     zeilen.push(`Wartende Regeln (${offen.length}):`)
     offen.forEach((l, i) => {
-      zeilen.push(`${i + 1}. „${l.rule}“${l.count > 1 ? ` ×${l.count}` : ''} · Vorschlag: ${zielName(l.scope)}`)
+      zeilen.push(`${i + 1}. „${l.rule}“${l.count > 1 ? ` ×${l.count}` : ''} · Vorschlag: ${zielName(l.scope)}${l.auchIn === undefined ? '' : ` (steht schon im Projekt ${ordnerName(l.auchIn)})`}`)
     })
     zeilen.push(v.speichern)
   }
@@ -988,6 +997,11 @@ export function registerReflect(on: On, options: PluginOptions): void {
             <Text color="green" wrap="wrap">
               {`💡 „${l.rule}“${l.count > 1 ? ` ×${l.count}` : ''}`}
             </Text>
+            {l.auchIn === undefined ? null : (
+              <Text key={`auchIn:${l.id}`} dimColor wrap="wrap">
+                {auchInHinweis(l.auchIn)}
+              </Text>
+            )}
             <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1.2}>
               {ZIELE.map(z => (
                 <Button

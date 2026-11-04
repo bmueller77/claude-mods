@@ -234,6 +234,14 @@ export function uhrzeit(at: number) {
   return `${String(t.hours).padStart(2, '0')}:${String(t.minutes).padStart(2, '0')}`
 }
 
+/** Der letzte Teil eines Pfads, mit Windows- oder Unix-Trennern; ohne Teil der ganze Pfad. */
+export function ordnerName(pfad: string): string {
+  return pfad.split(/[\\/]+/).filter(t => t !== '').at(-1) ?? pfad
+}
+
+/** Der Hinweis unter einer Regel, die schon als Regel in einem anderen Projekt steht. */
+export const auchInHinweis = (pfad: string) => `Steht schon als Regel im Projekt ${ordnerName(pfad)}, deshalb Vorschlag: Alle Projekte.`
+
 /** Ob das Wort an oder aus sagt; sonst undefined. */
 export function anAus(wort: string | undefined): boolean | undefined {
   const w = (wort ?? '').toLowerCase()
