@@ -15,6 +15,11 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   ein Skill, Björn mag den Namen ADHS nicht); i-have-adhd bleibt im Katalog. Seit 2026-11-04 gibt es
   `sorgfalt` (nur Skills `debuggen` und `belegen`, deutsche Fassung aus obra/superpowers, MIT); Superpowers
   und Everything Claude Code selbst installiert Björn nicht, sie stritten mit dem Leitstand um die Führung.
+  Ebenfalls seit 2026-11-04 gibt es `clean-code` (nur der Skill `clean-code` mit drei Dateien in
+  `references/`, deutsche und erweiterte Fassung aus markky21/claude-skills, MIT). Er lag vorher als
+  persönlicher Skill unter `~/.claude/skills/clean-code`; die englische Fassung 1.3.0.0 liegt als
+  Sicherung unter `~/.claude/skills-sicherung/clean-code-1.3.0.0/`. Seine Version zählt die des Skills
+  weiter (1.4.0.0), nicht ab 0.1.0.0.
 - Befehle heißen seit 2026-10-26 `/<mod>:<funktion>[-<wert>]` (Anthropics Schreibweise), `/<mod>:hilfe`
   listet sie. Jeder Mod hat dafür `<mod>/commands/<funktion>.md`; die App setzt `<mod>:` davor, der
   `command.run`-Hook des Mods beantwortet `e.command === '<mod>:<funktion>'`. Registriert

@@ -263,6 +263,15 @@ Zwei Skills, die von selbst greifen, deutsche Fassung aus Superpowers von Jesse 
 | `/sorgfalt:belegen` | Den Stand frisch prüfen und mit Beleg melden |
 | `/sorgfalt:hilfe` | Was Sorgfalt tut, wann die Skills greifen, wie du sie abschaltest |
 
+## Clean Code
+
+Ein Skill, der von selbst greift, wenn Claude Code prüft oder umbaut, deutsche und erweiterte Fassung von clean-code aus markky21/claude-skills: Review-Ablauf mit Tests zuerst, Funde nach Folgen geordnet, Frontend-Regeln nur bei Frontend-Code. Von Hand ruft ihn der Skill-Befehl.
+
+| Befehl | Was er tut |
+|---|---|
+| `/clean-code:clean-code` | Den aktuellen Code nach der Anleitung prüfen oder umbauen |
+| `/clean-code:hilfe` | Was Clean Code tut, wann der Skill greift, wie du ihn abschaltest |
+
 ## i-have-adhd
 
 Das englische Original von kurzfassen (fremd, bleibt im Katalog). Der Leitstand nutzt es für die Kurzantworten nur, wenn kurzfassen fehlt. Er bringt nur einen Skill mit, keine Befehle.

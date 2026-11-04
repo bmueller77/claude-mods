@@ -1,0 +1,7 @@
+{
+  "name": "clean-code",
+  "version": "1.4.0.0",
+  "description": "Ein Skill für sauberen Code, der von selbst greift, wenn Claude Code prüft oder umbaut, auch vor einem PR-Review und bei Frontend-Code. Er ordnet Funde nach ihren Folgen von KRITISCH bis NIEDRIG, sorgt vor einem Umbau für Tests und hält Annahmen im Code fest; die Frontend-Regeln liest er nur bei Frontend-Code. Hilfe: /clean-code:hilfe. Grundlage: clean-code von markky21 (MIT), abgeglichen mit dem Leitfaden von Sudonull und seinen acht Quellen.",
+  "author": { "name": "Björn Müller" },
+  "license": "MIT"
+}
