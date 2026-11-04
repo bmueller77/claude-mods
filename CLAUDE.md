@@ -231,7 +231,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Nächste Schritte seit 0.4.4.0: Antworten, die Claude ausdrücklich anbietet (Antworte/Schreib/Sag + Phrase in
   Anführungszeichen), stehen vorn als hervorgehobene Buttons und gehen mit einem Klick ab. Für Buttons bei
   Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein". Seit 0.4.5.0 bekommt auch eine
-  Ja/Nein-Frage am Ende der Antwort ("Soll ich …?") die Buttons Ja und Nein.
+  Ja/Nein-Frage am Ende der Antwort ("Soll ich …?") die Buttons Ja und Nein. Seit 0.4.6.0 (Björns Wunsch)
+  ist in der App jeder Vorschlag ein ganzer Button mit seinem Text, immer untereinander; die einzeilige Form
+  gibt es nicht mehr, auch nicht im Terminal.
 - Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
   Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
   zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung
@@ -239,8 +241,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   `$.state` (`bandHoehe`, Familie je Fläche, geschrieben per `$.clock.after(0)` nur bei Änderung; beim
   Zeichnen schreiben lehnt die Engine ab) und liest die der anderen (fremdes Lesen geht ohne
   `dependencies`). `plane` wählt für alle dieselbe Stufe: Zusammenfassung klein, dann Nächste Schritte
-  einzeilig, dann faltet der Leitstand wie in Normal; passt nichts, scrollt das Band. Die Hooks liegen in
-  Ladereihenfolge, auf jeder Instanz anders; die Lösung hängt nicht davon ab.
+  einzeilig (seit naechste-schritte 0.4.6.0 ohne Wirkung, voll = klein), dann faltet der Leitstand wie in
+  Normal; passt nichts, scrollt das Band. Die Hooks liegen in Ladereihenfolge, auf jeder Instanz anders;
+  die Lösung hängt nicht davon ab.
 
 ## Offen (Stand 2026-10-26, nach dem Live-Test am PC)
 

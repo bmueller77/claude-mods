@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 
-import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, alsEintrag, angeboteneAntworten, fehlerText, hilfeText, jaNeinAntworten, leseVorschlaege, mische, modIdAus, passtInEineZeile, uebersicht } from '../hooks/register'
+import { ALTE_BEFEHLE, BEFEHLE, GEMELDET, alsEintrag, angeboteneAntworten, fehlerText, hilfeText, jaNeinAntworten, leseVorschlaege, knopfText, mische, modIdAus, uebersicht } from '../hooks/register'
 
 const BAND = { component: 'AbovePrompt', props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 160 } }
 const ANTWORT = 'Ich habe Tests fuer das Login-Formular geschrieben, sie laufen lokal durch.'
@@ -185,21 +185,20 @@ describe('naechste-schritte', () => {
         await ui.unmount()
     })
 
-    test('in der App Buttons 1 bis 3 ohne Hotkey, im Terminal keine', async ($, on) => {
+    test('in der App ist jeder Vorschlag ein Button ohne Hotkey, im Terminal keiner', async ($, on) => {
         engine(on, () => MODELL)
         await rundeFertig($)
         const app = await band($, 160, 'desktop')
-        const knoepfe = (await app.findAll({ type: 'Button' })) as { key?: string; props: Record<string, unknown> }[]
-        expect(knoepfe.map(k => k.props.label)).toEqual(['1️⃣', '2️⃣', '3️⃣'])
+        const knoepfe = (await app.findAll({ type: 'Button' })) as { key?: string; text: string; props: Record<string, unknown> }[]
+        expect(knoepfe.map(k => k.text)).toEqual(['1  Fuehr die neuen Tests aus', '2  Mach dasselbe fuer die Einstellungen', '3  Oeffne einen Entwurf fuer den PR'])
         expect(knoepfe.map(k => k.key)).toEqual(['naechste-schritte-1', 'naechste-schritte-2', 'naechste-schritte-3'])
         expect(knoepfe.every(k => k.props.hotkey === undefined)).toBe(true)
         expect(await app.find({ type: 'Text', text: /^1 $/ })).toBeUndefined()
-        expect(await app.find({ type: 'Text', text: /^Fuehr die neuen Tests aus$/ })).toBeDefined()
-        // Ohne Vorspann, ohne Rand, Knoepfe ohne Kinder.
+        // Ohne Vorspann, ohne Rand, die Nummer blass im Knopf.
         expect(await app.find({ type: 'Text', text: /Als Nächstes/ })).toBeUndefined()
+        expect(await app.find({ type: 'Text', text: /^1$/ })).toMatchObject({ props: { dimColor: true } })
         const boxen = (await app.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]
         expect(boxen.some(b => b.props.paddingX !== undefined)).toBe(false)
-        expect((knoepfe as unknown as { children: unknown[] }[]).every(k => k.children.length === 0)).toBe(true)
         await app.unmount()
         const terminal = await band($)
         expect(await terminal.findAll({ type: 'Button' })).toHaveLength(0)
@@ -251,7 +250,7 @@ describe('naechste-schritte', () => {
         expect(gesendet).toEqual([])
     })
 
-    test('in der App einzeilig, wenn das Band niedrig ist, auch mit Buttons', async ($, on) => {
+    test('in der App auch bei niedrigem Band untereinander', async ($, on) => {
         engine(on, () => MODELL)
         await rundeFertig($)
         const ui = await $.ui.mount({
@@ -260,9 +259,74 @@ describe('naechste-schritte', () => {
             ...BAND,
             props: { ...BAND.props, bodyColumns: 50, maxRows: 4 },
         } as any)
-        expect((await ui.findAll({ type: 'Button' })).map((k: { props: Record<string, unknown> }) => k.props.label)).toEqual(['1️⃣', '2️⃣', '3️⃣'])
-        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeDefined()
+        expect((await ui.findAll({ type: 'Button' })).length).toBe(3)
+        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeUndefined()
         expect(await ui.find({ type: 'Text', text: /Als Nächstes/ })).toBeUndefined()
+        expect(((await ui.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]).some(b => b.props.rowGap === 1.2)).toBe(true)
+        await ui.unmount()
+    })
+
+    /** Die Spalte der Knoepfe: die Box mit rowGap, darin je Zeile die Texte ihrer Buttons. */
+    async function spalteDerKnoepfe(ui: any): Promise<string[][]> {
+        type Knoten = { type: string; key?: string; text: string; props: Record<string, unknown>; children: unknown[] }
+        const spalte = ((await ui.findAll({ type: 'Box' })) as Knoten[]).find(b => b.props.rowGap === 1.2)
+        expect(spalte?.props.flexDirection).toBe('column')
+        const text = new Map(((await ui.findAll({ type: 'Button' })) as Knoten[]).map(k => [k.key, k.text]))
+        const istKnoten = (k: unknown): k is Knoten => typeof k === 'object' && k !== null && 'type' in k
+        const knoepfeIn = (k: Knoten): Knoten[] => (k.type === 'Button' ? [k] : (k.children ?? []).filter(istKnoten).flatMap(knoepfeIn))
+        return (spalte?.children ?? []).filter(istKnoten).map(z => knoepfeIn(z).map(k => text.get(String(k.props.key)) ?? ''))
+    }
+
+    test('in der App traegt jeder Button Nummer und vollen Text, alle in einer Spalte, auch kurze wie Ja und Nein', async ($, on) => {
+        engine(on, () => 'Bau die Platz-Regel ein')
+        await rundeFertig($, 't1', 'Die Tests laufen alle durch. Soll ich die Platz-Regel einbauen?')
+        const ui = await band($, 160, 'desktop')
+        const zeilen = await spalteDerKnoepfe(ui)
+        expect(zeilen).toEqual([['1  Ja'], ['2  Nein'], ['3  Bau die Platz-Regel ein']])
+        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeUndefined()
+        await ui.unmount()
+    })
+
+    test('knopfText kuerzt auf spalten - 8 mit drei Punkten und laesst kurze Texte stehen', () => {
+        const lang = 'Bau die Platz-Regel in alle fuenf Mods ein und zaehle BAND_VERSION hoch'
+        expect(knopfText(lang, 50)).toBe(`${lang.slice(0, 39)}...`)
+        expect(knopfText(lang, 50)).toHaveLength(42)
+        expect(knopfText('Ja', 50)).toBe('Ja')
+        expect(knopfText('a'.repeat(42), 50)).toBe('a'.repeat(42))
+        expect(knopfText('a'.repeat(43), 50)).toBe(`${'a'.repeat(39)}...`)
+        // Mindestens 12 Zeichen, auch im schmalsten Band.
+        expect(knopfText(lang, 10)).toBe(`${lang.slice(0, 9)}...`)
+        expect(knopfText(lang, 50)).not.toContain('\u2026')
+    })
+
+    test('ein gekuerzter Button holt beim Klick den vollen Text ins Feld', async ($, on) => {
+        const lang = 'Bau die Platz-Regel in alle fuenf Mods ein und zaehle BAND_VERSION ueberall hoch'
+        const gefuellt: { text: string; mode: string }[] = []
+        engine(on, () => lang)
+        on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+        on('prompt.fill', (_$: any, e: any) => {
+            gefuellt.push({ text: e.text, mode: e.mode })
+            return { isFilled: true }
+        })
+        await rundeFertig($)
+        const ui = await band($, 50, 'desktop')
+        const knopf = (await ui.find({ type: 'Button', key: 'naechste-schritte-1' })) as { text: string } | undefined
+        expect(knopf?.text).toBe(`1  ${knopfText(lang, 50)}`)
+        expect(knopf?.text.endsWith('...')).toBe(true)
+        await ui.press({ key: 'naechste-schritte-1' })
+        await warte()
+        await ui.unmount()
+        expect(gefuellt).toEqual([{ text: lang, mode: 'replace' }])
+    })
+
+    test('im Terminal stehen auch kurze Vorschlaege auf mehreren Zeilen', async ($, on) => {
+        engine(on, () => 'Bau die Platz-Regel ein')
+        await rundeFertig($, 't1', 'Die Tests laufen alle durch. Soll ich die Platz-Regel einbauen?')
+        const ui = await band($, 160)
+        expect(await ui.find({ type: 'Text', text: /^Als Nächstes: {2}$/ })).toBeDefined()
+        expect((await ui.findAll({ type: 'Text', text: /^ {15}$/ })).length).toBe(2)
+        expect(await ui.find({ type: 'Text', text: /^ {2}· {2}$/ })).toBeUndefined()
+        expect(await ui.findAll({ type: 'Button' })).toHaveLength(0)
         await ui.unmount()
     })
 
@@ -317,8 +381,6 @@ describe('naechste-schritte', () => {
         expect(leseVorschlaege('Nichts mehr zu tun')).toEqual([])
         expect(leseVorschlaege('Ein paar Ideen:\nstarte es\nStarte es')).toEqual(['starte es'])
         expect(leseVorschlaege(`${'Wort '.repeat(30)}\nkurz`)).toEqual(['kurz']) // zu lang: weg, nicht gekuerzt
-        expect(passtInEineZeile(['a', 'b'], 60)).toBe(true)
-        expect(passtInEineZeile(['a'.repeat(40), 'b'.repeat(40)], 80)).toBe(false)
     })
 })
 
@@ -732,13 +794,13 @@ describe('naechste-schritte: Platz im Band', () => {
             props: { ...BAND.props, bodyColumns: 50, maxRows: 12, scroll: { offset: 0, bodyRows: 13 }, ...props },
         } as any)
 
-    test('in der App: viel von anderen Mods, die Vorschlaege ruecken in eine Zeile', async ($, on) => {
+    test('in der App: viel von anderen Mods, die Vorschlaege bleiben untereinander', async ($, on) => {
         engine(on, () => MODELL)
         fremd(on, { leitstand: { voll: 9, klein: 6 }, statistik: { voll: 1.75, klein: 1.75 } })
         await rundeFertig($)
         const ui = await app($)
-        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeDefined()
-        expect(((await ui.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]).some(b => b.props.rowGap !== undefined)).toBe(false)
+        expect(await ui.find({ type: 'Text', text: /^·$/ })).toBeUndefined()
+        expect(((await ui.findAll({ type: 'Box' })) as { props: Record<string, unknown> }[]).some(b => b.props.rowGap === 1.2)).toBe(true)
         await ui.unmount()
     })
 
@@ -753,14 +815,14 @@ describe('naechste-schritte: Platz im Band', () => {
         await ui.unmount()
     })
 
-    test('im Terminal: knapp eine Zeile, sonst drei', async ($, on) => {
+    test('im Terminal: auch knapp drei Zeilen', async ($, on) => {
         engine(on, () => MODELL)
         fremd(on, { leitstand: { voll: 4, klein: 4 } })
         await rundeFertig($)
-        // Eigener Block mehrzeilig 4 Zeilen (Strich und drei), einzeilig 2; Budget 7.
+        // Eigener Block 4 Zeilen (Strich und drei); Budget 7 ist knapp, eine Zeile gibt es trotzdem nicht.
         const knapp = await $.ui.mount({ plugin: 'naechste-schritte', surface: 'terminal', ...BAND, props: { ...BAND.props, bodyColumns: 50, maxRows: 7 } } as any)
-        expect(await knapp.find({ type: 'Text', text: /^ {15}$/ })).toBeUndefined()
-        expect(await knapp.find({ type: 'Text', text: /^ {2}· {2}$/ })).toBeDefined()
+        expect(await knapp.find({ type: 'Text', text: /^ {15}$/ })).toBeDefined()
+        expect(await knapp.find({ type: 'Text', text: /^ {2}· {2}$/ })).toBeUndefined()
         await knapp.unmount()
         const weit = await $.ui.mount({ plugin: 'naechste-schritte', surface: 'terminal', ...BAND, props: { ...BAND.props, bodyColumns: 50, maxRows: 8 } } as any)
         expect(await weit.find({ type: 'Text', text: /^ {15}$/ })).toBeDefined()
@@ -782,8 +844,8 @@ describe('naechste-schritte: Platz im Band', () => {
         const ui = await app($)
         expect(geschrieben).toEqual([])
         await uhr.advance(1)
-        // Mehrzeilig: Linie 0,75 + drei Zeilen + zwei Luecken zu 0,6; einzeilig: Linie + eine Zeile.
-        expect(geschrieben).toEqual([{ id: 'desktop', value: { v: 1, voll: 4.95, klein: 1.75 } }])
+        // Linie 0,75 + drei Zeilen + zwei Luecken zu 0,6; eine kleinere Form gibt es nicht, klein = voll.
+        expect(geschrieben).toEqual([{ id: 'desktop', value: { v: 1, voll: 4.95, klein: 4.95 } }])
         await uhr.advance(1)
         await uhr.advance(1000)
         expect(geschrieben.length).toBe(1)

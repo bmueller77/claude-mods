@@ -1,7 +1,7 @@
 // Naechste-Schritte: nach jeder Antwort zwei oder drei naheliegende naechste Eingaben.
 // Im leeren Eingabefeld holt 1 bis 3 einen Vorschlag als Entwurf (abgeschickt wird nichts
-// von selbst); in der App tun das auch die Knoepfe 1 bis 3. Nach next-steps von Hamza Zafar,
-// auf Deutsch und ganz unten.
+// von selbst); in der App ist jeder Vorschlag ein Knopf, alle untereinander, und ein Klick tut
+// dasselbe. Nach next-steps von Hamza Zafar, auf Deutsch und ganz unten.
 //
 // Ganz unten heisst: unter allem, was andere Mods ueber das Eingabefeld zeichnen, mit einem
 // Trennstrich davor. Die Reihenfolge der Mods legt die Engine fest. Steht dieser Mod aussen,
@@ -11,8 +11,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
 import type { BandHoehe, Eintrag, Vorschlaege } from '../types'
-import { BAND_VERSION, bandBudget, plane, zeilenVon } from './band'
-import type { BandHoehen } from './band'
+import { BAND_VERSION, zeilenVon } from './band'
 
 const MODELL = 'haiku'
 const MAX_EINTRAEGE = 3
@@ -66,19 +65,6 @@ function meldeBandHoehe($: EngineInterface, band: BandMerker, flaeche: RenderSur
             band.veroeffentlicht.delete(flaeche)
         })
     })
-}
-
-/** Die Hoehen der anderen Mods im Band dieser Flaeche; was fehlt oder nicht lesbar ist, zaehlt 0. */
-async function fremdeHoehen($: EngineInterface, flaeche: RenderSurface): Promise<BandHoehen> {
-    // Je Mod ein eigener Aufruf: Plugin und Schluessel muessen an der Stelle als Text dastehen.
-    const sicher = (p: Promise<{ value?: BandHoehe | null }>) => p.then(r => r.value ?? null).catch(() => null)
-    const [leitstand, statistik, zusammenfassung, modellwahl] = await Promise.all([
-        sicher($.state.get({ plugin: 'leitstand', key: 'bandHoehe', id: flaeche })),
-        sicher($.state.get({ plugin: 'statistik', key: 'bandHoehe', id: flaeche })),
-        sicher($.state.get({ plugin: 'zusammenfassung', key: 'bandHoehe', id: flaeche })),
-        sicher($.state.get({ plugin: 'modellwahl', key: 'bandHoehe', id: flaeche })),
-    ])
-    return { leitstand, statistik, zusammenfassung, modellwahl }
 }
 
 // Beim Host gehalten, so ueberleben die Vorschlaege ein Neuladen des Moduls.
@@ -146,7 +132,7 @@ function vorschlagBefehl(n: number): Befehl {
         description: `Den ${n}. Vorschlag für den nächsten Schritt sofort als deine Nachricht abschicken`,
         was: `Schickt den ${n}. Vorschlag sofort als deine Nachricht an Claude ab. Gibt es ihn nicht, sagt der Befehl, wie viele Vorschläge es gibt, und schickt nichts.`,
         knopf:
-            `${n}️⃣ in der Leiste über dem Eingabefeld (Desktop-App) holt den Vorschlag erst ins Eingabefeld; steht er dort unverändert, schickt ein zweiter Klick ihn ab. ` +
+            `Der Button mit dem ${n}. Vorschlag in der Leiste über dem Eingabefeld (Desktop-App) holt den Vorschlag erst ins Eingabefeld; steht er dort unverändert, schickt ein zweiter Klick ihn ab. ` +
             `Im Terminal holt die Ziffer ${n} im leeren Eingabefeld ihn als Entwurf.`,
         gilt: GILT_EINMAL,
         argumente: 'keine.',
@@ -174,7 +160,7 @@ export const BEFEHLE: readonly Befehl[] = [
         description: 'Die aktuellen Vorschläge als nummerierte Liste zeigen',
         was:
             'Zeigt die Vorschläge nach der letzten Antwort als nummerierte Liste, etwa vom Handy, wo es keine Leiste gibt. ' +
-            'In der Leiste über dem Eingabefeld stehen dieselben Vorschläge: in der Desktop-App hinter den Buttons 1️⃣ bis 3️⃣, im Terminal hinter "Als Nächstes:".',
+            'In der Leiste über dem Eingabefeld stehen dieselben Vorschläge: in der Desktop-App als Buttons, im Terminal hinter "Als Nächstes:".',
         knopf: 'keiner.',
         gilt: GILT_EINMAL,
         argumente: 'keine.',
@@ -257,13 +243,12 @@ export function uebersicht(id: string | null = null): string {
             'die du als Nächstes schreiben könntest, etwa "Führ die neuen Tests aus". Sie stehen ganz unten in der Leiste über dem Eingabefeld.',
         '',
         'So arbeitest du damit',
-        '- In der Desktop-App: Ein Klick auf 1️⃣, 2️⃣ oder 3️⃣ holt den Vorschlag ins leere Eingabefeld; steht dort schon Text, hängt er den Vorschlag dahinter. ' +
+        '- In der Desktop-App: Ein Klick auf einen Vorschlag holt ihn ins leere Eingabefeld; steht dort schon Text, hängt er den Vorschlag dahinter. ' +
             'Steht genau dieser Vorschlag unverändert im Feld, schickt ein zweiter Klick ihn ab. Hast du ihn geändert, schick ihn wie jede Nachricht mit Enter ab.',
         '- Im Terminal: Tipp 1, 2 oder 3 ins leere Eingabefeld, dann steht der Vorschlag dort als Entwurf; Enter schickt ihn ab. ' +
             'Willst du wirklich nur eine Ziffer schicken, füge sie aus der Zwischenablage ein, statt sie zu tippen.',
         '- Überall: /naechste-schritte:1 bis :3 schicken den Vorschlag sofort als deine Nachricht ab, /naechste-schritte:zeigen listet die Vorschläge als Text.',
         '- Bietet Claude Antworten ausdrücklich an (etwa Antworte "ja"), stehen sie vorn, und ein Klick oder die Ziffer schickt sie sofort ab. Endet die Antwort mit einer Ja/Nein-Frage, gibt es ebenso Ja und Nein.',
-        '- Ist die Leiste über dem Eingabefeld knapp, weil andere Mods dort viel zeigen, rücken die Vorschläge in eine Zeile.',
         '- Die Vorschläge verschwinden, sobald du etwas abschickst, und kommen nach der nächsten Antwort neu. ' +
             'Solange Claude Code selbst eine Frage mit Auswahl in der Leiste zeigt, sind sie ausgeblendet, und Ziffern gehen an diese Frage.',
         '',
@@ -461,7 +446,6 @@ export const register: Register = on => {
         const { Box, Text, Button } = elemente
         // Bilder zeichnet nur die App; das Terminal fuehrt Svg zwar, zeichnet es aber nicht.
         const Svg = e.surface === 'desktop' && 'Svg' in elemente ? elemente.Svg : null
-        const inEiner = passtInEineZeile(liste.map(t => t.text), e.props.bodyColumns)
 
         // Wie die getippte Ziffer: der Vorschlag als Entwurf. Der Knopf behaelt nach dem Klick aber
         // den Fokus und Enter drueckt ihn erneut; steht der Vorschlag schon im Feld, schickt der
@@ -488,73 +472,47 @@ export const register: Register = on => {
             }
         }
 
-        const baueZeilen = (einzeilig: boolean) => {
-            let zeilen
-            if (e.surface === 'desktop') {
-                // In der App Knoepfe statt Ziffern. Gekuerzt wird dort nur ein einzelner Text in fester Breite,
-                // buendig nur ohne Leerzeichen: die Schrift ist proportional.
-                const breite = Math.max(20, e.props.bodyColumns) // ohne Rand: buendig mit der Statistik darueber
-                // Ziffern-Emoji: so breit wie die anderen Emoji-Knoepfe, alle drei gleich.
-                // Was Claude angeboten hat, bekommt einen hervorgehobenen Knopf: er schickt sofort ab.
-                const knopf = (i: number) => (
-                    <Box flexShrink={0}>
-                        <Button
-                            key={`naechste-schritte-${i + 1}`}
-                            label={`${i + 1}️⃣`}
-                            {...(liste[i]?.art === 'angeboten' ? { variant: 'primary' as const } : {})}
-                            onPress={() => void hole(i).catch(() => undefined)}
-                        />
-                    </Box>
-                )
-                zeilen = einzeilig ? (
-                    <Box flexDirection="row" gap={1} alignItems="center" width={breite}>
-                        {liste.flatMap((t, i) => [
-                            ...(i > 0 ? [<Text dimColor>·</Text>] : []),
-                            knopf(i),
-                            <Box flexShrink={1} minWidth={0}>
-                                <Text wrap="truncate-end">{t.text}</Text>
-                            </Box>,
-                        ])}
-                    </Box>
-                ) : (
-                    // Die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile: 1.2 halbe Zeilen dazwischen lassen
-                    // 4 Pixel frei, sonst schieben sich die Knoepfe uebereinander.
-                    <Box flexDirection="column" rowGap={1.2} width={breite}>
-                        {liste.map((t, i) => (
-                            <Box flexDirection="row" gap={1} alignItems="center">
-                                {knopf(i)}
-                                <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                                    <Text wrap="truncate-end">{t.text}</Text>
-                                </Box>
-                            </Box>
-                        ))}
-                    </Box>
-                )
-            } else {
-                const trenner = <Text dimColor>{'  ·  '}</Text>
-                // Was Claude angeboten hat, steht fett: die Ziffer schickt es sofort ab.
-                const eintrag = (t: Eintrag, i: number) => [
-                    <Text color="cyan" bold>{`${i + 1} `}</Text>,
-                    t.art === 'angeboten' ? <Text bold>{t.text}</Text> : <Text>{t.text}</Text>,
-                ]
-                zeilen = einzeilig ? (
-                    <Text wrap="truncate-end">
-                        <Text dimColor>{VORSPANN}</Text>
-                        {liste.flatMap((t, i) => [...(i > 0 ? [trenner] : []), ...eintrag(t, i)])}
-                    </Text>
-                ) : (
-                    <Box flexDirection="column">
-                        {liste.map((t, i) => (
-                            <Text wrap="truncate-end">
-                                <Text dimColor>{i === 0 ? VORSPANN : LUECKE}</Text>
-                                {eintrag(t, i)}
-                            </Text>
-                        ))}
-                    </Box>
-                )
-            }
-
-            return zeilen
+        let zeilen
+        if (e.surface === 'desktop') {
+            // In der App ist jeder Vorschlag ein ganzer Knopf mit Nummer und Text, alle untereinander.
+            // Zu lange Texte kuerzt knopfText; ein Klick holt trotzdem den vollen Vorschlag (hole).
+            const breite = Math.max(20, e.props.bodyColumns) // ohne Rand: buendig mit der Statistik darueber
+            // Die App zeichnet einen Knopf 8 Pixel hoeher als seine Zeile: 1.2 halbe Zeilen dazwischen lassen
+            // 4 Pixel frei, sonst schieben sich die Knoepfe uebereinander.
+            // Was Claude angeboten hat, bekommt einen hervorgehobenen Knopf: er schickt sofort ab.
+            zeilen = (
+                <Box flexDirection="column" rowGap={1.2} width={breite}>
+                    {liste.map((t, i) => (
+                        <Box flexDirection="row">
+                            <Button
+                                key={`naechste-schritte-${i + 1}`}
+                                {...(t.art === 'angeboten' ? { variant: 'primary' as const } : {})}
+                                onPress={() => void hole(i).catch(() => undefined)}
+                            >
+                                <Text dimColor>{String(i + 1)}</Text>
+                                {'  ' + knopfText(t.text, breite)}
+                            </Button>
+                        </Box>
+                    ))}
+                </Box>
+            )
+        } else {
+            // Im Terminal einer je Zeile, mit Ziffern statt Knoepfen.
+            // Was Claude angeboten hat, steht fett: die Ziffer schickt es sofort ab.
+            const eintrag = (t: Eintrag, i: number) => [
+                <Text color="cyan" bold>{`${i + 1} `}</Text>,
+                t.art === 'angeboten' ? <Text bold>{t.text}</Text> : <Text>{t.text}</Text>,
+            ]
+            zeilen = (
+                <Box flexDirection="column">
+                    {liste.map((t, i) => (
+                        <Text wrap="truncate-end">
+                            <Text dimColor>{i === 0 ? VORSPANN : LUECKE}</Text>
+                            {eintrag(t, i)}
+                        </Text>
+                    ))}
+                </Box>
+            )
         }
 
         // Ein Trennstrich ueber den Vorschlaegen: in der App 1 Pixel mit je 7 Pixeln Luft,
@@ -569,25 +527,15 @@ export const register: Register = on => {
             </Text>
         )
         // In der App ohne Rand: die Knoepfe stehen buendig mit Statistik und Zusammenfassung.
-        const baueBlock = (einzeilig: boolean) => {
-            const zeilen = baueZeilen(einzeilig)
-            return (
-                <Box key={BLOCK} flexDirection="column">
-                    {trennlinie}
-                    {e.surface === 'desktop' ? <Box>{zeilen}</Box> : <Box paddingX={1}>{zeilen}</Box>}
-                </Box>
-            )
-        }
-        // Einer je Zeile braucht je eine Zeile. Ist das Band zu knapp fuer alles, was die Mods dort
-        // zeigen, rueckt alles in eine Zeile, am Ende gekuerzt (Stufe 2 von plane in hooks/band.ts).
-        const klein = baueBlock(true)
-        const hoeheKlein = zeilenVon(klein, e.surface, e.props.bodyColumns)
-        const voll = inEiner ? klein : baueBlock(false)
-        const hoeheVoll = inEiner ? hoeheKlein : zeilenVon(voll, e.surface, e.props.bodyColumns)
-        meldeBandHoehe($, band, e.surface, hoeheVoll, hoeheKlein)
-        const fremde = await fremdeHoehen($, e.surface)
-        const plan = plane(bandBudget(e.surface, e.props), e.surface, { ...fremde, naechsteSchritte: { v: BAND_VERSION, voll: hoeheVoll, klein: hoeheKlein } })
-        const block = inEiner || plan.naechsteKlein ? klein : voll
+        const block = (
+            <Box key={BLOCK} flexDirection="column">
+                {trennlinie}
+                {e.surface === 'desktop' ? <Box>{zeilen}</Box> : <Box paddingX={1}>{zeilen}</Box>}
+            </Box>
+        )
+        // Eine kleinere Form gibt es nicht mehr: voll und klein sind gleich hoch.
+        const hoehe = zeilenVon(block, e.surface, e.props.bodyColumns)
+        meldeBandHoehe($, band, e.surface, hoehe, hoehe)
         if (!rest) {
             return block
         }
@@ -601,10 +549,13 @@ export const register: Register = on => {
     })
 }
 
-/** Alle Vorschlaege in einer Zeile, oder einer je Zeile, wenn sie nicht passen. */
-export function passtInEineZeile(eintraege: string[], spalten: number): boolean {
-    const breite = VORSPANN.length + eintraege.reduce((n, t) => n + 2 + t.length, 0) + 5 * (eintraege.length - 1)
-    return breite <= spalten - 2 // der Rand des Bands
+/**
+ * Der Text eines Knopfs in der App: hoechstens `spalten - 8` Zeichen (mindestens 12), sonst
+ * abgeschnitten mit drei Punkten am Ende. Nur fuer die Anzeige; geholt wird immer der volle Text.
+ */
+export function knopfText(text: string, spalten: number): string {
+    const max = Math.max(12, spalten - 8)
+    return text.length <= max ? text : text.slice(0, max - 3) + '...'
 }
 
 async function schlageVor($: EngineInterface, turnId: string, antwort: string, angeboten: Eintrag[], jetzt: () => string): Promise<void> {
