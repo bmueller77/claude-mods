@@ -243,7 +243,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   gesperrt. Solange das Band zu sehen ist, beantwortet er Claudes `mcp__ccd_turn__update_plan` selbst und
   reicht die Liste beim `wrap_up` per `$.mcp.call('ccd_turn', 'update_plan', …)` einmal an die App weiter;
   schlägt das fehl, gehen alle Aufrufe wieder an die App (live ungeprüft). Schloss und Schild erfassen IPs
-  und Hostnamen an Netz-Stellen (`privacy.ts`), der Passwortschutz nicht.
+  und Hostnamen an Netz-Stellen (`privacy.ts`), der Passwortschutz nicht. Seit 0.63.6.1 bleibt ein Vierer
+  ohne Port oder CIDR sichtbar, wenn direkt davor ein Versionswort, ein `@` oder eine Versionskette steht
+  (`isVersionAt`); vorher verdeckte das Schloss "auf Version 1.1.0.0" als IP (gesehen 2026-11-04).
 - Nächste Schritte seit 0.4.4.0: Antworten, die Claude ausdrücklich anbietet (Antworte/Schreib/Sag + Phrase in
   Anführungszeichen), stehen vorn als hervorgehobene Buttons und gehen mit einem Klick ab. Für Buttons bei
   Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein". Seit 0.4.5.0 bekommt auch eine

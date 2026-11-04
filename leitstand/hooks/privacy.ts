@@ -66,7 +66,8 @@ const PHONE_INTL = /(?<![\w.])\+\d{1,3}[\s.-]?\(?\d{1,4}\)?(?:[\s.-]?\d{2,4}){2,
 // lets them through.
 
 // IPv4 with an optional :port or /CIDR. The first number is at least 1 (so versions like 0.63.4.0 stay), and a longer
-// chain of dots (1.2.3.4.5) is no address. Group 1 is the address alone.
+// chain of dots (1.2.3.4.5) is no address. Group 1 is the address alone. A match without port or CIDR may still be a
+// version (1.1.0.0); isVersionAt sorts those out.
 const IPV4 = /(?<![\w.])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d?)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?::\d{1,5})?(?:\/\d{1,2})?(?![\w-]|\.[\w-])/g
 
 // IPv6: eight groups, or fewer around one '::', with an optional zone (%eth0); also inside [..]:port. isIpv6 sorts out
@@ -129,6 +130,28 @@ const isOpenHost = (raw: string) => {
 
 const isIpv4 = (host: string) => /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
 
+// A version word right before a number on the same line, then at most : or =, quotes, blanks and one of von, from,
+// auf, to, nach: "auf Version 1.1.0.0", "version": "1.2.0.0", "updated to 1.3.0.0". The word must stand right before
+// the number, so "Update: Server 10.0.0.5" and "Release-Server 10.0.0.5" stay addresses.
+const VERSION_BEFORE =
+  /(?:\b(?:version|versionen|versions|release|tag|update|updates|updated|aktualisiert|upgrade|upgraded)|\bver\.|["']version["'])\s*[:=]?\s*["']?\s*(?:(?:von|from|auf|to|nach)\s+["']?)?$/i
+
+// The next link of a chain after a version: the earlier number, then blanks and auf, to, nach, bis (zu), →, -> or -
+// ("Version 1.1.0.0 auf 1.2.0.0", "Version 1.1.0.0 → 1.2.0.0"). Group 1 is the earlier number.
+const VERSION_CHAIN = /(?<![\w.])(\d+(?:\.\d+)+)(?:\s*(?:→|->|-)\s*|\s+(?:auf|to|nach|bis zu|bis)\s+)$/i
+
+/**
+ * Whether the number starting at start is a version, by what stands before it on its line: an @ (clean-code@1.2.0.0),
+ * a version word (VERSION_BEFORE), or a chain link after a number that is a version itself (VERSION_CHAIN).
+ */
+function isVersionAt(text: string, start: number): boolean {
+  const before = text.slice(text.lastIndexOf('\n', start - 1) + 1, start)
+  if (before.endsWith('@') || VERSION_BEFORE.test(before)) return true
+  const chain = VERSION_CHAIN.exec(before)
+  if (!chain) return false
+  return isVersionAt(text, start - before.length + chain.index)
+}
+
 /** Loopback (127.x) and net masks (255.x) are no address worth hiding. */
 const isOpenIpv4 = (address: string) => /^(?:127|255)\./.test(address)
 
@@ -173,9 +196,13 @@ function findNetSpots(text: string): NetSpot[] {
     const [, address = ''] = m
     if (isIpv6(address)) add('ipv6', m[0], m.index)
   }
+  // With a port or CIDR it is an address; without one, a number a version word, an @ or a version chain leads to is a
+  // version (isVersionAt), so "auf Version 1.1.0.0" stays while "Version 2 läuft auf 192.168.1.10" is masked.
   for (const m of matches(IPV4, text)) {
-    const [, address = ''] = m
-    if (!isOpenIpv4(address)) add('ipv4', address, m.index)
+    const [whole, address = ''] = m
+    if (isOpenIpv4(address)) continue
+    if (whole === address && isVersionAt(text, m.index)) continue
+    add('ipv4', address, m.index)
   }
 
   return spots.sort((a, b) => a.start - b.start)

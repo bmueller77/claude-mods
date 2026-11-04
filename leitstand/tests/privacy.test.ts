@@ -62,6 +62,39 @@ describe('Netz-Stellen', () => {
     for (const [text, masked] of cases) expect(maskPrivate(text)).toBe(masked)
   })
 
+  test('Versionsnummern nach Versionswort, @ oder in einer Kette bleiben stehen, Adressen daneben nicht', () => {
+    const cases: [string, string][] = [
+      ['Der Clean-Code-Skill steht jetzt auf Version 1.1.0.0.', 'Der Clean-Code-Skill steht jetzt auf Version 1.1.0.0.'],
+      ['clean-code@1.2.0.0', 'clean-code@1.2.0.0'],
+      ['auf Version 1.1.0.0', 'auf Version 1.1.0.0'],
+      ['Version: 1.1.0.0', 'Version: 1.1.0.0'],
+      ['"version": "1.2.0.0"', '"version": "1.2.0.0"'],
+      ["{'version': '2.0.1.0'}", "{'version': '2.0.1.0'}"],
+      ['ver. 1.4.0.0', 'ver. 1.4.0.0'],
+      ['Release 2.3.0.0', 'Release 2.3.0.0'],
+      ['aktualisiert auf 1.2.0.0', 'aktualisiert auf 1.2.0.0'],
+      ['updated to 1.3.0.0', 'updated to 1.3.0.0'],
+      ['Update von 1.1.0.0', 'Update von 1.1.0.0'],
+      ['Version 1.1.0.0 auf 1.2.0.0', 'Version 1.1.0.0 auf 1.2.0.0'],
+      ['von Version 1.1.0.0 nach 1.2.0.0', 'von Version 1.1.0.0 nach 1.2.0.0'],
+      ['Version 1.1.0.0 → 1.2.0.0', 'Version 1.1.0.0 → 1.2.0.0'],
+      ['Versionen 1.1.0.0 bis zu 1.3.0.0', 'Versionen 1.1.0.0 bis zu 1.3.0.0'],
+      ['Version 1.2.0.0 läuft jetzt auf 192.168.1.10', 'Version 1.2.0.0 läuft jetzt auf •••.•••.•••.•••'],
+      ['Version 2 läuft auf 192.168.1.10', 'Version 2 läuft auf •••.•••.•••.•••'],
+      ['Update: Server 10.0.0.5', 'Update: Server •••.•••.•••.•••'],
+      ['Release-Server 10.0.0.5', 'Release-Server •••.•••.•••.•••'],
+      ['192.168.1.10:8080', '•••.•••.•••.•••:8080'],
+      ['Version 10.0.0.0/8', 'Version •••.•••.•••.•••/8'],
+      ['Version 1.1.0.0\n10.0.0.5', 'Version 1.1.0.0\n•••.•••.•••.•••'],
+    ]
+    for (const [text, masked] of cases) expect(maskPrivate(text)).toBe(masked)
+  })
+
+  test('Schild: eine Versionsnummer kommt nicht in die .env, die IP daneben schon', () => {
+    expect(extractSecrets(['Version: 1.1.0.0', '"version": "1.2.0.0"', 'clean-code@1.2.0.0', 'Version 1.1.0.0 → 1.2.0.0'])).toEqual([])
+    expect(extractSecrets('Version 1.2.0.0 läuft jetzt auf 192.168.1.10')).toEqual([{ name: 'IP', value: '192.168.1.10' }])
+  })
+
   test('E-Mail-Adressen werden verdeckt wie bisher, Passwörter neben einer IP auch', () => {
     expect(maskPrivate('mail an bjoern@mueller.family')).toBe('mail an •••@•••')
     expect(maskPrivate('Passwort: geheim123 auf 10.0.0.5')).toBe('Passwort: •••••••• auf •••.•••.•••.•••')
