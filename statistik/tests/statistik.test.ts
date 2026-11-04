@@ -14,11 +14,13 @@ import {
     dauer,
     fableAus,
     fehlerText,
+    gekuerzt,
     gespeichertUm,
     hilfeText,
     istVeraltet,
     leseDauer,
     mitFehlwegen,
+    ohneRahmen,
     restUhr,
     sicherungspunktAbschnitt,
     tokenMenge,
@@ -2446,16 +2448,67 @@ test('/statistik:zusammenfassung-zeigen öffnet das Fenster Zusammenfassung mit 
     }
 })
 
-test('ist das Fenster nicht platziert, kommt die Zusammenfassung als Antwort, gekürzt auf 10 000 Zeichen', async ($, on) => {
+test('ist das Fenster nicht platziert, kommt die Zusammenfassung als Antwort, gekürzt auf 60.000 Zeichen mit Hinweis', async ($, on) => {
     mock.clock(on, { now: COMPACT_AM })
     mock.store(on, {})
     boden(on, STAND)
-    const lang = `Anfang ${'x'.repeat(12_000)}`
+    const lang = `Anfang ${'x'.repeat(69_993)}`
     verdichtungMit(on, lang)
     on('ui.open', () => ({ value: { isPlaced: false, reason: 'keine Fläche' } }) as never)
     await start($ as never)
     await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
-    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`Verdichtet um 14:32, von 412k auf 38k Tokens\n\n${lang.slice(0, 10_000)}`)
+    expect(await befehl($ as never, 'statistik:zusammenfassung-zeigen')).toBe(
+        `Verdichtet um 14:32, von 412k auf 38k Tokens\n\n${lang.slice(0, 60_000)}\n\n(Gekürzt: Hier stehen die ersten 60.000 von 70.000 Zeichen.)`,
+    )
+})
+
+/** Der Rahmen, den Claude Code um die Zusammenfassung legt (gesehen 2026-11-04). */
+const RAHMEN_VORN =
+    'This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n' +
+    '<system-reminder>\n<tools-used-before-summary>Agent, AskUserQuestion, Bash</tools-used-before-summary>\n</system-reminder>\nSummary:\n'
+const RAHMEN_HINTEN =
+    '\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: C:\\Users\\x\\x.jsonl\n' +
+    'Continue the conversation from where it left off without asking the user any further questions. Resume directly. Pick up the last task as if the break never happened.\n\n' +
+    'The messages after this summary are the most recent messages from before compaction, kept verbatim.'
+const KERN = '1. **Primary Request and Intent**\n   Björn will die Zusammenfassung ganz sehen.\n\n2. **Key Technical Concepts**\n   - Markdown'
+
+test('ohneRahmen: der volle Rahmen vorn und hinten fällt weg, der Text dazwischen bleibt', () => {
+    expect(ohneRahmen(`${RAHMEN_VORN}${KERN}${RAHMEN_HINTEN}`)).toBe(KERN)
+    // Eine zitierte Marke mitten im Text schneidet nichts ab; es zaehlt die letzte.
+    const zitat = `${KERN}\nContinue the conversation from where it left off, stand im Rahmen.\nWeiterer Text.`
+    expect(ohneRahmen(`${RAHMEN_VORN}${zitat}${RAHMEN_HINTEN}`)).toBe(zitat)
+})
+
+test('ohneRahmen: ohne Rahmen bleibt der Text, nur der hintere fällt allein weg, Summary: mitten im Text bleibt', () => {
+    expect(ohneRahmen(`\n${KERN}\n`)).toBe(KERN)
+    expect(ohneRahmen(`${KERN}${RAHMEN_HINTEN}`)).toBe(KERN)
+    const mitte = `## Ziel\nSo weit.\nSummary:\nDas bleibt stehen.`
+    expect(ohneRahmen(mitte)).toBe(mitte)
+    // Bleibt nach dem Abschneiden nichts, kommt der ganze Text.
+    expect(ohneRahmen(RAHMEN_VORN)).toBe(RAHMEN_VORN.trim())
+})
+
+test('gekuerzt: kurzer Text unverändert, langer mit Hinweis, ein offener Codeblock schließt davor', () => {
+    expect(gekuerzt('kurz', 60_000)).toBe('kurz')
+    const lang = 'y'.repeat(70_000)
+    expect(gekuerzt(lang, 60_000)).toBe(`${'y'.repeat(60_000)}\n\n(Gekürzt: Hier stehen die ersten 60.000 von 70.000 Zeichen.)`)
+    expect(gekuerzt(`${'z'.repeat(72_345)}`, 1_000)).toBe(`${'z'.repeat(1_000)}\n\n(Gekürzt: Hier stehen die ersten 1.000 von 72.345 Zeichen.)`)
+    const code = `Vorher\n\`\`\`ts\n${'c'.repeat(100)}`
+    expect(gekuerzt(code, 50)).toBe(`${code.slice(0, 50)}\n\`\`\`\n\n(Gekürzt: Hier stehen die ersten 50 von ${code.length} Zeichen.)`)
+    const eingerueckt = `1. Punkt\n   \`\`\`ts\n   ${'e'.repeat(100)}`
+    expect(gekuerzt(eingerueckt, 40)).toBe(`${eingerueckt.slice(0, 40)}\n\`\`\`\n\n(Gekürzt: Hier stehen die ersten 40 von ${eingerueckt.length} Zeichen.)`)
+    const zu = `\`\`\`\nx\n\`\`\`\n${'d'.repeat(100)}`
+    expect(gekuerzt(zu, 20)).toBe(`${zu.slice(0, 20)}\n\n(Gekürzt: Hier stehen die ersten 20 von ${zu.length} Zeichen.)`)
+})
+
+test('/statistik:zusammenfassung-zeigen vom Handy: Kopf und Zusammenfassung ohne den Rahmen von Claude Code', async ($, on) => {
+    mock.clock(on, { now: COMPACT_AM })
+    mock.store(on, {})
+    boden(on, STAND)
+    verdichtungMit(on, `${RAHMEN_VORN}${KERN}${RAHMEN_HINTEN}`)
+    await start($ as never)
+    await $.session.compact({ trigger: 'manual', messages: VERLAUF_KURZ } as never)
+    expect(await vomHandy($ as never, 'statistik:zusammenfassung-zeigen')).toBe(`Verdichtet um 14:32, von 412k auf 38k Tokens\n\n${KERN}`)
 })
 
 test('ohne Compact: der Befehl sagt es, das Fenster auch, und es geht nichts auf', async ($, on) => {

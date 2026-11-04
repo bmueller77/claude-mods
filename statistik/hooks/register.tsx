@@ -83,8 +83,63 @@ const FENSTER_LETZTER_STAND = 'statistik-letzter-stand'
 const FENSTER_ZUSAMMENFASSUNG = 'statistik-zusammenfassung'
 /** Sein Titel; nicht nur "Zusammenfassung", damit es nicht wie der Mod Zusammenfassung heißt. */
 export const TITEL_ZUSAMMENFASSUNG = 'Zusammenfassung vom Verdichten'
-/** So viel vom Text zeigen Fenster und Befehl hoechstens. */
-const ZUSAMMENFASSUNG_GRENZE = 10_000
+/**
+ * So viel vom Text zeigen Fenster und Befehl hoechstens. Ein Markdown-Block zeichnet bis
+ * 100.000 Zeichen je Zeichnung, Kopf und Knopf passen daneben.
+ */
+const TEXT_GRENZE = 60_000
+
+/** Zahl mit Punkt als Tausendertrenner, etwa 72.345. */
+function mitPunkten(zahl: number): string {
+    return String(zahl).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
+/**
+ * Text fuer die Anzeige, hoechstens `grenze` Zeichen. Laenger wird er gekuerzt, ein offener
+ * Codeblock geschlossen, und ein Hinweis sagt, wie viel davon da steht.
+ */
+export function gekuerzt(text: string, grenze: number): string {
+    if (text.length <= grenze) {
+        return text
+    }
+    let anfang = text.slice(0, grenze)
+    const zaeune = anfang.split('\n').filter((zeile) => zeile.trimStart().startsWith('```')).length
+    if (zaeune % 2 === 1) {
+        anfang += '\n```'
+    }
+    return `${anfang}\n\n(Gekürzt: Hier stehen die ersten ${mitPunkten(grenze)} von ${mitPunkten(text.length)} Zeichen.)`
+}
+
+/**
+ * Die Zusammenfassung ohne den Rahmen, den Claude Code um sie legt: vorn der Satz "This session
+ * is being continued ...", ein system-reminder und das Etikett "Summary:", hinten die Hinweise
+ * auf das Transkript und zum Weitermachen. Jeder Teil faellt nur weg, wenn er da ist.
+ */
+export function ohneRahmen(text: string): string {
+    let rest = text
+    if (rest.trimStart().startsWith('This session is being continued from a previous conversation')) {
+        rest = rest.trimStart()
+        const leer = rest.search(/\r?\n[ \t]*\r?\n/)
+        rest = leer < 0 ? '' : rest.slice(leer).replace(/^\r?\n[ \t]*\r?\n/, '')
+    }
+    if (rest.trimStart().startsWith('<system-reminder>')) {
+        rest = rest.trimStart()
+        const ende = rest.indexOf('</system-reminder>')
+        rest = ende < 0 ? rest : rest.slice(ende + '</system-reminder>'.length)
+    }
+    const etikett = /^Summary:[ \t]*(\r?\n|$)/
+    if (etikett.test(rest.trimStart())) {
+        rest = rest.trimStart().replace(etikett, '')
+    }
+    const hinten = ['\nIf you need specific details from before compaction', '\nContinue the conversation from where it left off']
+        .map((marke) => rest.lastIndexOf(marke))
+        .filter((stelle) => stelle >= 0)
+    if (hinten.length > 0) {
+        rest = rest.slice(0, Math.min(...hinten))
+    }
+    rest = rest.trim()
+    return rest === '' ? text.trim() : rest
+}
 
 /** Was Befehl und Fenster sagen, solange in diesem Chat kein Compact lief. */
 export const OHNE_ZUSAMMENFASSUNG = 'In diesem Chat wurde noch nicht verdichtet, es gibt also keine Zusammenfassung.'
@@ -1555,7 +1610,7 @@ async function zusammenfassungZeigen($: EngineInterface, vomHandy: boolean): Pro
             return `Die Zusammenfassung vom letzten Verdichten steht im Fenster "${TITEL_ZUSAMMENFASSUNG}".`
         }
     }
-    return `${zusammenfassungKopf(z, await $.clock.now())}\n\n${await verdeckt($, z.text.slice(0, ZUSAMMENFASSUNG_GRENZE))}`
+    return `${zusammenfassungKopf(z, await $.clock.now())}\n\n${await verdeckt($, gekuerzt(ohneRahmen(z.text), TEXT_GRENZE))}`
 }
 
 // --- Countdown vor Schwamm und Pfeil ---
@@ -2460,7 +2515,7 @@ export const register: Register = (on, options) => {
                     {kopf}
                 </Text>
                 <Box key="notiz" flexDirection="column" marginTop={1}>
-                    <Markdown key="notiz-text" text={(await zeigbar($, punkt.notiz)).slice(0, 10_000)} />
+                    <Markdown key="notiz-text" text={gekuerzt(await zeigbar($, punkt.notiz), TEXT_GRENZE)} />
                 </Box>
                 {schliessen}
             </Box>
@@ -2494,7 +2549,7 @@ export const register: Register = (on, options) => {
                     {zusammenfassungKopf(z, await $.clock.now())}
                 </Text>
                 <Box key="text" flexDirection="column" marginTop={1}>
-                    <Markdown key="zusammenfassung-text" text={await verdeckt($, z.text.slice(0, ZUSAMMENFASSUNG_GRENZE))} />
+                    <Markdown key="zusammenfassung-text" text={await verdeckt($, gekuerzt(ohneRahmen(z.text), TEXT_GRENZE))} />
                 </Box>
                 {schliessen}
             </Box>

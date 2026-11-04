@@ -93,6 +93,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
 - Statistik seit 0.19.0 (Björns Wunsch): Nach einem Compact steht im Verlauf nur eine Zeile, die
   Zusammenfassung zeigt `/statistik:zusammenfassung-zeigen` im Fenster (vom Handy und ohne Fenster als
   Text), verdeckt, wenn der Leitstand verdeckt. `$.ui.log`-Zeilen lassen sich nicht zuklappen.
+  Seit 0.19.6.1 zeigen die Fenster Zusammenfassung und Letzter Stand und der Befehl bis 60.000 Zeichen
+  (`TEXT_GRENZE`) und sagen, wenn sie kürzen; vorher schnitten sie still bei 10.000 ab. Den Rahmen, den
+  Claude Code um die Zusammenfassung legt (Satz vorn, `<system-reminder>` mit der Werkzeugliste, Hinweise
+  hinten), lässt die Anzeige weg (`ohneRahmen`); gespeichert bleibt der ganze Text.
 - Desktop-App: Denkblöcke, die in der Ansicht Normal offen bleiben und sich auch mit ▾ nicht zuklappen
   lassen (gesehen 2026-10-28 in einigen Chats, etwa mit Fable), sind ein Fehler der App. Kein Mod fasst
   Denkblöcke an.
@@ -350,7 +354,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    laut Leitstand") und `/uebergabe-zeigen` (Eingabefeld); Nächste Schritte als ganze Buttons untereinander;
    `sorgfalt:debuggen` griff bei unerwartetem Verhalten. Gefunden und behoben: Das Schloss verdeckte
    "Version 1.1.0.0" (0.63.6.1) und "Versionen wie 1.1.0.0", wobei `cleanName` die Nummer aus der
-   Schritt-Zusammenfassung warf (0.63.6.2). Gesehen, offen:
+   Schritt-Zusammenfassung warf (0.63.6.2). Der Abschnitt "Was nicht geklappt hat" steht in der
+   Zusammenfassung des Compacts (ab Zeichen 15.042 von 17.295), aber das Fenster schnitt still bei 10.000
+   ab und zeigte den Anfang als Rohtext, weil der `<system-reminder>`-Block ohne Leerzeile davor stand
+   (statistik 0.19.6.1). Gesehen, offen:
    - Lange Pausen (`Start-Sleep 150`) sperrt die Umgebung. Als Zeitfenster für Björns Eingriffe dienen
      die Tests aller Mods nacheinander (etwa 115 s); vorher auf sein "bereit" warten.
    - Ein "ja" gab einen Plan nicht frei, als nach der Frage noch eine Stand-Zeile kam (Kurzfassen schreibt
@@ -359,5 +366,7 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
      am Rand).
    - Die Aufgabenliste der App zählte nach einem neuen Plan "Schritt 3, 4 von 7" bei sechs Schritten.
    - Schrittnamen über 40 Zeichen kürzt `cleanName` mit "…".
-   Noch nicht gesehen: Abschnitt "Was nicht geklappt hat" im Compact, Vorschlag "Alle Projekte" im Fenster
-   Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
+   - `mcp__ccd_turn__update_plan` mit `advance` meldete wieder "every step is done", diesmal nach Schritt 2
+     von 4 (wie in Offen 12).
+   Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
+   im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
