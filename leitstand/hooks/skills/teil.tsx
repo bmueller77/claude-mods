@@ -5,17 +5,20 @@ import type { SkillKategorie } from '../../types'
 import { merkeAntwort } from '../antwort'
 import { befehlsHilfe, fragtNachHilfe, kurzform } from '../logic'
 import { SKILLS_BEFEHLE } from './befehle'
-import { ausModellAntwort, haikuPrompt, kategorienHash, kategorienText, nachPlugin, pruefeGespeichert } from './kategorien'
+import { ausModellAntwort, haikuPrompt, imBand, kategorienText, kurzAusBeschreibungen, menueHash, nachPlugin, passtNicht, pruefeGespeichert } from './kategorien'
+import type { Kurz } from './kategorien'
 
 /**
- * Skill menu: the skills of this session in categories, kept in the Leitstand's state (`skillListe`, `skillMenue`).
- * The band draws them as the two-stage picker 🧩 (glance.tsx); the command answers with them as text. No pane.
+ * Skill menu: the skills of this session in categories, each with a short description, kept in the Leitstand's state
+ * (`skillListe`, `skillMenue`, `skillKurz`). The band draws them as the hover menu 🧩 (glance.tsx); the command
+ * answers with them as text. No pane.
  *
  * The skills come from the context breakdown (`$.session.usage({ breakdown: 'summary' })`, its `skills` listing, which
  * names each skill and its plugin), matched against `$.command.list()` for the name the person types and the line it
  * shows. The list is loaded at the session's start and at the end of each turn of the main loop, outside any drawing
- * and with a time limit: the band never waits for it. The categories are first the plugins (nachPlugin); Haiku then
- * sorts them by purpose in the background, once per set of skills, kept in `$.store` under its hash.
+ * and with a time limit: the band never waits for it. The categories are first the plugins (nachPlugin) and the short
+ * descriptions the first sentence of each skill's description; Haiku then sorts the skills by purpose and writes a
+ * short description for each, in the background, once per set of skills, kept in `$.store` under its hash.
  */
 
 type $ = EngineInterface
@@ -34,14 +37,19 @@ const skillListeAtom = atom(LISTE, null as readonly string[] | null)
 const MENUE_ZUSTAND = { plugin: 'leitstand', key: 'skillMenue' } as const
 const skillMenueAtom = atom(MENUE_ZUSTAND, null as readonly SkillKategorie[] | null)
 
-/** Haiku's categories across sessions: `{ hash, kategorien }`, the hash of the names they were made for. */
+/** The short descriptions the band shows as tooltips; null until known. The band reads the same key. */
+const KURZ_ZUSTAND = { plugin: 'leitstand', key: 'skillKurz' } as const
+const skillKurzAtom = atom(KURZ_ZUSTAND, null as Kurz | null)
+
+/** Haiku's menu across sessions: `{ hash, kategorien, kurz }`, the hash of the prompt and the names it was made for. */
 export const STORE_KATEGORIEN = 'skillKategorien'
 
 /** How long a load of the list may take before the old list stays. */
 export const LADEFRIST_MS = 10_000
 
-/** How long Haiku may take to sort the skills. */
+/** How long Haiku may take to sort the skills, and how long its answer may be. */
 export const HAIKU_FRIST_MS = 60_000
+export const HAIKU_MAX_TOKENS = 8192
 
 const MENUE = SKILLS_BEFEHLE[0]!
 
@@ -52,8 +60,8 @@ const BEFEHL_NAMEN: readonly string[] = SKILLS_BEFEHLE.flatMap(eintrag => {
 })
 
 export const OHNE_SKILLS = 'In dieser Sitzung sind keine Skills installiert.'
-/** What the command adds on the computer, where the band shows the picker. */
-export const AM_RECHNER = 'Am Rechner klappt 🧩 im Band dieselbe Liste auf.'
+/** What the command adds on the computer, where the band shows the menu. */
+export const AM_RECHNER = 'Am Rechner zeigt 🧩 dieselbe Liste, wenn du mit der Maus darüberfährst.'
 
 /** What the command says when it fails. */
 export const fehlerText = (name: string): string =>
@@ -74,27 +82,29 @@ export function skillNamen(skills: readonly SkillEintrag[], befehle: readonly st
   return [...new Set(namen.filter(name => !name.startsWith(`${EIGENES}:`)))].sort((a, b) => a.localeCompare(b, 'de'))
 }
 
-/** The skills as text, for the command: the categories as headings, each skill as `/name`. */
-export function textListe(namen: readonly string[], kategorien: readonly SkillKategorie[] = nachPlugin(namen).kategorien): string {
+/** The skills as text, for the command: the categories as headings, each skill as `/name: Kurzbeschreibung`. */
+export function textListe(namen: readonly string[], kategorien: readonly SkillKategorie[] = nachPlugin(namen).kategorien, kurz: Kurz = {}): string {
   if (namen.length === 0) return OHNE_SKILLS
-  return kategorienText(namen, kategorien)
+  return kategorienText(namen, kategorien, kurz)
 }
 
 /** Whether two lists name the same skills in the same order. */
 const gleich = (a: readonly string[] | null, b: readonly string[]): boolean =>
   a !== null && a.length === b.length && a.every((name, at) => name === b[at])
 
-/** Whether two category lists are the same. */
-const gleicheKategorien = (a: readonly SkillKategorie[] | null, b: readonly SkillKategorie[]): boolean => a !== null && JSON.stringify(a) === JSON.stringify(b)
+/** Whether two values are the same, as JSON. */
+const gleichWie = (a: unknown, b: unknown): boolean => a !== null && JSON.stringify(a) === JSON.stringify(b)
 
 // What only this load of the module needs.
 
 /** The hashes Haiku was asked for in this load: a failed one is not asked again. */
 const versucht = new Set<string>()
-/** Haiku's categories of this load, by hash, so a load running beside it does not write the plugins over them. */
-const vomModell = new Map<string, SkillKategorie[]>()
+/** Haiku's menu of this load, by hash, so a load running beside it does not write the plugins over it. */
+const vomModell = new Map<string, { kategorien: SkillKategorie[]; kurz: Record<string, string> }>()
 /** The hash of the list loaded last: Haiku's answer for an older one goes to the store only. */
 let aktuellerHash: string | null = null
+/** The short descriptions from the skills' own descriptions, for the list loaded last. */
+let aktuellerRueckfall: Record<string, string> = {}
 
 /** The skills of this session and the line each one's command shows. */
 type Geladen = { namen: string[]; beschreibungen: Map<string, string> }
@@ -133,18 +143,44 @@ async function gespeicherteKategorien($: $): Promise<readonly SkillKategorie[] |
   return value ?? null
 }
 
-/** Writes the categories to the state when they changed. */
-async function schreibeMenue($: $, kategorien: readonly SkillKategorie[]): Promise<void> {
-  if (!gleicheKategorien(await gespeicherteKategorien($), kategorien)) await update($, skillMenueAtom, () => kategorien)
+/** The short descriptions as the state holds them; null when it holds none. */
+async function gespeicherteKurz($: $): Promise<Kurz | null> {
+  const { value } = await $.state.get(KURZ_ZUSTAND)
+  return value ?? null
 }
 
 /**
- * Asks Haiku to sort the skills by purpose, within its time limit. A valid answer goes to the store and, while the list
- * is still the same, to the state; anything else leaves the plugins' categories, with a line in the debug log.
+ * Writes the categories and the short descriptions to the state when they changed. New categories that make the
+ * menu wider than the popover are said in the debug log; nothing is cut.
+ */
+async function schreibeMenue($: $, kategorien: readonly SkillKategorie[], kurz: Kurz): Promise<void> {
+  if (!gleichWie(await gespeicherteKategorien($), kategorien)) {
+    await update($, skillMenueAtom, () => kategorien)
+    const zuBreit = passtNicht(imBand(kategorien))
+    if (zuBreit !== null) {
+      const was = [...zuBreit.kategorien.map(name => `category ${name}`), ...zuBreit.skills].join(', ')
+      $.ui.log(`leitstand: skill menu: about ${zuBreit.gesamtPx} px wide, the popover holds about 340 px; too wide: ${was}`, { to: 'debug' })
+    }
+  }
+  if (!gleichWie(await gespeicherteKurz($), kurz)) await update($, skillKurzAtom, () => kurz)
+}
+
+/** Haiku's short descriptions over the first sentences: a skill Haiku gave none keeps its own. */
+const mitRueckfall = (kurz: Kurz, rueckfall: Kurz): Record<string, string> => ({ ...rueckfall, ...kurz })
+
+/**
+ * Asks Haiku to sort the skills by purpose and to describe each, within its time limit. A valid answer goes to the
+ * store and, while the list is still the same, to the state; anything else leaves the plugins' categories and the
+ * first sentences, with a line in the debug log that says why.
  */
 async function frageHaiku($: $, namen: readonly string[], beschreibungen: ReadonlyMap<string, string>, hash: string): Promise<void> {
   try {
-    const antwort = await $.model.complete({ model: 'haiku', prompt: haikuPrompt(namen, beschreibungen), maxTokens: 4096, timeoutMs: HAIKU_FRIST_MS })
+    const antwort = await $.model.complete({
+      model: 'haiku',
+      prompt: haikuPrompt(namen, beschreibungen),
+      maxTokens: HAIKU_MAX_TOKENS,
+      timeoutMs: HAIKU_FRIST_MS,
+    })
     if (!antwort.isAnswered) {
       $.ui.log(`leitstand: skill categories: Haiku gave no answer (${antwort.reason}); the plugins stay`, { to: 'debug' })
       return
@@ -154,43 +190,47 @@ async function frageHaiku($: $, namen: readonly string[], beschreibungen: Readon
       $.ui.log('leitstand: skill categories: Haiku\'s answer held no valid categories; the plugins stay', { to: 'debug' })
       return
     }
-    vomModell.set(hash, menue.kategorien)
-    await $.store.set(STORE_KATEGORIEN, { hash, kategorien: menue.kategorien }).catch(() => undefined)
-    if (aktuellerHash === hash) await schreibeMenue($, menue.kategorien)
+    vomModell.set(hash, { kategorien: menue.kategorien, kurz: menue.kurz })
+    await $.store.set(STORE_KATEGORIEN, { hash, kategorien: menue.kategorien, kurz: menue.kurz }).catch(() => undefined)
+    if (aktuellerHash === hash) await schreibeMenue($, menue.kategorien, mitRueckfall(menue.kurz, aktuellerRueckfall))
   } catch (fehler) {
     $.ui.log(`leitstand: skill categories failed: ${fehler instanceof Error ? fehler.message : String(fehler)}; the plugins stay`, { to: 'debug' })
   }
 }
 
 /**
- * The categories for these names: Haiku's, from this load or the store, when they were made for the same names; else
- * the plugins at once, and Haiku asked in the background, once per set of names and load. Never waits for Haiku.
+ * The categories and short descriptions for these names: Haiku's, from this load or the store, when they were made
+ * for the same names by the same prompt; else the plugins and the first sentences at once, and Haiku asked in the
+ * background, once per set of names and load. Never waits for Haiku.
  */
 async function ordneKategorien($: $, namen: readonly string[], beschreibungen: ReadonlyMap<string, string>): Promise<void> {
-  const hash = kategorienHash(namen)
+  const hash = menueHash(namen)
+  const rueckfall = kurzAusBeschreibungen(namen, beschreibungen)
   aktuellerHash = hash
-  if (namen.length === 0) return schreibeMenue($, [])
+  aktuellerRueckfall = rueckfall
+  if (namen.length === 0) return schreibeMenue($, [], {})
   const hier = vomModell.get(hash)
-  if (hier !== undefined) return schreibeMenue($, hier)
+  if (hier !== undefined) return schreibeMenue($, hier.kategorien, mitRueckfall(hier.kurz, rueckfall))
   const gespeichert = pruefeGespeichert(await $.store.get(STORE_KATEGORIEN).catch(() => undefined), hash, namen)
   if (gespeichert !== null) {
     vomModell.set(hash, gespeichert)
-    return schreibeMenue($, gespeichert)
+    return schreibeMenue($, gespeichert.kategorien, mitRueckfall(gespeichert.kurz, rueckfall))
   }
   const nachPlugins = nachPlugin(namen)
   if (nachPlugins.weggelassen.length > 0) {
     $.ui.log(`leitstand: skill menu: ${nachPlugins.weggelassen.length} skills do not fit (at most 144)`, { to: 'debug' })
   }
   // Haiku may have answered while the store was read.
-  await schreibeMenue($, vomModell.get(hash) ?? nachPlugins.kategorien)
+  const inzwischen = vomModell.get(hash)
+  await schreibeMenue($, inzwischen?.kategorien ?? nachPlugins.kategorien, mitRueckfall(inzwischen?.kurz ?? {}, rueckfall))
   if (versucht.has(hash)) return
   versucht.add(hash)
   void frageHaiku($, namen, beschreibungen, hash).catch(() => undefined)
 }
 
 /**
- * Loads the list and writes it and its categories to the state when they changed. When the time runs out or the load
- * fails, the old list stays and a line goes to the debug log. Never throws.
+ * Loads the list and writes it, its categories and short descriptions to the state when they changed. When the time
+ * runs out or the load fails, the old list stays and a line goes to the debug log. Never throws.
  */
 async function aktualisiere($: $, anlass: string): Promise<readonly string[] | null> {
   try {
@@ -220,7 +260,7 @@ function antwort(text: string): { text: string } {
   return { text }
 }
 
-/** Registers the skill menu: loading its list and categories, and its command. */
+/** Registers the skill menu: loading its list, categories and short descriptions, and its command. */
 export function registerSkills(on: On, _options: PluginOptions): void {
   // Every hook carries a matcher: the Leitstand hooks the same events without one.
 
@@ -245,7 +285,7 @@ export function registerSkills(on: On, _options: PluginOptions): void {
   })
 
   // /leitstand:skill-menue and its short form: the categories as text, everywhere; on the computer with a word on the
-  // picker. Never a pane.
+  // hover menu. Never a pane.
   on('command.run', { command: [...BEFEHL_NAMEN] }, async ($, e) => {
     if (fragtNachHilfe(e.args ?? '')) return antwort(befehlsHilfe(MENUE))
     try {
@@ -254,9 +294,10 @@ export function registerSkills(on: On, _options: PluginOptions): void {
       const namen = gespeichert !== null && gespeichert.length > 0 ? gespeichert : await aktualisiere($, 'command')
       if (namen === null) return antwort(fehlerText(MENUE.name))
       const kategorien = (await gespeicherteKategorien($).catch(() => null)) ?? nachPlugin(namen).kategorien
+      const kurz = (await gespeicherteKurz($).catch(() => null)) ?? {}
       const kind = e.origin?.kind
       const amRechner = (kind === 'sdk' || kind === 'composer') && namen.length > 0
-      const liste = textListe(namen, kategorien)
+      const liste = textListe(namen, kategorien, kurz)
       return antwort(amRechner ? `${liste}\n\n${AM_RECHNER}` : liste)
     } catch {
       return antwort(fehlerText(MENUE.name))

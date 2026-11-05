@@ -1,5 +1,5 @@
 ---
-description: "Klappt die installierten Skills nach Kategorien auf; eine Wahl startet den Skill. (Leitstand)"
+description: "Zeigt beim Darüberfahren die Skills nach Anwendungsfall; ein Klick startet einen. (Leitstand)"
 disable-model-invocation: true
 ---
 

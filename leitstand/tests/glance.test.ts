@@ -2149,6 +2149,30 @@ test('the desktop row of buttons is counted as the app draws it: one line at 82 
   expect(appButtonRows(pickerAndBar(''), 7.2)).toBe(2)
   expect(appButtonRows(pickerAndBar('x'), 10.4)).toBe(1)
   expect(appButtonRows(pickerAndBar('x'), 10.3)).toBe(2)
+  // The skill menu is a hover menu: its keyed Box counts as its button 🧩 (4.5 ch), the hidden popover not at all.
+  const hoverAndBar = {
+    type: 'Box',
+    props: { flexDirection: 'row' },
+    children: [
+      {
+        type: 'Box',
+        props: { columnGap: 0.5, flexWrap: 'wrap' },
+        children: [
+          {
+            type: 'Box',
+            props: { key: 'skillmenue' },
+            children: [
+              { type: 'Button', props: { label: '\u{1F9E9}' } },
+              { type: 'Box', props: { position: 'absolute', display: 'none' }, children: [{ type: 'Button', props: { label: 'ein sehr langer Skill im Popover' } }] },
+            ],
+          },
+          { type: 'Text', props: {}, children: ['|'] },
+        ],
+      },
+    ],
+  }
+  expect(appButtonRows(hoverAndBar, 5.9)).toBe(1)
+  expect(appButtonRows(hoverAndBar, 5.7)).toBe(2)
   // Over the row 0.6, a line of buttons 1, between two lines 0.6.
   expect(appButtonRows(APP_ROW, 82)).toBe(1.6)
   expect(appButtonRows(APP_ROW, 81)).toBe(3.2)
@@ -2347,9 +2371,9 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const working = await drawn()
-  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links. Das Skill-Menü 🧩 ist ein Aufklappmenü
-  // unten links (ohne geladene Liste nur 🧩).
-  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal', '\u{1F9E9}'])
+  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links. Das Skill-Menü 🧩 ist kein Select,
+  // sondern ein Hover-Menü unten links (ohne geladene Liste ein Button).
+  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal'])
   expect(working.bottom).toContain('"key":"skillmenue"')
   expect(working.bottom).toContain('"key":"workmode"')
   expect(working.top).toContain('"type":"Select"')

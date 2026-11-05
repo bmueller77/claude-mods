@@ -288,17 +288,33 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   mit 20 Einträgen nicht. Deshalb: höchstens 12 Einträge plus Kopf je Select; die Leitstand-Tests prüfen jeden
   gezeichneten Baum mit `tests/selects.ts` (`geprueft`, höchstens 64 Optionen, keine doppelten Werte). Ein
   hot-reload-Probe-Mod schreibt abgelehnte Bäume mit Grund ins Protokoll: so findet man solche Grenzen.
+- Hover in der Desktop-App (belegt im App-Code `ion-dist.asar` des Pakets
+  `C:\Program Files\WindowsApps\Claude_4.16336.0.0_x64__pzs8sxrjxfjjc\app\resources\`, und live am 2026-11-05):
+  Ein Box mit `position="absolute"`, `display="none"`, `hover={{ display: 'flex' }}` (ohne `scope`) unter einem
+  keyed Box wird im Band und im Fenster zu einem Popover der App. Sie setzt es links bündig über den keyed Box
+  (darunter nur ohne Platz oben), schiebt es ins Fenster, begrenzt es auf 360 px Breite und verwirft dessen
+  position, Versätze, Größen, Ränder, Rahmen und Hintergrund; ein Popover im Popover sitzt über seinem eigenen
+  keyed Box (so entstehen Tooltips, aber kein Untermenü rechts daneben). Es bleibt offen, solange die Maus auf dem
+  keyed Box oder im Popover ist (150 ms Nachlauf). Eine Hover-Gruppe (`hover.scope`) leuchtet nur über Elementen,
+  deren `hover` außer `scope` einen Stilwert hat (etwa `backgroundColor`); Zwischenräume gehören nicht dazu. Ohne
+  Popover gilt normales CSS: `top`/`bottom` in lh, `left`/`right` in ch. Gemessen: etwa 6,2 px je Buchstabe und
+  24 px Innenabstand je Button. Buttons haben keinen Tooltip-Prop.
 - Leitstand, Skill-Menü (Björns Wunsch, kein Seitenfenster): 0.63.7.0 öffnete ein Fenster Skills mit allen 82
   Skills in einem `Select` (blieb leer), 0.63.7.1 setzte denselben `Select` in die Button-Zeile (das ganze Band
-  fehlte), 0.63.7.2 nahm das zurück; Ursache war beide Male die 64er-Grenze. Seit 0.63.8.0 ist 🧩 in App und VS
-  Code ein `Select` in zwei Stufen: erst höchstens 12 Kategorien ("Code (11)"), nach der Wahl "🧩 Code", "← zurück"
-  und höchstens 12 Skills; eine Wahl startet den Skill per `runCommand`, danach wieder 🧩 (`skillWahl`). Kein Weg
-  öffnet ein Fenster. Im Terminal legt 🧩 `/skill-menue` ins Eingabefeld; der Befehl antwortet mit Text nach
-  Kategorien. Die Liste lädt der Teil `skills` bei `session.start` und nach jeder Runde (22 ms live) über
-  `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`, ohne Beschreibungen;
-  die kommen aus `$.command.list()`). Kategorien: sofort `nachPlugin` (Teil vor dem Doppelpunkt), dann einmal je
-  Skill-Bestand Haiku (`$.model.complete`, 60 s Frist), Ergebnis in `$.store` `skillKategorien` mit Hash; ein
-  neuer Prompt erneuert gespeicherte Kategorien nicht. Reine Logik in `hooks/skills/kategorien.ts`. Ein
+  fehlte), 0.63.7.2 nahm das zurück; Ursache war beide Male die 64er-Grenze. 0.63.8.0 war ein `Select` in zwei
+  Stufen (Björn: niedriger als die Buttons, kein Untermenü beim Darüberfahren). Seit 0.63.9.0 ist 🧩 ein Button,
+  über dem beim Darüberfahren ein Popover aufgeht: links höchstens 12 Kategorien (jede eine Hover-Gruppe mit
+  Hintergrund), rechts die Skills der gerade gezeigten Kategorie (höchstens 12, ohne den Teil vor dem Doppelpunkt,
+  nie gekürzt), über jedem Skill ein Tooltip mit Kurzbeschreibung; ein Klick startet den Skill per `runCommand`.
+  Kein Weg öffnet ein Fenster. Im Terminal und ohne Liste legt 🧩 `/skill-menue` ins Eingabefeld; der Befehl
+  antwortet mit Text nach Kategorien (`/name: Kurzbeschreibung`). Die Liste lädt der Teil `skills` bei
+  `session.start` und nach jeder Runde (22 ms live) über `$.session.usage({ breakdown: 'summary' })`
+  (`context.breakdown.skills.skillFrontmatter`, ohne Beschreibungen; die kommen aus `$.command.list()`).
+  Kategorien und Kurzbeschreibungen: sofort nach dem Teil vor dem Doppelpunkt (ohne "Eigene", Rest "Weitere") und
+  erster Satz der Beschreibung, dann einmal je Skill-Bestand und Prompt-Version (`PROMPT_VERSION`, Hash `p3-`)
+  Haiku nach Anwendungsfall mit Kategorienamen aus einem Wort bis 14 Zeichen (`$.model.complete`, 60 s,
+  `maxTokens` 8192), Ergebnis in `$.store`. Reine Logik in `hooks/skills/kategorien.ts`. Der Probe-Mod
+  `skill-probe` (Sitzung f08ea4af) war das Testfeld dafür. Ein
   importiertes Atom lehnt `claude plugin validate` ab. Am 2026-11-05 stellte ein Commit nach `git switch` mit
   `core.autocrlf=true` und `add` mit `core.autocrlf=false` BEFEHLE.md, CLAUDE.md und leitstand/plugin.json auf
   CRLF um; nach einem Zweigwechsel die Zeilenenden prüfen.
@@ -404,9 +420,13 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    endeten auf U+2026. Die gesperrten langen Pausen sind kein Mod-Fehler (siehe Arbeitsweise).
    Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
    im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
-14. Live-Test ausstehend (2026-11-05, leitstand 0.63.8.0): das Skill-Menü in zwei Stufen (klappt es am Button
-   auf, wie gut sortiert Haiku, springt es nach der Wahl auf 🧩 zurück, wie breit wird "🧩 <Kategorie>" in der
-   Button-Zeile); die App-Liste zählt richtig, auch nach einem Chatwechsel (die Ursache ist nur aus Verlauf und
+14. Live-Test ausstehend (2026-11-05, leitstand 0.63.9.0): das Hover-Menü 🧩 im Leitstand (wie im Probe-Mod?
+   passen die Breiten bei allen Kategorien, erscheinen die Tooltips über den Skills, startet ein Klick den Skill);
+   die App-Liste zählt richtig, auch nach einem Chatwechsel (die Ursache ist nur aus Verlauf und
    Engine-Code erschlossen; `claude --debug` sollte "left out for re-entry" zeigen); "Los und ..." gibt frei; 🧹
    startet Clean Code 1.4.0.0; "bleibt auf 1.4.0.0" im Schloss. Bestanden am 2026-11-05: Das Band lädt mit
    0.63.7.2 wieder; die Bash-Sperre in Lese-Plänen hielt einen Befehl an, der eine Datei schreiben wollte (Offen 12).
+15. Geplant (Björn, 2026-11-05): Tooltips für die übrigen Buttons, erst im Leitstand (Texte aus seiner Hilfe-Liste),
+   dann in Statistik, Nächste Schritte, Zusammenfassung, Modellwahl und Prompt Upgrade, gemeinsamer Code über
+   `band.ts`. Mit demselben Popover wie im Skill-Menü; zu prüfen: Unruhe durch sofortige Popups, Abstände und
+   `appButtonRows`, wenn jeder Button in einem keyed Box steckt.

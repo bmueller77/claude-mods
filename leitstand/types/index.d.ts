@@ -294,7 +294,7 @@ export type AutopilotSchicht = {
     fragen: string[]
 }
 
-/** Skill-Menü: eine Kategorie im Aufklappmenü 🧩, ihr Name und ihre Skills (höchstens 12), sortiert. */
+/** Skill-Menü: eine Kategorie im Hover-Menü 🧩, ihr Name und ihre Skills (höchstens 12), sortiert. */
 export type SkillKategorie = {
   name: string
   skills: string[]
@@ -490,12 +490,10 @@ declare module 'claude-code' {
       autopilotZeigeFragen: boolean
       /** Skill-Menü: die Namen der Skills dieser Sitzung, sortiert; null, bis der Teil skills sie geladen hat. */
       skillListe: readonly string[] | null
-      /** Skill-Menü: die Kategorien des Aufklappmenüs 🧩 (nach Plugin oder von Haiku); null, bis der Teil skills sie kennt. */
+      /** Skill-Menü: die Kategorien des Hover-Menüs 🧩 (nach Plugin oder von Haiku); null, bis der Teil skills sie kennt. */
       skillMenue: readonly SkillKategorie[] | null
-      /** Skill-Menü: die aufgeklappte Kategorie (Stufe 2); null in Stufe 1. */
-      skillOffen: string | null
-      /** Skill-Menü: zählt die Wahlen im Aufklappmenü 🧩; eine Wahl zeichnet das Band neu, das Menü zeigt wieder value "". */
-      skillWahl: number
+      /** Skill-Menü: die Kurzbeschreibungen je vollem Skill-Namen (von Haiku, sonst der erste Satz der Beschreibung); null, bis der Teil skills sie kennt. */
+      skillKurz: Readonly<Record<string, string>> | null
       /**
        * This chat's own settings: the chat they belong to, whether they move to the next chat id (after /clear), and
        * the values the person changed in it; anything left out follows the defaults from the config menu.
