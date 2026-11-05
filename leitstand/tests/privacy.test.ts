@@ -82,6 +82,18 @@ describe('Netz-Stellen', () => {
       ['hält vierstellige Versionen wie 1.1.0.0 für Adressen', 'hält vierstellige Versionen wie 1.1.0.0 für Adressen'],
       ['Version etwa 1.2.0.0', 'Version etwa 1.2.0.0'],
       ['Versionen wie etwa 1.1.0.0', 'Versionen wie etwa 1.1.0.0'],
+      ['Version: bleibt auf 1.4.0.0', 'Version: bleibt auf 1.4.0.0'],
+      ['steht jetzt auf 1.1.0.0', 'steht jetzt auf 1.1.0.0'],
+      ['clean-code 1.4.0.0 ist fertig', 'clean-code 1.4.0.0 ist fertig'],
+      ['2.0.1.0', '2.0.1.0'],
+      ['0.63.7.1', '0.63.7.1'],
+      ['10.0.0.5', '•••.•••.•••.•••'],
+      ['5.75.12.3', '•••.•••.•••.•••'],
+      ['3.120.4.10', '•••.•••.•••.•••'],
+      ['1.2.3.4:8080', '•••.•••.•••.•••:8080'],
+      ['1.4.0.0/16', '•••.•••.•••.•••/16'],
+      ['100.64.0.1', '•••.•••.•••.•••'],
+      ['192.168.1.10', '•••.•••.•••.•••'],
       ['Server wie 192.168.1.10', 'Server wie •••.•••.•••.•••'],
       ['etwa 10.0.0.5', 'etwa •••.•••.•••.•••'],
       ['Version 1.2.0.0 läuft jetzt auf 192.168.1.10', 'Version 1.2.0.0 läuft jetzt auf •••.•••.•••.•••'],
@@ -98,6 +110,7 @@ describe('Netz-Stellen', () => {
   test('Schild: eine Versionsnummer kommt nicht in die .env, die IP daneben schon', () => {
     expect(extractSecrets(['Version: 1.1.0.0', '"version": "1.2.0.0"', 'clean-code@1.2.0.0', 'Version 1.1.0.0 → 1.2.0.0'])).toEqual([])
     expect(extractSecrets('Version 1.2.0.0 läuft jetzt auf 192.168.1.10')).toEqual([{ name: 'IP', value: '192.168.1.10' }])
+    expect(extractSecrets('steht auf 1.4.0.0')).toEqual([])
   })
 
   test('E-Mail-Adressen werden verdeckt wie bisher, Passwörter neben einer IP auch', () => {

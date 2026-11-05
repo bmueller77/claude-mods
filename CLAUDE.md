@@ -264,7 +264,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   die `tool.call`-Hooks; der Test spielt die Engine mit dem Test-Mod `MCP_BRUECKE`. Schloss und Schild erfassen IPs
   und Hostnamen an Netz-Stellen (`privacy.ts`), der Passwortschutz nicht. Seit 0.63.6.1 bleibt ein Vierer
   ohne Port oder CIDR sichtbar, wenn direkt davor ein Versionswort, ein `@` oder eine Versionskette steht
-  (`isVersionAt`); vorher verdeckte das Schloss "auf Version 1.1.0.0" als IP (gesehen 2026-11-04).
+  (`isVersionAt`); vorher verdeckte das Schloss "auf Version 1.1.0.0" als IP (gesehen 2026-11-04). Seit 0.63.7.1
+  gilt ein Vierer ohne Port oder CIDR auch nach seiner Form als Version (`isVersionShape`: erster Teil 0 bis 2, alle
+  Teile höchstens 99), weil "Version: bleibt auf 1.4.0.0" kein Versionswort direkt davor hat; kleine öffentliche
+  Adressen wie 1.1.1.1 bleiben dafür sichtbar.
 - Nächste Schritte seit 0.4.4.0: Antworten, die Claude ausdrücklich anbietet (Antworte/Schreib/Sag + Phrase in
   Anführungszeichen), stehen vorn als hervorgehobene Buttons und gehen mit einem Klick ab. Für Buttons bei
   Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein". Seit 0.4.5.0 bekommt auch eine
@@ -279,12 +282,19 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   trifft auch den vollen Namen (`stemStep`, nur bei genau einem Treffer). 🧹 startet `clean-code:clean-code` aus
   dem Mod clean-code, ohne ihn den älteren Skill `clean-code` (`CLEAN_CODE_NAMES`). Kurzfassen 0.1.2.1 sagt
   dazu: die Frage immer als letzte Zeile, der Stand davor.
-- Leitstand seit 0.63.7.0, Skill-Menü als Test (Björns Wunsch): 🧩 hinter 🧹 und `/leitstand:skill-menue`
-  (Kurzform `/skill-menue`) öffnen das Fenster Skills mit einem `Select` aller Skills; eine Wahl schließt es und
-  startet den Skill wie getippt. `$.command.list()` unterscheidet Skills nicht von anderen Befehlen, deshalb
-  kommen die Namen aus `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`),
-  ungeprüft, ob dort alle stehen. Handy und `Select`-lose Flächen bekommen eine Textliste. Mit 🧩 bricht die
-  Button-Zeile bei 80 Spalten um (App und Terminal); die Tests rechnen deshalb mit 81 Spalten.
+- Leitstand seit 0.63.7.0, Skill-Menü als Test (Björns Wunsch): 🧩 hinter 🧹. Ein Menü, das an einem Button
+  aufklappt, kennt die API nicht; seit 0.63.7.1 ist 🧩 in App und VS Code deshalb selbst ein `Select` in der
+  Button-Zeile (Optionen 🧩 und alle Skills, `value=""`), das die App wie "Minimal ⌄" als eigenes Aufklappmenü
+  zeichnet; eine Wahl zählt das Atom `skillWahl` hoch (Neuzeichnen auf 🧩) und startet den Skill per
+  `runCommand`. Im Terminal legt 🧩 `/skill-menue` ins Eingabefeld; `/leitstand:skill-menue` antwortet überall mit
+  der Liste als Text. 0.63.7.0 öffnete stattdessen ein Fenster Skills, das live leer blieb ("leitstand has not
+  drawn in this pane"); vermutete Ursache: Der Fenster-Hook holte die Liste beim Zeichnen und wartete darauf.
+  Seit 0.63.7.1 lädt der Teil `skills` die Liste bei `session.start` und nach jeder Runde der Hauptschleife per
+  `$.clock.after(0)` mit 10 s Frist ins Atom `skillListe`; kein Zeichnen holt etwas. `$.command.list()` unterscheidet
+  Skills nicht von anderen Befehlen, deshalb kommen die Namen aus `$.session.usage({ breakdown: 'summary' })`
+  (`context.breakdown.skills.skillFrontmatter`), ungeprüft, ob dort alle stehen. Ein importiertes Atom lehnt
+  `claude plugin validate` ab; glance.tsx und der Teil legen es je selbst an. Mit 🧩 bricht die Button-Zeile bei
+  81 Spalten um (App und Terminal); die Tests rechnen mit 82 Spalten.
 - Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
   Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
   zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung
@@ -387,8 +397,10 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    endeten auf U+2026. Die gesperrten langen Pausen sind kein Mod-Fehler (siehe Arbeitsweise).
    Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
    im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
-14. Live-Test ausstehend (2026-11-05, leitstand 0.63.7.0): die App-Liste zählt richtig, auch nach einem
+14. Live-Test ausstehend (2026-11-05, leitstand 0.63.7.1): die App-Liste zählt richtig, auch nach einem
    Chatwechsel (die Ursache ist nur aus Verlauf und Engine-Code erschlossen; `claude --debug` sollte "left out
-   for re-entry" zeigen); "Los und ..." gibt frei; das Skill-Menü 🧩 (wie die App `Select` zeichnet, ob die
-   Liste alle Skills hat und in welcher Schreibweise, Start mitten in einer Runde); 🧹 startet Clean Code
-   1.4.0.0; die Button-Zeile mit 🧩 bei schmalem Fenster.
+   for re-entry" zeigen); "Los und ..." gibt frei; das Skill-Menü 🧩 als Aufklappmenü (klappt es auf, hat die
+   Liste alle Skills und in welcher Schreibweise, springt es nach der Wahl auf 🧩 zurück, Start mitten in einer
+   Runde); 🧹 startet Clean Code 1.4.0.0; die Button-Zeile mit 🧩 bei schmalem Fenster; "bleibt auf 1.4.0.0"
+   im Schloss. Bestanden am 2026-11-05: Die Bash-Sperre in Lese-Plänen hielt einen Befehl an, der eine Datei
+   schreiben wollte (Offen 12).

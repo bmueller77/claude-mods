@@ -153,6 +153,16 @@ function isVersionAt(text: string, start: number): boolean {
   return isVersionAt(text, start - before.length + chain.index)
 }
 
+/**
+ * Whether a four-part number looks like a version by its shape alone: first part 0, 1 or 2 and every part at most 99
+ * (0.63.7.1, 1.4.0.0). These mods count x.x.x.x with small numbers; real addresses with parts this small are rare
+ * and mostly public services like 1.1.1.1. Only for a number without port or CIDR.
+ */
+const isVersionShape = (address: string) => {
+  const parts = address.split('.').map(Number)
+  return parts.length === 4 && parts[0]! <= 2 && parts.every(part => part <= 99)
+}
+
 /** Loopback (127.x) and net masks (255.x) are no address worth hiding. */
 const isOpenIpv4 = (address: string) => /^(?:127|255)\./.test(address)
 
@@ -198,11 +208,12 @@ function findNetSpots(text: string): NetSpot[] {
     if (isIpv6(address)) add('ipv6', m[0], m.index)
   }
   // With a port or CIDR it is an address; without one, a number a version word, an @ or a version chain leads to is a
-  // version (isVersionAt), so "auf Version 1.1.0.0" stays while "Version 2 läuft auf 192.168.1.10" is masked.
+  // version (isVersionAt), so "auf Version 1.1.0.0" stays while "Version 2 läuft auf 192.168.1.10" is masked. A small
+  // number like 1.4.0.0 is a version by its shape alone (isVersionShape).
   for (const m of matches(IPV4, text)) {
     const [whole, address = ''] = m
     if (isOpenIpv4(address)) continue
-    if (whole === address && isVersionAt(text, m.index)) continue
+    if (whole === address && (isVersionShape(address) || isVersionAt(text, m.index))) continue
     add('ipv4', address, m.index)
   }
 

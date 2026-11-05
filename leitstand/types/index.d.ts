@@ -482,6 +482,10 @@ declare module 'claude-code' {
       autopilotBericht: AutopilotBericht | null
       /** Autopilot: ob die Liste der selbst entschiedenen Fragen aufgeklappt ist. */
       autopilotZeigeFragen: boolean
+      /** Skill-Menü: die Namen der Skills dieser Sitzung, sortiert; null, bis der Teil skills sie geladen hat. */
+      skillListe: readonly string[] | null
+      /** Skill-Menü: zählt die Wahlen im Aufklappmenü 🧩; eine Wahl zeichnet das Band neu, das Menü zeigt wieder 🧩. */
+      skillWahl: number
       /**
        * This chat's own settings: the chat they belong to, whether they move to the next chat id (after /clear), and
        * the values the person changed in it; anything left out follows the defaults from the config menu.
