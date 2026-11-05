@@ -282,19 +282,19 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   trifft auch den vollen Namen (`stemStep`, nur bei genau einem Treffer). 🧹 startet `clean-code:clean-code` aus
   dem Mod clean-code, ohne ihn den älteren Skill `clean-code` (`CLEAN_CODE_NAMES`). Kurzfassen 0.1.2.1 sagt
   dazu: die Frage immer als letzte Zeile, der Stand davor.
-- Leitstand seit 0.63.7.0, Skill-Menü als Test (Björns Wunsch): 🧩 hinter 🧹. Ein Menü, das an einem Button
-  aufklappt, kennt die API nicht; seit 0.63.7.1 ist 🧩 in App und VS Code deshalb selbst ein `Select` in der
-  Button-Zeile (Optionen 🧩 und alle Skills, `value=""`), das die App wie "Minimal ⌄" als eigenes Aufklappmenü
-  zeichnet; eine Wahl zählt das Atom `skillWahl` hoch (Neuzeichnen auf 🧩) und startet den Skill per
-  `runCommand`. Im Terminal legt 🧩 `/skill-menue` ins Eingabefeld; `/leitstand:skill-menue` antwortet überall mit
-  der Liste als Text. 0.63.7.0 öffnete stattdessen ein Fenster Skills, das live leer blieb ("leitstand has not
-  drawn in this pane"); vermutete Ursache: Der Fenster-Hook holte die Liste beim Zeichnen und wartete darauf.
-  Seit 0.63.7.1 lädt der Teil `skills` die Liste bei `session.start` und nach jeder Runde der Hauptschleife per
-  `$.clock.after(0)` mit 10 s Frist ins Atom `skillListe`; kein Zeichnen holt etwas. `$.command.list()` unterscheidet
-  Skills nicht von anderen Befehlen, deshalb kommen die Namen aus `$.session.usage({ breakdown: 'summary' })`
-  (`context.breakdown.skills.skillFrontmatter`), ungeprüft, ob dort alle stehen. Ein importiertes Atom lehnt
-  `claude plugin validate` ab; glance.tsx und der Teil legen es je selbst an. Mit 🧩 bricht die Button-Zeile bei
-  81 Spalten um (App und Terminal); die Tests rechnen mit 82 Spalten.
+- Leitstand seit 0.63.7.0, Skill-Menü als Test (Björns Wunsch): 🧩 hinter 🧹 und `/leitstand:skill-menue`
+  öffnen das Fenster Skills mit einem `Select` aller Skills. Live blieb das Fenster leer ("leitstand has not drawn
+  in this pane"), Ursache offen. Björn will statt des Fensters ein Menü direkt am Button; das kennt die API nicht,
+  am nächsten kommt ein `Select` in der Button-Zeile, den die App wie "Minimal ⌄" als Aufklappmenü zeichnet.
+  So gebaut in 0.63.7.1 (Liste per `$.clock.after(0)` bei `session.start` und nach jeder Runde mit 10 s Frist ins
+  Atom `skillListe`, Zeichnen holt nichts); damit lud das Band live gar nicht mehr. 0.63.7.2 setzt glance.tsx,
+  logic.ts und den Teil `skills` auf den Stand von 0.63.7.0 zurück, die Schloss-Regel aus 0.63.7.1 bleibt.
+  Verdächtig, nicht bewiesen: ein `Select` mit vielen Optionen (die Ansichtswahl mit 3 Optionen geht) und das
+  Laden über `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`; die
+  Befehlsliste unterscheidet Skills nicht von anderen Befehlen). Weiter nur mit kleinen Versuchen in einem eigenen
+  Probe-Mod, nie im Band des Leitstands. Ein importiertes Atom lehnt `claude plugin validate` ab. Am 2026-11-05
+  stellte ein Commit nach `git switch` mit `core.autocrlf=true` und `add` mit `core.autocrlf=false` BEFEHLE.md,
+  CLAUDE.md und leitstand/plugin.json auf CRLF um; nach einem Zweigwechsel die Zeilenenden prüfen.
 - Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
   Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
   zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung
@@ -397,10 +397,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    endeten auf U+2026. Die gesperrten langen Pausen sind kein Mod-Fehler (siehe Arbeitsweise).
    Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
    im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
-14. Live-Test ausstehend (2026-11-05, leitstand 0.63.7.1): die App-Liste zählt richtig, auch nach einem
-   Chatwechsel (die Ursache ist nur aus Verlauf und Engine-Code erschlossen; `claude --debug` sollte "left out
-   for re-entry" zeigen); "Los und ..." gibt frei; das Skill-Menü 🧩 als Aufklappmenü (klappt es auf, hat die
-   Liste alle Skills und in welcher Schreibweise, springt es nach der Wahl auf 🧩 zurück, Start mitten in einer
-   Runde); 🧹 startet Clean Code 1.4.0.0; die Button-Zeile mit 🧩 bei schmalem Fenster; "bleibt auf 1.4.0.0"
-   im Schloss. Bestanden am 2026-11-05: Die Bash-Sperre in Lese-Plänen hielt einen Befehl an, der eine Datei
+14. Live-Test ausstehend (2026-11-05, leitstand 0.63.7.2): das Band lädt wieder; die App-Liste zählt richtig,
+   auch nach einem Chatwechsel (die Ursache ist nur aus Verlauf und Engine-Code erschlossen; `claude --debug`
+   sollte "left out for re-entry" zeigen); "Los und ..." gibt frei; 🧹 startet Clean Code 1.4.0.0; "bleibt auf
+   1.4.0.0" im Schloss. Offen: das leere Fenster Skills und das Menü am Button (siehe Fachliches). Bestanden am 2026-11-05: Die Bash-Sperre in Lese-Plänen hielt einen Befehl an, der eine Datei
    schreiben wollte (Offen 12).

@@ -1,5 +1,5 @@
 ---
-description: "Liste aller installierten Skills zeigen"
+description: "Menü mit allen installierten Skills öffnen und einen starten"
 disable-model-invocation: true
 ---
 

@@ -2107,12 +2107,7 @@ const APP_ROW = {
       props: { flexDirection: 'row', columnGap: 0.5, rowGap: 1.2, flexWrap: 'wrap' },
       children: [
         ...['\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}', '\u{1F170}️', '|', '\u{1F4D6}', '\u{1F9CD}', '♨️', '\u{1FA9E}', '\u{1F9F9}', '\u{1F9E9}', '|', '\u{1F4C2}', '|', '\u{1F512}', '\u{1F6E1}️', '|', 'Plan', 'Verlauf'].map(label =>
-          label === '|'
-            ? { type: 'Text', props: { dimColor: true }, children: ['|'] }
-            : label === '\u{1F9E9}'
-              // The skill menu is a picker on 🧩, with the skills after it.
-              ? { type: 'Select', props: { key: 'skillmenue', value: '', options: [{ value: '', label }, { value: 'grill-me', label: 'grill-me' }] } }
-              : { type: 'Button', props: { label, variant: 'secondary' } },
+          label === '|' ? { type: 'Text', props: { dimColor: true }, children: ['|'] } : { type: 'Button', props: { label, variant: 'secondary' } },
         ),
       ],
     },
@@ -2120,37 +2115,15 @@ const APP_ROW = {
   ],
 }
 
-test('the desktop row of buttons is counted as the app draws it: one line at 82 columns, where band.ts counts three', () => {
-  // A sign button 1 + 2.5 + 1 ch, the family one glyph; Plan 2 + 3.2, Verlauf 2 + 5.6, a bar 0.8, half a cell between;
-  // the skill menu, a picker, 1 + 2.5 + 1 and its arrow 1.5: the left 75 ch, with Pause (6) and the gap 82: at 81
-  // columns Pause wraps.
+test('the desktop row of buttons is counted as the app draws it: one line at 81 columns, where band.ts counts three', () => {
+  // A sign button 1 + 2.5 + 1 ch, the family one glyph; Plan 2 + 3.2, Verlauf 2 + 5.6, a bar 0.8, half a cell between:
+  // the left 73.5 ch (with the skill menu), with Pause (6) and the gap 80.5: at 80 columns Pause wraps.
   expect(appCells('\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}')).toBe(2.5)
   expect(appCells('♨️')).toBe(2.5)
   expect(appCells('Verlauf')).toBe(5.6)
   expect(zeilenVon(APP_ROW as never, 'desktop', 80)).toBe(4.8)
-  // A picker is measured by the option it shows, not by its longest one.
-  // A picker and a bar (0.8) half a cell apart: on 🧩 the picker is 6 ch, on Verlauf 9.1.
-  const pickerAndBar = (value: string) => ({
-    type: 'Box',
-    props: { flexDirection: 'row' },
-    children: [
-      {
-        type: 'Box',
-        props: { columnGap: 0.5, flexWrap: 'wrap' },
-        children: [
-          { type: 'Select', props: { key: 'p', value, options: [{ value: '', label: '\u{1F9E9}' }, { value: 'x', label: 'Verlauf' }] } },
-          { type: 'Text', props: {}, children: ['|'] },
-        ],
-      },
-    ],
-  })
-  expect(appButtonRows(pickerAndBar(''), 7.3)).toBe(1)
-  expect(appButtonRows(pickerAndBar(''), 7.2)).toBe(2)
-  expect(appButtonRows(pickerAndBar('x'), 10.4)).toBe(1)
-  expect(appButtonRows(pickerAndBar('x'), 10.3)).toBe(2)
   // Over the row 0.6, a line of buttons 1, between two lines 0.6.
-  expect(appButtonRows(APP_ROW, 82)).toBe(1.6)
-  expect(appButtonRows(APP_ROW, 81)).toBe(3.2)
+  expect(appButtonRows(APP_ROW, 81)).toBe(1.6)
   expect(appButtonRows(APP_ROW, 80)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 75)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 60)).toBe(4.8)
@@ -2160,8 +2133,8 @@ describe('Detailliert im engen Band: Schritte vor Helfern, der Rest in einer Zei
   const EIGHT = ['Finde die Ursache', 'Baue die Seite', 'Schreib die Texte', 'Prüfe die Änderung', 'Schreib Tests', 'Lass Tests laufen', 'Prüfe die Doku', 'Melde das Ergebnis']
   // Statistik a line under its rule, Nächste Schritte three lines (one, small), the summary its head line.
   const USUAL = { statistik: { voll: 1.75, klein: 1.75 }, 'naechste-schritte': { voll: 4.95, klein: 1.75 }, zusammenfassung: { voll: 1.75, klein: 1.75 } }
-  // 82 columns: at 81 the row of buttons wraps before Pause since the skill menu became a picker, with its arrow.
-  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 82, scroll: { offset: 0, bodyRows } } })
+  // 81 columns: at 80 the row of buttons wraps before Pause since the skill menu joined it.
+  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 81, scroll: { offset: 0, bodyRows } } })
 
   /** Gruppenarbeit in Detailliert with Autopilot on: `steps` planned and started, four helpers at work on the first. */
   const atWork = async ($: Engine, on: On, steps: string[], heights: Record<string, { voll: number; klein: number }>) => {
@@ -2346,10 +2319,8 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const working = await drawn()
-  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links. Das Skill-Menü 🧩 ist ein Aufklappmenü
-  // unten links (ohne geladene Liste nur 🧩).
-  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal', '\u{1F9E9}'])
-  expect(working.bottom).toContain('"key":"skillmenue"')
+  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links.
+  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal'])
   expect(working.bottom).toContain('"key":"workmode"')
   expect(working.top).toContain('"type":"Select"')
   expect(working.top).not.toContain('Pause')
