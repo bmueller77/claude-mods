@@ -833,7 +833,9 @@ export function leseVorschlaege(text: string): string[] {
         const sauber = zeile
             .replace(/\*\*/g, '')
             .replace(/^\s*(?:[-*•]|\d+[.):])\s*/, '')
-            .replace(/^["'`„“]+|["'`“”,]+$/g, '')
+            .replace(/`([^`\n]*)`/g, '$1')
+            .replace(/`/g, '')
+            .replace(/^["'„“]+|["'“”,]+$/g, '')
             .replace(/\s*[—–]\s*/g, ', ')
             .replace(/\.$/, '')
             .trim()

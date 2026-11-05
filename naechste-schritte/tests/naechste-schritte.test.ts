@@ -376,6 +376,9 @@ describe('naechste-schritte', () => {
             'Behebe die 3 roten Tests',
             'Schau dir die 3 roten Tests an',
         ])
+        expect(leseVorschlaege('Teste es mit `/x`')).toEqual(['Teste es mit /x'])
+        expect(leseVorschlaege('"`npm test` laufen lassen."')).toEqual(['npm test laufen lassen'])
+        expect(leseVorschlaege('Teste es mit `/x` und dann `y')).toEqual(['Teste es mit /x und dann y'])
         expect(leseVorschlaege('NONE')).toEqual([])
         expect(leseVorschlaege('Keine weiteren Schritte noetig')).toEqual([])
         expect(leseVorschlaege('Nichts mehr zu tun')).toEqual([])

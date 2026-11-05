@@ -1,6 +1,6 @@
 {
   "name": "naechste-schritte",
-  "version": "0.4.6.0",
+  "version": "0.4.6.1",
   "description": "Nach jeder Antwort zwei oder drei Vorschläge, was du Claude als Nächstes schreiben könntest, über dem Eingabefeld. In der App ist jeder Vorschlag ein Button, alle untereinander; ein Klick holt ihn ins Eingabefeld, im Terminal eine Ziffer; /naechste-schritte:1 bis :3 schicken ihn sofort ab. Bietet Claude Antworten ausdrücklich an (etwa Antworte \"ja\"), stehen sie vorn, und ein Klick schickt sie sofort ab; nach einer Ja/Nein-Frage gibt es ebenso Ja und Nein. Hilfe: /naechste-schritte:hilfe. Grundlage: next-steps von Hamza Zafar.",
   "author": {
     "name": "Björn Müller",
