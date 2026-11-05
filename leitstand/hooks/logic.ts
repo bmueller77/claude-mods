@@ -5,6 +5,7 @@ import { maskPrivate } from './privacy'
 import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE, AUTOPILOT_GRUNDBEFEHL, AUTOPILOT_TUT } from './autopilot/befehle'
 import { FILETREE_ALTE, FILETREE_BEFEHLE } from './filetree/befehle'
 import { REFLECT_ALTE, REFLECT_BEFEHLE } from './reflect/befehle'
+import { SKILLS_BEFEHLE } from './skills/befehle'
 
 export const PLUGIN = 'leitstand'
 
@@ -47,6 +48,10 @@ export function resetTime(resetsAt: string | null, at: number): string | null {
   return `am ${WEEKDAY_SHORT[berlin.weekday]} um ${time}`
 }
 
+// What ends a name cleanName cut short; plans saved before 0.63.6.3 end on the ellipsis character (U+2026) instead.
+const CUT_MARK = '...'
+const CUT_END = /(?:…|\.\.\.)$/
+
 /** Turns any step or job name, or a step's summary, into short plain English. */
 export function cleanName(raw: unknown, max = MAX_NAME): string {
   const words = localTimes(maskPrivate(String(raw ?? '')))
@@ -62,11 +67,29 @@ export function cleanName(raw: unknown, max = MAX_NAME): string {
   if (name.length <= max) {
     return name
   }
-  const cut = name.slice(0, max - 1)
+  // Three plain dots mark the cut, within the limit: no typographic ellipsis.
+  const cut = name.slice(0, max - CUT_MARK.length)
   const space = cut.lastIndexOf(' ')
 
-  return `${(space > 0 ? cut.slice(0, space) : cut).replace(/[\s,;:.\-–]+$/, '')}…`
+  return `${(space > 0 ? cut.slice(0, space) : cut).replace(/[\s,;:.\-–]+$/, '')}${CUT_MARK}`
 }
+
+/**
+ * The one step whose saved name was cut short (U+2026 or "...") and whose stem opens one of these names, ignoring case;
+ * -1 when no step or more than one fits. For a report naming a step in full, or cut at another length.
+ */
+export function stemStep(tasks: readonly GlanceTask[], names: readonly string[]): number {
+  const wanted = names.map(one => one.toLowerCase())
+  const fits = tasks.flatMap((one, index) => {
+    if (!CUT_END.test(one.name)) return []
+    const stem = one.name.replace(CUT_END, '').trim().toLowerCase()
+    return stem !== '' && wanted.some(name => name.startsWith(stem)) ? [index] : []
+  })
+  return fits.length === 1 ? fits[0]! : -1
+}
+
+/** Whether cleanName cut this raw name short. */
+export const isCutName = (raw: unknown, max = MAX_NAME): boolean => cleanName(raw, max) !== cleanName(raw, Number.POSITIVE_INFINITY)
 
 // Small words that mark a name as German, whose nouns keep their capitals.
 const GERMAN_WORDS = new Set([
@@ -612,6 +635,11 @@ const EXPLAIN =
 // In the same sentence, a negation or a condition keeps an instruction or a yes from counting.
 const DO_HEDGE = /(?<![\p{L}])(?:nicht|nichts|kein|keine|keinen|keinem|keiner|keines|nie|niemals|wenn|falls|sobald|bevor|nachdem)(?![\p{L}])/u
 const BUT = /(?<![\p{L}])aber(?![\p{L}])/u
+// A go-ahead word that opens the message, then "und", a comma, a full stop or "!" with more: "Los und schau ... an".
+const GO_AHEAD_THEN =
+  /^\s*(?:bitte,?\s+)?(?:leg los|los|ja|okay|ok|passt|starte|start|mach das|einverstanden|freigegeben)(?:,?\s+bitte)?(?:\s*[,.!]|\s+und(?![\p{L}\p{N}]))/u
+// After such a go-ahead, a reservation keeps it from counting: "Los, aber ändere vorher Schritt 2".
+const GO_AHEAD_RESERVE = /(?<![\p{L}])(?:aber|doch|erst|vorher|warte\p{L}*|stopp?|nicht|ändere?|ändre|statt)(?![\p{L}])/u
 
 /** A clause that tells Claude to do work, not about the plan itself. */
 function tellsWork(clause: string): boolean {
@@ -636,6 +664,13 @@ export function saysDo(text: string): boolean {
   }))
   // A change to the plan anywhere in the message holds it back: "Ja. Ändere Schritt zwei."
   if (sentences.some(({ sentence }) => DO_WORK.test(sentence) && PLAN_TALK.test(sentence))) return false
+  // "Los und schau dir auch ... an", "Okay, arbeite bitte alle Punkte ab": a go-ahead word first, then more to do.
+  const head = GO_AHEAD_THEN.exec(said)
+  if (head !== null) {
+    const rest = said.slice(head[0].length)
+    // A condition or a negation after it holds it back as in any sentence: "Ja, wenn du meinst."
+    if (rest.trim() !== '' && !rest.includes('?') && !GO_AHEAD_RESERVE.test(rest) && !DO_HEDGE.test(rest)) return true
+  }
   return sentences.some(({ sentence, isQuestion }) => {
     if (sentence === '' || isQuestion || DO_HEDGE.test(sentence) || EXPLAIN.test(sentence)) return false
     const parts = sentence.split(BUT)
@@ -644,10 +679,43 @@ export function saysDo(text: string): boolean {
   })
 }
 
+// A status line Claude may put after its question: "Stand: Schritt 4 von 7.", "**Zwischenstand** 3 von 5 erledigt".
+const STATUS_LINE = /^(?:zwischenstand|stand|status)(?::|\s)/i
+const MAX_STATUS_LINE = 160
+// At most this many status lines are passed over at the end of an answer.
+const MAX_STATUS_LINES = 2
+
+/**
+ * Claude's answer without the status lines at its end (up to two, each a short line that opens with Stand, Status or
+ * Zwischenstand, blank lines between them too), so that a question before them still ends the answer. A status line
+ * that asks something itself stays. Nothing left without them, or none there: the answer as it is.
+ */
+export function withoutStatusLines(answer: string): string {
+  const lines = answer.split(/\r?\n/)
+  let end = lines.length
+  let passed = 0
+  while (end > 0) {
+    const line = lines[end - 1]!.trim()
+    if (line === '') {
+      end--
+      continue
+    }
+    const plain = line.replace(/[*_>]+/g, '').trim().replace(/^(?:[-•+]|\d+[.)])\s+/, '')
+    const isStatus = passed < MAX_STATUS_LINES && line.length <= MAX_STATUS_LINE && STATUS_LINE.test(plain) && !/\?\s*$/.test(plain)
+    if (!isStatus) break
+    passed++
+    end--
+  }
+  if (passed === 0) return answer
+  const rest = lines.slice(0, end).join('\n').trimEnd()
+  return rest === '' ? answer : rest
+}
+
 // Claude's closing words that ask the person to pick or to go on, without a question mark: "Sag mir, welche du
-// willst.", "Nimm a oder b, dann lege ich los.", "Schreib los."
+// willst.", "Nimm a oder b, dann lege ich los.", "Schreib los.", "Antworte "ja" oder "nein"."
 const CHOICE_INVITE = new RegExp(
   String.raw`(?:^|[,;:–—]\s*)(?:(?:sag|sage|schreib|schreibe|gib) (?:mir|uns)|schreib(?:e)? los|welche[nrsm]?|wähl(?:e)?|such(?:e)? dir|entscheide? dich)(?![\p{L}\p{N}])` +
+    String.raw`|(?<![\p{L}\p{N}])antworte(?:t)?(?: mit)? ["„“»']` +
     String.raw`|(?:^|[,;:–—]\s*)dann (?:leg(?:e)? ich(?: [^\s,;:]+){0,3} los|fang(?:e)? ich(?: [^\s,;:]+){0,3} an|starte ich|setz(?:e)? ich(?: [^\s,;:]+){0,3} um|mach(?:e)? ich(?: [^\s,;:]+){0,3} weiter)(?![\p{L}\p{N}])`,
   'u',
 )
@@ -659,7 +727,7 @@ const CHOICE_INVITE = new RegExp(
  */
 export function offersChoice(answer: string): boolean {
   if (asksQuestion(answer)) return true
-  const text = answer.trimEnd()
+  const text = withoutStatusLines(answer).trimEnd()
   if (text.endsWith('```')) return false
   const lastLine = text.split('\n').map(line => line.trim()).filter(Boolean).pop() ?? ''
   const plain = lastLine.replace(/[*_`>#]+/g, '').replace(/^(?:[-•]|\d+[.)])\s+/, '').toLowerCase()
@@ -674,7 +742,7 @@ export function offersChoice(answer: string): boolean {
  * in Greek text and nowhere else; a code block never does. German closing quotes (“ and «) are passed over like ” and ».
  */
 export function asksQuestion(answer: string): boolean {
-  const end = answer.trimEnd().replace(/[*_"'”“«»)\s]+$/g, '')
+  const end = withoutStatusLines(answer).trimEnd().replace(/[*_"'”“«»)\s]+$/g, '')
   return /[?？؟]$/.test(end) || (end.endsWith(';') && /\p{Script=Greek}/u.test(end))
 }
 
@@ -1581,7 +1649,7 @@ export const MAX_QUESTION = 160
 /** The question Claude ended on, as one plain line: its last sentence, or the whole last paragraph when that sentence is a few words. */
 export function questionOf(answer: string): string | null {
   if (!asksQuestion(answer)) return null
-  const paragraph = (answer.trim().split(/\n\s*\n/).pop() ?? '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim()
+  const paragraph = (withoutStatusLines(answer).trim().split(/\n\s*\n/).pop() ?? '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim()
   const last = paragraph.split(/(?<=[.!?;？؟])\s+/).pop() ?? ''
   const line = maskPrivate(last.length >= 12 ? last : paragraph)
 
@@ -1845,8 +1913,12 @@ export function progressName(tasks: GlanceTask[], rawName: string): string {
     const current = tasks.find(one => one.status === 'active') ?? tasks.find(one => one.status !== 'done')
     if (current) return current.name
   }
+  const name = cleanName(rawName)
+  if (tasks.some(one => one.name.toLowerCase() === name.toLowerCase())) return name
+  // A step saved cut short also takes a report that names it in full or cut elsewhere, when it alone fits.
+  const index = stemStep(tasks, [name, cleanName(rawName, Number.POSITIVE_INFINITY)])
 
-  return cleanName(rawName)
+  return index === -1 ? name : tasks[index]!.name
 }
 
 /**
@@ -1890,10 +1962,19 @@ export function todosToTasks(
   todos: ReadonlyArray<{ content: string; status: string }>,
   previous: GlanceTask[],
 ): GlanceTask[] {
-  return carryTokens(previous, settle(
+  const names = todos.map(todo => cleanName(todo.content))
+  // A step saved cut short takes the name a todo now gives it, when it alone fits: it keeps its tokens, not twice.
+  const known = [...previous]
+  todos.forEach((todo, index) => {
+    const name = names[index]!
+    if (known.some(one => one.name === name)) return
+    const at = stemStep(known, [name, cleanName(todo.content, Number.POSITIVE_INFINITY)])
+    if (at !== -1) known[at] = { ...known[at]!, name }
+  })
+  return carryTokens(known, settle(
     todos.map((todo, index) => {
-      const name = cleanName(todo.content)
-      const before = previous.find(one => one.name === name)
+      const name = names[index]!
+      const before = known.find(one => one.name === name)
       const status = todo.status === 'completed' ? 'done' : todo.status === 'in_progress' ? 'active' : 'upcoming'
       const kept = before && before.status === status ? before : task(name, status, `todo#${index}`)
 
@@ -2335,7 +2416,7 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
     argumente: 'Thema (freiwillig). Ohne Thema geht es um den aktuellen Plan; gibt es keinen, fragt der Befehl nach einem Thema.',
     beispiel: '/leitstand:ausfragen Umzug der Datenbank',
   }),
-  befehl('Werkzeuge', 'leitstand:sauberer-code', 'Code prüfen lassen mit dem Skill clean-code', 'Startet den Skill clean-code (ein mitgelieferter Ablauf für Claude): Claude prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', 'Button: 🧹 unten links', 'einmal'),
+  befehl('Werkzeuge', 'leitstand:sauberer-code', 'Code prüfen lassen mit dem Skill clean-code', 'Startet den Skill clean-code aus dem Mod clean-code (ein mitgelieferter Ablauf für Claude), ohne den Mod den älteren Skill clean-code: Claude prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', 'Button: 🧹 unten links', 'einmal'),
   befehl('Werkzeuge', 'leitstand:fernsteuerung-an', 'Remote Control einschalten', 'Schaltet Remote Control ein: Du steuerst diesen Chat dann auch vom Handy aus. Geht nur, wo der Chat es kann.', 'Button: 🛜 unten links (im Terminal 📡); leuchtet, solange es verbunden ist, und fehlt, wo der Chat es nicht kann.', 'chat'),
   befehl('Werkzeuge', 'leitstand:fernsteuerung-aus', 'Remote Control ausschalten', 'Schaltet Remote Control aus und trennt damit die Verbindung zum Handy: Von dort erreichst du diesen Chat dann nicht mehr, einschalten geht nur am Rechner.', 'Button: 🛜 unten links (im Terminal 📡), solange es leuchtet', 'chat'),
 
@@ -2373,8 +2454,8 @@ const EIGENE_BEFEHLE: readonly LeitstandBefehl[] = [
   befehl('Einstellungen', 'leitstand:zuruecksetzen', 'Einstellungen auf den Standard zurücksetzen', 'Setzt in diesem Chat alles aus dem Einstellungsfenster auf den Standard für neue Chats zurück (eingebaut oder, was du dafür eingestellt hast): Ansicht, Arbeitsweise, Töne, Desktop-Benachrichtigungen, Andere Chats, Ruhemodus, Plan zuerst freigeben, Auf GitHub abschließen, Passwortschutz und Verdecken. Korrekturen prüfen, Selbstkritik nach Dateiänderungen und Kurzantworten bleiben, wie sie sind.', 'Button: Auf Standard zurücksetzen im Einstellungsfenster', 'chat'),
 ]
 
-/** Die Befehle der Teile, die bis 2026-10-26 eigene Mods waren: Selbstkritik und Regeln, Dateien, Autopilot. */
-export const TEIL_BEFEHLE: readonly LeitstandBefehl[] = [...REFLECT_BEFEHLE, ...FILETREE_BEFEHLE, ...AUTOPILOT_BEFEHLE]
+/** Die Befehle der Teile: das Skill-Menü (vorn, so steht es in der Übersicht noch bei den Werkzeugen), Selbstkritik und Regeln, Dateien und Autopilot (bis 2026-10-26 eigene Mods). */
+export const TEIL_BEFEHLE: readonly LeitstandBefehl[] = [...SKILLS_BEFEHLE, ...REFLECT_BEFEHLE, ...FILETREE_BEFEHLE, ...AUTOPILOT_BEFEHLE]
 
 /** Alle Befehle des Leitstands, in der Reihenfolge der Übersicht: die der Teile hinter den Werkzeugen. */
 export const LEITSTAND_BEFEHLE: readonly LeitstandBefehl[] = (() => {

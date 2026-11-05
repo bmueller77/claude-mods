@@ -3,6 +3,7 @@ import type { On, PluginOptions } from 'claude-code'
 import { registerAutopilot } from './autopilot/teil'
 import { registerFiletree } from './filetree/teil'
 import { registerReflect } from './reflect/teil'
+import { registerSkills } from './skills/teil'
 
 /**
  * Die Teile des Leitstands, die bis 2026-10-26 eigene Mods waren: Selbstkritik und Regeln (Reflect), Dateien
@@ -23,4 +24,5 @@ export function registerTeile(on: On, options: PluginOptions): void {
     unterAltenNamen(options, { activity: 'dateienAktivitaet', glyphs: 'dateienSymbole', follow: 'dateienFolgen', column: 'dateienSpalte', open: 'dateienOeffnen' }),
   )
   registerAutopilot(on, unterAltenNamen(options, { maxRunden: 'autopilotMaxRunden' }))
+  registerSkills(on, options)
 }

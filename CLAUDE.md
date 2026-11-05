@@ -32,7 +32,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   `/context` (Björn, 2026-10-26). Deshalb stecken Reflect, Filetree und Autopilot seit leitstand 0.57.0
   im Leitstand, als Teile unter `leitstand/hooks/<teil>/` (`teil.ts` meldet an, `befehle.ts` hält die
   Befehle für Übersicht und Kurzformen, `teile.ts` gibt ihnen ihre Einstellungen unter den alten
-  Namen). Ihre alten Ordner bleiben im Repo, stehen aber nicht mehr im Katalog. Das Aufräumen mit
+  Namen). Ihre alten Ordner bleiben im Repo, stehen aber nicht mehr im Katalog. Seit 0.63.7.0 gibt es
+  dort auch den Teil `skills` (Skill-Menü 🧩, nur im Leitstand, nie ein eigener Mod). Das Aufräumen mit
   Sicherungspunkt gehört seit statistik 0.18.0 der Statistik. Fremden Zustand nur lesen (etwa die
   Zeile der Modellwahl im Band) ist kein Aufruf.
 - `README.md` sagt, was jeder Mod tut. `UMSTIEG.md` ist der Prompt für andere Instanzen,
@@ -52,6 +53,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   nimmt das an, und `plugin update` aktualisiert bei jeder anderen Nummer, auch rückwärts (geprüft 2.1.309).
 - Prüfen vor jedem Commit, je geändertem Mod: `claude plugin validate ./<mod>` und
   `claude plugin test ./<mod>`. Nach Änderungen am Katalog zusätzlich `claude plugin validate .`.
+- Live-Tests mit Björn am PC: Lange Pausen (`Start-Sleep 150`) sperrt die Umgebung, und Monitor hält die
+  Runde nicht offen. Als Zeitfenster für seine Eingriffe dienen die Tests aller Mods nacheinander (etwa
+  115 s); vorher auf sein "bereit" warten. Eine Frage an ihn steht immer als letzte Zeile.
 - Typprüfung: `tsc -p <mod>`, sobald die Engine die Typen nach `<mod>/.claude-plugin/types/`
   gelegt hat (das tut sie beim Laden; der Ordner ist in `.gitignore`). Die tsconfig-Dateien am PC
   unter `d:\temp\claude\ns-tsc-7e39\` zeigen noch auf den alten Ordner `~/.claude/mods`. Für das
@@ -251,7 +255,13 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   `turn.complete` der Runde, die ihn angelegt hat (Atom `planVeiled`); die Werkzeuge sind ab `plan_steps`
   gesperrt. Solange das Band zu sehen ist, beantwortet er Claudes `mcp__ccd_turn__update_plan` selbst und
   reicht die Liste beim `wrap_up` per `$.mcp.call('ccd_turn', 'update_plan', …)` einmal an die App weiter;
-  schlägt das fehl, gehen alle Aufrufe wieder an die App (live ungeprüft). Schloss und Schild erfassen IPs
+  schlägt das fehl, gehen alle Aufrufe wieder an die App (live ungeprüft). Bis 0.63.6.3 kam diese Weitergabe
+  nie an: Die Engine schickt ein `$.mcp.call` auch durch die `tool.call`-Hooks des eigenen Mods und lässt nur den
+  aufrufenden aus, also beantwortete der update_plan-Hook sie selbst. Seit 0.63.6.3 nimmt er nur Aufrufe mit
+  `next.origin.plugin === 'engine'`, und fehlt das Band (Björn in einem anderen Chat), bekommt die App vor einem
+  durchgereichten advance/done/start erst die gehaltene Liste (`handAppPlan`). Daher kamen "Schritt 3, 4 von 7"
+  bei sechs Schritten und "every step is done" nach Schritt 2. Das Test-Kit reicht `$.mcp.call` nicht durch
+  die `tool.call`-Hooks; der Test spielt die Engine mit dem Test-Mod `MCP_BRUECKE`. Schloss und Schild erfassen IPs
   und Hostnamen an Netz-Stellen (`privacy.ts`), der Passwortschutz nicht. Seit 0.63.6.1 bleibt ein Vierer
   ohne Port oder CIDR sichtbar, wenn direkt davor ein Versionswort, ein `@` oder eine Versionskette steht
   (`isVersionAt`); vorher verdeckte das Schloss "auf Version 1.1.0.0" als IP (gesehen 2026-11-04).
@@ -260,7 +270,21 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   Entscheidungsfragen deshalb so fragen: Antworte "ja" oder "nein". Seit 0.4.5.0 bekommt auch eine
   Ja/Nein-Frage am Ende der Antwort ("Soll ich …?") die Buttons Ja und Nein. Seit 0.4.6.0 (Björns Wunsch)
   ist in der App jeder Vorschlag ein ganzer Button mit seinem Text, immer untereinander; die einzeilige Form
-  gibt es nicht mehr, auch nicht im Terminal.
+  gibt es nicht mehr, auch nicht im Terminal. Seit 0.4.6.1 fallen Backticks aus Vorschlägen ganz weg.
+- Leitstand seit 0.63.6.3 (Offen 13): Eine Frage am Ende zählt auch, wenn danach noch bis zu zwei kurze Zeilen
+  mit "Stand", "Status" oder "Zwischenstand" stehen (`withoutStatusLines`, für Freigabe und "Braucht dich"), und
+  "Antworte ..." gilt als Einladung (`CHOICE_INVITE`). Ein wartender Plan geht auch mit "Los und ..." oder
+  "Okay, arbeite ... ab" los (`GO_AHEAD_THEN`), nicht mit "Los, aber ...", "erst", "warte", "nicht" oder "wenn".
+  `cleanName` kürzt mit "..." statt U+2026, `plan_steps` nennt Claude gekürzte Namen, und ein gekürzter Schritt
+  trifft auch den vollen Namen (`stemStep`, nur bei genau einem Treffer). 🧹 startet `clean-code:clean-code` aus
+  dem Mod clean-code, ohne ihn den älteren Skill `clean-code` (`CLEAN_CODE_NAMES`). Kurzfassen 0.1.2.1 sagt
+  dazu: die Frage immer als letzte Zeile, der Stand davor.
+- Leitstand seit 0.63.7.0, Skill-Menü als Test (Björns Wunsch): 🧩 hinter 🧹 und `/leitstand:skill-menue`
+  (Kurzform `/skill-menue`) öffnen das Fenster Skills mit einem `Select` aller Skills; eine Wahl schließt es und
+  startet den Skill wie getippt. `$.command.list()` unterscheidet Skills nicht von anderen Befehlen, deshalb
+  kommen die Namen aus `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`),
+  ungeprüft, ob dort alle stehen. Handy und `Select`-lose Flächen bekommen eine Textliste. Mit 🧩 bricht die
+  Button-Zeile bei 80 Spalten um (App und Terminal); die Tests rechnen deshalb mit 81 Spalten.
 - Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
   Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
   zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung
@@ -344,8 +368,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    in die laufende Runde (`remove` mit `reason: "absorbed_mid_turn"` im Verlauf); Plan und Werkzeuge
    blieben. Die Erkennung über `turnId` und Abbruch griff dabei nicht ein. Offen: Berichte von Arbeitern
    ohne neue Freigabe, Bash-Sperre in Lese-Plänen, Detailliert im engen Band, Bearbeiten-Feld im Fenster
-   von Prompt Upgrade. Gesehen, nicht geklärt: `mcp__ccd_turn__update_plan` mit `advance` antwortete einmal
-   "every step is done" nach dem ersten von acht Schritten.
+   von Prompt Upgrade. Das "every step is done" nach dem ersten von acht Schritten ist geklärt und behoben in
+   0.63.6.3 (siehe Fachliches).
 13. Live-Test 2026-11-04 am PC (leitstand 0.63.6.0, statistik 0.19.6.0, naechste-schritte 0.4.6.0,
    sorgfalt 0.1.0.0). Bestanden: Schleifen-Melder (die `context`-Zeile kam nach dem fünften gleichen Aufruf
    bei Claude an; die Zeile im Band hat Björn nicht gesehen); Einschub (siehe Offen 12); Pause, dann "Kurz
@@ -357,16 +381,14 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    Schritt-Zusammenfassung warf (0.63.6.2). Der Abschnitt "Was nicht geklappt hat" steht in der
    Zusammenfassung des Compacts (ab Zeichen 15.042 von 17.295), aber das Fenster schnitt still bei 10.000
    ab und zeigte den Anfang als Rohtext, weil der `<system-reminder>`-Block ohne Leerzeile davor stand
-   (statistik 0.19.6.1). Gesehen, offen:
-   - Lange Pausen (`Start-Sleep 150`) sperrt die Umgebung. Als Zeitfenster für Björns Eingriffe dienen
-     die Tests aller Mods nacheinander (etwa 115 s); vorher auf sein "bereit" warten.
-   - Ein "ja" gab einen Plan nicht frei, als nach der Frage noch eine Stand-Zeile kam (Kurzfassen schreibt
-     den Stand ans Ende); der Leitstand sieht die Frage nur am Ende der Antwort.
-   - Nächste Schritte: Ein einzelner Backtick bleibt im Vorschlag stehen (`leseVorschlaege` schneidet nur
-     am Rand).
-   - Die Aufgabenliste der App zählte nach einem neuen Plan "Schritt 3, 4 von 7" bei sechs Schritten.
-   - Schrittnamen über 40 Zeichen kürzt `cleanName` mit "…".
-   - `mcp__ccd_turn__update_plan` mit `advance` meldete wieder "every step is done", diesmal nach Schritt 2
-     von 4 (wie in Offen 12).
+   (statistik 0.19.6.1). Am 2026-11-05 geklärt und behoben (leitstand 0.63.6.3, naechste-schritte 0.4.6.1,
+   kurzfassen 0.1.2.1, siehe Fachliches): "ja" nach einer Stand-Zeile und "Los und ..." gaben nicht frei, ein
+   Backtick blieb im Vorschlag, die App-Liste zählte "3, 4 von 7" und "every step is done", Schrittnamen
+   endeten auf U+2026. Die gesperrten langen Pausen sind kein Mod-Fehler (siehe Arbeitsweise).
    Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
    im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
+14. Live-Test ausstehend (2026-11-05, leitstand 0.63.7.0): die App-Liste zählt richtig, auch nach einem
+   Chatwechsel (die Ursache ist nur aus Verlauf und Engine-Code erschlossen; `claude --debug` sollte "left out
+   for re-entry" zeigen); "Los und ..." gibt frei; das Skill-Menü 🧩 (wie die App `Select` zeichnet, ob die
+   Liste alle Skills hat und in welcher Schreibweise, Start mitten in einer Runde); 🧹 startet Clean Code
+   1.4.0.0; die Button-Zeile mit 🧩 bei schmalem Fenster.

@@ -71,6 +71,7 @@ import {
   apiErrorSentence,
   applyProgress,
   progressName,
+  isCutName,
   STANDARD_WEG,
   LEITSTAND_GRUNDBEFEHL,
   PLAN_FREIGABE,
@@ -210,6 +211,8 @@ const NIGHTSHIFT = '\u{1F170}\uFE0F'
 const FILETREE = '\u{1F4C2}'
 /** The clean-code skill, right behind Selbstkritik: a broom. */
 const CLEAN_CODE = '\u{1F9F9}'
+/** The skill menu, right behind Sauberer Code: a puzzle piece. Its press lands in the part skills/teil.tsx. */
+const SKILL_MENU = '\u{1F9E9}'
 /** Selbstkritik (once the Reflect mod), right behind Grill mich: a mirror. */
 const REFLECT = '\u{1FA9E}'
 /** Masking on screen, on and off, and moving the chat's secrets into the .env: a lock, an open lock, a shield. */
@@ -284,7 +287,8 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
       { sign: HUMANIZE, name: 'Vermenschlichen', does: 'Claude schreibt seine letzte Antwort um, damit sie nicht nach KI klingt.', command: '/leitstand:vermenschlichen' },
       { sign: GRILL, name: 'Grill mich', does: 'Claude löchert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
       { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint im Fenster Selbstkritik.', command: '/leitstand:selbstkritik' },
-      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code (ein mitgelieferter Ablauf für Claude) prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', command: '/leitstand:sauberer-code' },
+      { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code aus dem Mod clean-code (ein mitgelieferter Ablauf für Claude), ohne den Mod der ältere Skill clean-code, prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', command: '/leitstand:sauberer-code' },
+      { sign: SKILL_MENU, name: 'Skill-Menü', does: 'Öffnet ein Fenster mit allen installierten Skills; wähle einen, er startet sofort.', command: '/leitstand:skill-menue' },
       { sign: FILETREE, name: 'Dateien', does: 'Öffnet das Fenster Dateien: die Dateien des Projekts als Baum.', command: '/leitstand:dateien' },
       {
         sign: REMOTE,
@@ -1891,6 +1895,24 @@ export const appPlanAnswer = (plan: AppPlan | null, isNew: boolean): string => {
   return plan.items.every(one => one.status === 'completed') ? `Plan updated: all ${count} steps are completed.` : `Plan updated (${count} steps).`
 }
 
+/**
+ * Hands the kept list to the app, once per change: at wrap_up, or before a change the app gets itself, so it never lands
+ * on the app's older list. Throws nothing: when the app refuses, update_plan goes to it unchanged from then on.
+ */
+const handAppPlan = async ($: $): Promise<void> => {
+  const plan = appPlan
+  if (plan === null || plan.isHandedOver) return
+  appPlan = { ...plan, isHandedOver: true }
+  try {
+    const handed = await $.mcp.call(APP_SERVER, 'update_plan', { items: plan.items, scope: plan.scope ?? 'continuation' })
+    if (handed.isError) throw new Error(handed.content.map(block => block.text ?? '').join(' ') || 'isError')
+  } catch (failed) {
+    // The app keeps no list then: from now on Claude's lists go to it as they are, shown twice rather than lost.
+    isAppPlanBroken = true
+    $.ui.log(`leitstand: handing the plan to the app failed: ${failed instanceof Error ? failed.message : String(failed)}`, { to: 'debug' })
+  }
+}
+
 /** No terminal, app or phone draws this session (a plain claude -p run): nobody could press Start. */
 const hasNoSurface = async ($: $): Promise<boolean> => (await $.session.surfaces().catch(() => ['?'])).length === 0
 
@@ -2011,14 +2033,19 @@ const openFiletree = async ($: $) => {
   await $.ui.open({ id: DATEIEN_FENSTER, title, focus: true })
 }
 
+// The clean-code skill: the one of the mod clean-code first, else the older personal skill of that name.
+const CLEAN_CODE_NAMES = ['clean-code:clean-code', 'clean-code']
+
 /** Clean code: the clean-code skill (functions, names, nesting, error handling), run as if typed. */
-const runCleanCode = ($: $) => runCommand($, 'clean-code', ['clean-code'])
+const runCleanCode = ($: $) => runCommand($, 'clean-code', CLEAN_CODE_NAMES)
 
 /**
  * Selbstkritik: its part (hooks/reflect) answers a press of 🪞 itself and starts it at once. This runs only if that
  * part failed: /selbstkritik waits in the prompt box.
  */
 const runReflect = ($: $) => void $.prompt.fill({ text: '/selbstkritik' }).catch(() => undefined)
+// The skill menu's press is answered by the part's ui.press hook; should that fail, the command waits in the prompt.
+const runSkillMenu = ($: $) => void $.prompt.fill({ text: '/skill-menue' }).catch(() => undefined)
 
 // Autopilot keeps its run in Leitstand's own state since it became a part of it: the run while there is one, null
 // once it is ended. Its key still says Schicht, from the days as the Nachtschicht.
@@ -2881,7 +2908,7 @@ const befehlAusfuehren = async ($: $, name: string, args: string, isPhone: boole
     case 'leitstand:ausfragen':
       return ausfragen($, args, isPhone)
     case 'leitstand:sauberer-code': {
-      const answer = skillAntwort('clean-code', await skillLage($, ['clean-code']), isPhone, 'clean-code startet.')
+      const answer = skillAntwort('clean-code', await skillLage($, CLEAN_CODE_NAMES), isPhone, 'clean-code startet.')
       if (answer.run) danach($, () => runCleanCode($))
       return answer.text
     }
@@ -3751,7 +3778,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
 
     if (tool === PLAN_TOOL) {
       const input = e as unknown as { steps?: unknown; sizes?: unknown; nurLesen?: unknown }
-      const steps = (Array.isArray(input.steps) ? input.steps : []).map(one => cleanName(one)).slice(0, 8)
+      const rawSteps = (Array.isArray(input.steps) ? input.steps : []).slice(0, 8)
+      const steps = rawSteps.map(one => cleanName(one))
+      // Names cut short are named back to Claude, so its answer and its reports use them as the band shows them.
+      const cutSteps = steps.filter((_, at) => isCutName(rawSteps[at]))
+      const cutNote = cutSteps.length === 0 ? '' : ` Gekürzt auf ${MAX_NAME} Zeichen: ${cutSteps.map(one => `"${one}"`).join(', ')}.`
       const sizes = Array.isArray(input.sizes) ? input.sizes : []
       const isReadOnly = input.nurLesen === true
       if (steps.length === 0) {
@@ -3796,13 +3827,14 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         return {
           result:
             `${steps.length} Schritte geplant, nur lesen: Der Plan startet ohne Freigabe. Anlegen, ändern, löschen oder verschicken ` +
-            'gehört nicht dazu; brauchst du das, leg mit plan_steps einen neuen Plan ohne nurLesen an, der auf die Freigabe wartet.',
+            'gehört nicht dazu; brauchst du das, leg mit plan_steps einen neuen Plan ohne nurLesen an, der auf die Freigabe wartet.' +
+            cutNote,
         }
       }
       if (await holdForApproval($)) {
         return {
           result:
-            `${steps.length} Schritte geplant. Die Person gibt Pläne frei, bevor die Arbeit beginnt: Hör jetzt auf und warte auf ihre Antwort. ` +
+            `${steps.length} Schritte geplant.${cutNote} Die Person gibt Pläne frei, bevor die Arbeit beginnt: Hör jetzt auf und warte auf ihre Antwort. ` +
             'Nutze noch keine anderen Tools. Wünscht sie Änderungen, leg den neuen Plan mit plan_steps an. ' +
             // On the phone (Remote Control) the band with the plan and Start does not show: the answer carries both.
             `Nenne in deiner Antwort die Schritte nummeriert (${steps.map((one, at) => `${at + 1}. ${one}`).join('; ')}) und schließ mit dem Satz: ` +
@@ -3811,7 +3843,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
         }
       }
 
-      return { result: `${steps.length} Schritte geplant. Der erste hat begonnen.` }
+      return { result: `${steps.length} Schritte geplant. Der erste hat begonnen.${cutNote}` }
     }
 
     if (tool === PROGRESS_TOOL) {
@@ -4063,13 +4095,21 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   // The desktop app draws Claude's update_plan as a list in the chat, the band draws the same plan: while the band is
   // in view it alone shows it. The call is answered here, as the app would, and the list kept until wrap_up hands it on.
   on('tool.call', { tool: APP_PLAN_TOOL }, async ($, e, next) => {
+    // Only Claude's own calls: another plugin's goes to the app as it is, and so does this mod's own $.mcp.call from
+    // handAppPlan, which the engine also sends through these hooks.
+    if (next.origin.plugin !== 'engine') return next(e)
     const input = e as unknown as Record<string, unknown>
     const isNew = Array.isArray(input.items)
-    // A helper's call is the app's to refuse; with no band in view, or once handing on failed, the app shows the list.
-    // So does a change to a list the Leitstand never kept (one from before a reload): the app holds it.
-    if (e.agentId !== undefined || isAppPlanBroken || !(await drawsBand($)) || (!isNew && appPlan === null)) {
+    // A helper's call is the app's to refuse.
+    if (e.agentId !== undefined) return next(e)
+    // With no band in view, or once handing on failed, the app shows the list. So does a change to a list the Leitstand
+    // never kept (one from before a reload): the app holds it.
+    if (isAppPlanBroken || !(await drawsBand($)) || (!isNew && appPlan === null)) {
+      // A change would land on the app's older list: it first gets the kept one, unless it has that already. A new
+      // list replaces the app's anyway.
+      if (!isNew) await handAppPlan($)
       // From here the app's list is the one that counts.
-      if (e.agentId === undefined) appPlan = null
+      appPlan = null
       return next(e)
     }
     appPlan = applyAppPlan(appPlan, input)
@@ -4077,21 +4117,10 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
   }).catch(($, e, next) => next(e))
 
   // At the end of the turn the app gets the kept list once, before its box checks it off: it then stays in the chat.
-  // A plugin's $.mcp.call is a dispatch of its own (`mcp.call`), seen by the hooks above it: this mod's tool.call hooks
-  // never see it, and nothing comes back in here.
+  // The engine sends a plugin's $.mcp.call through the tool.call hooks too, leaving out only the hook that made it: the
+  // update_plan hook above sees the hand-over and lets it pass, as it takes the engine's own calls alone.
   on('tool.call', { tool: APP_WRAP_TOOL }, async ($, e, next) => {
-    const plan = appPlan
-    if (e.agentId === undefined && plan !== null && !plan.isHandedOver) {
-      appPlan = { ...plan, isHandedOver: true }
-      try {
-        const handed = await $.mcp.call(APP_SERVER, 'update_plan', { items: plan.items, scope: plan.scope ?? 'continuation' })
-        if (handed.isError) throw new Error(handed.content.map(block => block.text ?? '').join(' ') || 'isError')
-      } catch (failed) {
-        // The app keeps no list then: from now on Claude's lists go to it as they are, shown twice rather than lost.
-        isAppPlanBroken = true
-        $.ui.log(`leitstand: handing the plan to the app failed: ${failed instanceof Error ? failed.message : String(failed)}`, { to: 'debug' })
-      }
-    }
+    if (e.agentId === undefined) await handAppPlan($)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -5437,6 +5466,13 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       ) : (
         terminalSign('cleancode', CLEAN_CODE, () => void runCleanCode($).catch(() => undefined))
       )
+    // The puzzle piece right behind the broom: the skill menu, whose pane the part skills/teil.tsx opens on the press.
+    const skillMenuItem =
+      !isEnabled ? null : vector ? (
+        <Button key="skillmenue" variant="secondary" label={SKILL_MENU} onPress={() => runSkillMenu($)} />
+      ) : (
+        terminalSign('skillmenue', SKILL_MENU, () => runSkillMenu($))
+      )
     // The mirror right behind Grill mich: the reflect mod's command, likewise not waited for.
     const reflectItem =
       !isEnabled ? null : vector ? (
@@ -5491,7 +5527,7 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const textGap = columns < 44 ? 1 : 2
     const leftGroups = [
       { bar: '', gap: 1, items: [workModeItem, nightShiftItem] },
-      { bar: 'sep-autopilot', gap: 1, items: [...(skillItems?.beside ?? []), grillItem, reflectItem, cleanItem] },
+      { bar: 'sep-autopilot', gap: 1, items: [...(skillItems?.beside ?? []), grillItem, reflectItem, cleanItem, skillMenuItem] },
       { bar: 'sep-files', gap: 1, items: skillItems?.files ?? [] },
       { bar: 'sep-skills', gap: 1, items: skillItems?.past ?? [] },
       { bar: 'sep-places', gap: textGap, items: places },

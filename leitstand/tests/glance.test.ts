@@ -5,6 +5,7 @@ import type { GlanceHistoryEntry, GlanceOutcome } from '../types'
 
 import { GEMELDET, ohneVorsatz, activityOf, asksQuestion, carryTokens, questionOf, isButtonsOnly, isContinueWords, liftButtons, isGermanText, isLatinText, isStartWords, cleanName, sentenceCase, localTimes, resetTime, fit, formatCost, formatTokens, headerDetails, ownWords, takeOut, wholePieces, prettyModel, tokenNote } from '../hooks/glance'
 import { envValue, extractSecrets, findSecrets, gitignoreWithEnv, maskPrivate, mergeEnv, parseEnv, removeSecrets, replaceSecrets } from '../hooks/privacy'
+import { applyProgress, progressName, task as planTask, todosToTasks, withoutStatusLines } from '../hooks/logic'
 import { FACTORY_SETTINGS, endsWithContinue, handoffFacts, LEITSTAND_BEFEHLE, LEITSTAND_GRUNDBEFEHL, LEITSTAND_KURZFORMEN, STANDARD_WEG, TEIL_BEFEHLE, befehlsHilfe, einstellungenAlsText, startsAtOnce, OTHER_WAITING_MS, OTHER_WORKING_MS, SETTINGS_DAYS, SETTINGS_PREFIX, askedMergeSha, chatSettings, defaultSettings, OLD_VIEW, storedView, ownValues, staleSettingsKeys, isMcpMergeAction, otherChats, otherChatsWords, runsPowerShellMerge, runsPrMerge, offersChoice, saysDo, shellPieces, staleResumeKeys, toggled, unsafeMerge, unsafePowerShellMerge, widthOf, writesFiles, appButtonRows, appCells } from '../hooks/logic'
 import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, historyDay, historyKey, longDay, mergedEntries, paceFromHistory, sharedDayKeys, shiftDay, teamReport, weekSummary } from '../hooks/history'
 import { inBerlin } from '../hooks/berlin'
@@ -215,8 +216,8 @@ describe('clean names', () => {
     const long = 'Rewrite the welcome message so that it sounds warmer and friendlier to new visitors'
     const name = cleanName(long)
     expect(name.length <= 40).toBe(true)
-    expect(name.endsWith('…')).toBe(true)
-    expect(long.startsWith(name.slice(0, -1))).toBe(true)
+    expect(name).toBe('Rewrite the welcome message so that...')
+    expect(long.startsWith(name.slice(0, -3))).toBe(true)
   })
 
   test('nothing left becomes a friendly placeholder', () => {
@@ -1976,8 +1977,9 @@ test('a long plan says how many steps are out of view', async ($, on) => {
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'] })
   await callTool($, { tool: PROGRESS, task: 'Three', percent: 100 })
-  // Five rows: the line over the band, the header, two for the steps and the row of buttons.
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 5 }, surface: 'terminal' })
+  // Five rows: the line over the band, the header, two for the steps and the row of buttons. 90 columns: at 80 the row
+  // of signs wraps since the skill menu joined it.
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 5, bodyColumns: 90 }, surface: 'terminal' })
   const shown = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await ui.unmount()
   expect(shown).toContain('… 3 davor · 4 weitere Schritte')
@@ -2104,7 +2106,7 @@ const APP_ROW = {
       type: 'Box',
       props: { flexDirection: 'row', columnGap: 0.5, rowGap: 1.2, flexWrap: 'wrap' },
       children: [
-        ...['\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}', '\u{1F170}️', '|', '\u{1F4D6}', '\u{1F9CD}', '♨️', '\u{1FA9E}', '\u{1F9F9}', '|', '\u{1F4C2}', '|', '\u{1F512}', '\u{1F6E1}️', '|', 'Plan', 'Verlauf'].map(label =>
+        ...['\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}', '\u{1F170}️', '|', '\u{1F4D6}', '\u{1F9CD}', '♨️', '\u{1FA9E}', '\u{1F9F9}', '\u{1F9E9}', '|', '\u{1F4C2}', '|', '\u{1F512}', '\u{1F6E1}️', '|', 'Plan', 'Verlauf'].map(label =>
           label === '|' ? { type: 'Text', props: { dimColor: true }, children: ['|'] } : { type: 'Button', props: { label, variant: 'secondary' } },
         ),
       ],
@@ -2113,15 +2115,16 @@ const APP_ROW = {
   ],
 }
 
-test('the desktop row of buttons is counted as the app draws it: one line at 80 columns, where band.ts counts three', () => {
+test('the desktop row of buttons is counted as the app draws it: one line at 81 columns, where band.ts counts three', () => {
   // A sign button 1 + 2.5 + 1 ch, the family one glyph; Plan 2 + 3.2, Verlauf 2 + 5.6, a bar 0.8, half a cell between:
-  // the left 68.5 ch, with Pause (6) and the gap 75.5.
+  // the left 73.5 ch (with the skill menu), with Pause (6) and the gap 80.5: at 80 columns Pause wraps.
   expect(appCells('\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}')).toBe(2.5)
   expect(appCells('♨️')).toBe(2.5)
   expect(appCells('Verlauf')).toBe(5.6)
   expect(zeilenVon(APP_ROW as never, 'desktop', 80)).toBe(4.8)
   // Over the row 0.6, a line of buttons 1, between two lines 0.6.
-  expect(appButtonRows(APP_ROW, 80)).toBe(1.6)
+  expect(appButtonRows(APP_ROW, 81)).toBe(1.6)
+  expect(appButtonRows(APP_ROW, 80)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 75)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 60)).toBe(4.8)
 })
@@ -2130,7 +2133,8 @@ describe('Detailliert im engen Band: Schritte vor Helfern, der Rest in einer Zei
   const EIGHT = ['Finde die Ursache', 'Baue die Seite', 'Schreib die Texte', 'Prüfe die Änderung', 'Schreib Tests', 'Lass Tests laufen', 'Prüfe die Doku', 'Melde das Ergebnis']
   // Statistik a line under its rule, Nächste Schritte three lines (one, small), the summary its head line.
   const USUAL = { statistik: { voll: 1.75, klein: 1.75 }, 'naechste-schritte': { voll: 4.95, klein: 1.75 }, zusammenfassung: { voll: 1.75, klein: 1.75 } }
-  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 80, scroll: { offset: 0, bodyRows } } })
+  // 81 columns: at 80 the row of buttons wraps before Pause since the skill menu joined it.
+  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 81, scroll: { offset: 0, bodyRows } } })
 
   /** Gruppenarbeit in Detailliert with Autopilot on: `steps` planned and started, four helpers at work on the first. */
   const atWork = async ($: Engine, on: On, steps: string[], heights: Record<string, { voll: number; klein: number }>) => {
@@ -6614,15 +6618,15 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(state.toasts).toEqual([])
   })
 
-  test('hinter dem Autopiloten stehen Kurzantworten, Vermenschlichen, Grill mich, Selbstkritik, Sauberer Code, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
+  test('hinter dem Autopiloten stehen Kurzantworten, Vermenschlichen, Grill mich, Selbstkritik, Sauberer Code, Skill-Menü, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
     await skillWorld($, on)
     const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
-    const order = ['workmode', 'nightshift', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
+    const order = ['workmode', 'nightshift', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
     expect(order.every(index => index >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const label of ['\u{1F9F9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4D6}', '\u{1F4C2}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
+    for (const label of ['\u{1F9F9}', '\u{1F9E9}', '\u{1FA9E}', '\u{1F9CD}', '\u{1F4D6}', '\u{1F4C2}', '\u{1F170}\uFE0F', '\u{1F512}', '\u{1F6E1}\uFE0F']) expect(row).toContain(`"label":"${label}"`)
     // Review and Usage are gone.
     for (const key of ['review', 'usage']) expect(row).not.toContain(`"key":"${key}"`)
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
@@ -6631,7 +6635,7 @@ describe('Arbeitsweise und Grill mich', () => {
       const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
       const keys = (await ui.findAll({ type: 'Button' })).map(one => one.props.key)
       await ui.unmount()
-      for (const key of ['cleancode', 'reflect', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).toContain(key)
+      for (const key of ['cleancode', 'skillmenue', 'reflect', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).toContain(key)
       for (const key of ['review', 'usage']) expect(keys).not.toContain(key)
     }
   })
@@ -6646,9 +6650,9 @@ describe('Arbeitsweise und Grill mich', () => {
     return left.map(kid => (kid.type === 'Text' ? `${kid.props.dimColor === true ? 'dim' : ''}${(kid.children ?? []).join('')}` : String(kid.props.key)))
   }
 
-  test('Striche trennen die Gruppen unten links: hinter dem Autopiloten, hinter Sauberer Code, hinter Dateien und vor Plan, auch im Terminal', async ($, on) => {
+  test('Striche trennen die Gruppen unten links: hinter dem Autopiloten, hinter dem Skill-Menü, hinter Dateien und vor Plan, auch im Terminal', async ($, on) => {
     await skillWorld($, on)
-    const groups = ['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history']
+    const groups = ['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'plan', 'history']
     expect(await leftRow($)).toEqual(groups)
     // In a wide terminal on one line, as in the app; narrower, the groups wrap at a bar, which then goes.
     expect((await terminalRow($, 140)).flat()).toEqual(groups)
@@ -6748,18 +6752,18 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('ohne Plan steht der Strich vor Verlauf; nie zwei nebeneinander, nie einer am Rand', async ($, on) => {
     world(on)
-    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
+    expect(await leftRow($)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue', 'dim|', 'filetree', 'dim|', 'privacy', 'vault', 'dim|', 'history'])
   })
 
   test('Kurzantworten (📖) steht direkt hinter dem Strich hinter dem Autopiloten und vor Vermenschlichen', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
-    const chain = ['adhd', 'humanize', 'grill', 'reflect', 'cleancode']
+    const chain = ['adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue']
     for (let i = 1; i < chain.length; i++) expect(row.indexOf(chain[i]!)).toBe(row.indexOf(chain[i - 1]!) + 1)
     expect(row[row.indexOf('adhd') - 1]).toBe('dim|')
     expect(row[row.indexOf('nightshift') + 1]).toBe('dim|')
-    expect(row[row.indexOf('cleancode') + 1]).toBe('dim|')
-    expect(row[row.indexOf('cleancode') + 2]).toBe('filetree')
+    expect(row[row.indexOf('skillmenue') + 1]).toBe('dim|')
+    expect(row[row.indexOf('skillmenue') + 2]).toBe('filetree')
   })
 
   test('in der App steht genau ein Strich zwischen 🅰️ und dem Knopf dahinter; keiner am Rand, nie zwei nebeneinander', async ($, on) => {
@@ -6781,11 +6785,11 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(off.at(-1)).not.toBe('dim|')
   })
 
-  test('Dateien (📂) steht hinter 🧹 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
+  test('Dateien (📂) steht hinter 🧩 allein zwischen zwei Strichen, schlicht, als Öffner', async ($, on) => {
     await skillWorld($, on)
     const row = await leftRow($)
     const at = row.indexOf('filetree')
-    expect(row.slice(at - 2, at + 2)).toEqual(['cleancode', 'dim|', 'filetree', 'dim|'])
+    expect(row.slice(at - 2, at + 2)).toEqual(['skillmenue', 'dim|', 'filetree', 'dim|'])
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'filetree')
     await ui.unmount()
@@ -6793,7 +6797,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(button?.props.variant).toBe('secondary')
   })
 
-  test('ein Druck auf 🧹 hinter 🪞 startet den Skill clean-code; fehlt er, sagt der Leitstand das', async ($, on) => {
+  test('ein Druck auf 🧹 hinter 🪞 startet den Skill clean-code; fehlt er, steht der Skill des Mods im Eingabefeld', async ($, on) => {
     const { state, press } = await skillWorld($, on)
     state.commands = [skill('clean-code')]
     await press('cleancode')
@@ -6802,7 +6806,20 @@ describe('Arbeitsweise und Grill mich', () => {
     state.commands = []
     await press('cleancode')
     expect(state.runs).toEqual([])
-    expect(state.toasts).toContain('clean-code ist in dieser Sitzung nicht verfügbar.')
+    // As with Kurzfassen: the app often knows a mod's skill the list leaves out, so its full name waits for Enter.
+    expect(state.filled).toEqual(['/clean-code:clean-code'])
+    expect(state.toasts).toContain('clean-code:clean-code steht im Eingabefeld: Drück Enter, um zu starten.')
+  })
+
+  test('🧹 startet den Skill clean-code:clean-code aus dem Mod clean-code, auch neben dem älteren Skill clean-code', async ($, on) => {
+    const { state, press } = await skillWorld($, on)
+    state.commands = [skill('clean-code:clean-code')]
+    await press('cleancode', 'terminal')
+    expect(state.runs).toEqual([{ command: 'clean-code:clean-code', args: undefined }])
+    state.runs.length = 0
+    state.commands = [skill('clean-code'), skill('clean-code:clean-code')]
+    await press('cleancode', 'terminal')
+    expect(state.runs).toEqual([{ command: 'clean-code:clean-code', args: undefined }])
   })
 
   test('ein Druck auf 🪞 direkt hinter ♨️ startet die Selbstkritik sofort, ohne Befehl und ohne Prompt', async ($, on) => {
@@ -7265,7 +7282,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await endTurn($)
     expect(await remoteButton($)).toEqual({ variant: 'primary', label: '\u{1F6DC}' })
     const row = await leftRow($)
-    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'remote'])
+    expect(row.slice(0, 13)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue', 'dim|', 'filetree', 'dim|', 'remote'])
     expect(row.filter(one => one === 'dim|')).toHaveLength(4)
   })
 
@@ -7287,7 +7304,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(await remoteButton($)).toBeNull()
     const row = await leftRow($)
     expect(row).not.toContain('remote')
-    expect(row.slice(0, 12)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'dim|', 'filetree', 'dim|', 'privacy'])
+    expect(row.slice(0, 13)).toEqual(['workmode', 'nightshift', 'dim|', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue', 'dim|', 'filetree', 'dim|', 'privacy'])
     expect(row[0]).not.toBe('dim|')
     expect(row.at(-1)).not.toBe('dim|')
     expect(row.some((one, at) => one === 'dim|' && row[at + 1] === 'dim|')).toBe(false)
@@ -9968,6 +9985,27 @@ describe('Eigene Befehle /leitstand-…', () => {
     expect(sent).toEqual(['Kurzfassen aus'])
   })
 
+  test('/leitstand:sauberer-code startet clean-code:clean-code aus dem Mod clean-code, ohne den Mod den älteren Skill clean-code', READS, async ($, on) => {
+    const clock = world(on)
+    const runs: string[] = []
+    const skill = (name: string) => ({ name, description: name, source: 'plugin' })
+    let commands = [skill('clean-code:clean-code')]
+    on('command.list', () => ({ value: commands }) as never)
+    on('command.run', (_, e) => {
+      runs.push(e.command)
+      return { text: '' }
+    })
+    expect(await run($, 'leitstand:sauberer-code')).toBe('clean-code startet.')
+    await settle(clock)
+    commands = [skill('clean-code'), skill('clean-code:clean-code')]
+    expect(await run($, 'leitstand:sauberer-code')).toBe('clean-code startet.')
+    await settle(clock)
+    commands = [skill('clean-code')]
+    expect(await run($, 'leitstand:sauberer-code')).toBe('clean-code startet.')
+    await settle(clock)
+    expect(runs).toEqual(['clean-code:clean-code', 'clean-code:clean-code', 'clean-code'])
+  })
+
   test('Remote Control an und aus wie 🛜; ohne Remote Control sagt der Befehl, dass es hier nicht geht', async ($, on) => {
     world(on)
     let app: 'on' | 'off' | null = null
@@ -10791,6 +10829,23 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
     { content: 'Prüf die Seite', status: 'pending' },
   ]
 
+  /**
+   * The engine's way with a plugin's $.mcp.call, played by a mod of its own: the call runs through the tool.call hooks
+   * as that tool's call, raised by a plugin (not the engine), and what the tools beneath get is what the server gets.
+   * `viaMcp` tells the tools beneath it came this way.
+   */
+  const MCP_BRIDGE = {
+    name: 'mcp-bruecke',
+    register(on: On) {
+      on('mcp.call', async ($, e, next) => {
+        if (e.server !== 'ccd_turn') return next(e)
+        const ran = (await $.tool.call({ tool: `mcp__${e.server}__${e.tool}`, ...e.args, viaMcp: true } as never)) as { deny?: string; result?: unknown }
+        return { value: { content: [{ type: 'text', text: String(ran.deny ?? ran.result ?? '') }], isError: ran.deny !== undefined } } as never
+      })
+    },
+  }
+  const BRIDGED = { plugins: [MCP_BRIDGE] }
+
   /** As world(), on these surfaces: what reaches the tools beneath the Leitstand, and what it hands the app's server. */
   function appWorld(on: On, surfaces: string[] = ['desktop']) {
     const seen = {
@@ -10800,26 +10855,33 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
       isRefusing: false,
       /** Both, in the order they came. */
       order: [] as string[],
+      /** What draws the session; a test empties it to take the band away. */
+      surfaces: [...surfaces],
     }
-    world(on, ((_: unknown, e: { tool: string }) => {
+    world(on, ((_: unknown, e: { tool: string } & Record<string, unknown>) => {
+      if (e.viaMcp === true) {
+        if (seen.isRefusing) return { deny: 'MCP server ccd_turn is not connected' }
+        const { tool, viaMcp: _via, tool_use_id: _id, ...args } = e
+        const name = tool.replace(/^mcp__ccd_turn__/, '')
+        seen.handed.push({ server: 'ccd_turn', tool: name, args })
+        seen.order.push(`ccd_turn/${name}`)
+        return { result: 'Plan shown (3 steps).' }
+      }
       seen.floor.push(e.tool)
       seen.order.push(e.tool)
       return { result: 'Von der App.' }
     }) as unknown as () => unknown)
-    on('session.surfaces', () => ({ value: surfaces }) as never)
+    on('session.surfaces', () => ({ value: [...seen.surfaces] }) as never)
+    // Remote Control's server is not there; only the app's task list answers, by the bridge above.
     on('mcp.call', (_, e) => {
-      // Remote Control's server is not there; only the app's task list answers.
-      if (e.server !== 'ccd_turn' || seen.isRefusing) throw new Error(`MCP server ${e.server} is not connected`)
-      seen.handed.push({ server: e.server, tool: e.tool, args: e.args })
-      seen.order.push(`${e.server}/${e.tool}`)
-      return { value: { content: [{ type: 'text', text: 'Plan shown (3 steps).' }], isError: false } } as never
+      throw new Error(`MCP server ${e.server} is not connected`)
     })
     return seen
   }
   const answer = async ($: Engine, input: Record<string, unknown>) => String((await callTool($, { tool: APP_PLAN, ...input })).result)
 
   for (const surface of ['desktop', 'terminal']) {
-    test(`mit dem Band (${surface}) beantwortet der Leitstand update_plan selbst und hält die Liste nach`, async ($, on) => {
+    test(`mit dem Band (${surface}) beantwortet der Leitstand update_plan selbst und hält die Liste nach`, BRIDGED, async ($, on) => {
       const seen = appWorld(on, [surface])
       await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
       expect(await answer($, { items: ITEMS, scope: 'first_task' })).toBe('Plan shown (3 steps).')
@@ -10830,7 +10892,7 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
     })
   }
 
-  test('bei wrap_up geht die nachgehaltene Liste genau einmal an die App, vor dem Kasten', async ($, on) => {
+  test('bei wrap_up geht die nachgehaltene Liste genau einmal an die App, vor dem Kasten', BRIDGED, async ($, on) => {
     const seen = appWorld(on)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await answer($, { items: ITEMS, scope: 'first_task' })
@@ -10864,7 +10926,7 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
   })
 
   for (const [name, surfaces] of [['nur Handy', ['mobile']], ['ohne Oberfläche', []]] as const) {
-    test(`ohne Band (${name}) geht update_plan unverändert an die App`, async ($, on) => {
+    test(`ohne Band (${name}) geht update_plan unverändert an die App`, BRIDGED, async ($, on) => {
       const seen = appWorld(on, [...surfaces])
       await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
       expect(await answer($, { items: ITEMS, scope: 'first_task' })).toBe('Von der App.')
@@ -10874,7 +10936,7 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
     })
   }
 
-  test('mit dem Leitstand aus geht update_plan an die App, ebenso der Aufruf eines Helfers', async ($, on) => {
+  test('mit dem Leitstand aus geht update_plan an die App, ebenso der Aufruf eines Helfers', BRIDGED, async ($, on) => {
     const seen = appWorld(on)
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: APP_PLAN, items: ITEMS, scope: 'first_task', agentId: 'w1' })
@@ -10886,7 +10948,7 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
     expect(seen.handed).toEqual([])
   })
 
-  test('nimmt die App die Liste nicht an, geht update_plan danach wieder unverändert an sie', async ($, on) => {
+  test('nimmt die App die Liste nicht an, geht update_plan danach wieder unverändert an sie', BRIDGED, async ($, on) => {
     const seen = appWorld(on)
     seen.isRefusing = true
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
@@ -10896,6 +10958,88 @@ describe('die Liste der App (update_plan) neben dem Band', () => {
     expect(seen.floor).toEqual([APP_WRAP])
     expect(await answer($, { items: ITEMS, scope: 'continuation' })).toBe('Von der App.')
     expect(seen.floor).toEqual([APP_WRAP, APP_PLAN])
+  })
+
+  for (const [name, change] of [
+    ['advance', { advance: true }],
+    ['done und start', { done: [1], start: 2 }],
+  ] as const) {
+    test(`fällt das Band weg, bekommt die App vor einem ${name} erst die nachgehaltene Liste`, BRIDGED, async ($, on) => {
+      const seen = appWorld(on)
+      await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+      await answer($, { items: ITEMS, scope: 'first_task' })
+      seen.surfaces = []
+      expect(await answer($, change)).toBe('Von der App.')
+      expect(seen.order).toEqual(['ccd_turn/update_plan', APP_PLAN])
+      expect(seen.handed[0]!.args).toEqual({ items: ITEMS, scope: 'first_task' })
+      // From here the app keeps the list: nothing more is handed on, not at the next change, not at wrap_up.
+      await answer($, { advance: true })
+      await callTool($, { tool: APP_WRAP, recap: 'Fertig.' })
+      expect(seen.order).toEqual(['ccd_turn/update_plan', APP_PLAN, APP_PLAN, APP_WRAP])
+    })
+  }
+
+  test('ohne Band geht eine neue Liste ohne Weitergabe an die App, sie ersetzt die alte', BRIDGED, async ($, on) => {
+    const seen = appWorld(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await answer($, { items: ITEMS, scope: 'first_task' })
+    seen.surfaces = []
+    expect(await answer($, { items: ITEMS, scope: 'continuation' })).toBe('Von der App.')
+    expect(seen.order).toEqual([APP_PLAN])
+    expect(seen.handed).toEqual([])
+  })
+
+  test('nach gelungener Weitergabe und dann fehlendem Band geht dieselbe Liste kein zweites Mal an die App', BRIDGED, async ($, on) => {
+    const seen = appWorld(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await answer($, { items: ITEMS, scope: 'first_task' })
+    await callTool($, { tool: APP_WRAP, recap: 'Erster Schritt steht.' })
+    expect(seen.handed).toHaveLength(1)
+    seen.surfaces = []
+    await answer($, { advance: true })
+    expect(seen.handed).toHaveLength(1)
+    expect(seen.order).toEqual(['ccd_turn/update_plan', APP_WRAP, APP_PLAN])
+  })
+
+  test('nach der Weitergabe geändert, bekommt die App den neuen Stand, bevor das Band wegfällt und ein advance kommt', BRIDGED, async ($, on) => {
+    const seen = appWorld(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await answer($, { items: ITEMS, scope: 'first_task' })
+    await callTool($, { tool: APP_WRAP, recap: 'Erster Schritt steht.' })
+    await answer($, { advance: true })
+    seen.surfaces = []
+    await answer($, { advance: true })
+    expect(seen.handed).toHaveLength(2)
+    expect((seen.handed[1]!.args.items as { status: string }[]).map(one => one.status)).toEqual(['completed', 'in_progress', 'pending'])
+    expect(seen.order).toEqual(['ccd_turn/update_plan', APP_WRAP, 'ccd_turn/update_plan', APP_PLAN])
+  })
+
+  /** Another mod that sends update_plan itself: /planen calls the tool with a list of one step. */
+  const PLANNER = {
+    name: 'planer',
+    register(on: On) {
+      on('command.run', { command: 'planen' }, async $ => {
+        const ran = (await $.tool.call({
+          tool: 'mcp__ccd_turn__update_plan',
+          items: [{ content: 'Fremder Schritt', status: 'pending' }],
+          scope: 'continuation',
+        } as never)) as { result?: unknown }
+        return { text: String(ran.result) }
+      })
+    },
+  }
+
+  test('mit dem Band gehen der Aufruf eines Helfers und der eines anderen Mods unverändert an die App', { plugins: [MCP_BRIDGE, PLANNER] }, async ($, on) => {
+    const seen = appWorld(on)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    await answer($, { items: ITEMS, scope: 'first_task' })
+    await callTool($, { tool: APP_PLAN, advance: true, agentId: 'w1' })
+    expect(seen.floor).toEqual([APP_PLAN])
+    expect(String((await $.command.run({ command: 'planen', args: '' } as never)).text)).toBe('Von der App.')
+    expect(seen.floor).toEqual([APP_PLAN, APP_PLAN])
+    // Claude's own list is still held, unchanged, and goes to the app at wrap_up.
+    await callTool($, { tool: APP_WRAP, recap: 'Fertig.' })
+    expect(seen.handed).toEqual([{ server: 'ccd_turn', tool: 'update_plan', args: { items: ITEMS, scope: 'first_task' } }])
   })
 })
 
@@ -11017,5 +11161,141 @@ describe('Autopilot, Zeitgeber, Berichte und Pause neben laufenden Helfern', () 
     await ui.press({ key: 'pause' })
     await ui.unmount()
     expect(aborted).toBe('t1')
+  })
+})
+
+describe('Frage vor einer Stand-Zeile, Startwort mit weiterer Bitte, gekürzte Schrittnamen', () => {
+  test('Stand-Zeilen am Ende einer Antwort zählen nicht: die Frage davor endet sie', () => {
+    const asked = 'Die Regel greift zu früh. Soll ich sie nachbessern?\n\nStand: Schritt 4 von 7.'
+    expect(withoutStatusLines(asked)).toBe('Die Regel greift zu früh. Soll ich sie nachbessern?')
+    expect(asksQuestion(asked)).toBe(true)
+    expect(offersChoice(asked)).toBe(true)
+    expect(questionOf(asked)).toBe('Soll ich sie nachbessern?')
+    expect(asksQuestion('Passt das so?\n**Stand:** 3 von 5 erledigt\n\n- Zwischenstand 2 Tests rot')).toBe(true)
+    expect(offersChoice('a) schlicht, b) mit Tabelle. Sag mir, welche du willst.\n> Status: wartet auf dich')).toBe(true)
+    // At most two, each one short; a status line that asks stays; nothing left: the answer as it is.
+    expect(asksQuestion('Passt das?\nStand: 1\nStand: 2\nStand: 3')).toBe(false)
+    expect(asksQuestion(`Passt das?\nStand: ${'x'.repeat(170)}`)).toBe(false)
+    expect(withoutStatusLines('Fertig.\nStand: alles erledigt, weiter?')).toBe('Fertig.\nStand: alles erledigt, weiter?')
+    expect(withoutStatusLines('Stand: Schritt 4 von 7.')).toBe('Stand: Schritt 4 von 7.')
+    expect(withoutStatusLines('Fertig.\nStandard bleibt aus.')).toBe('Fertig.\nStandard bleibt aus.')
+    expect(asksQuestion('Fertig.\nStand: Schritt 7 von 7.')).toBe(false)
+  })
+
+  test('"Antworte" mit einer Antwort in Anführungszeichen bietet eine Wahl an', () => {
+    expect(offersChoice('Der Plan steht. Antworte "ja" oder "nein".')).toBe(true)
+    expect(offersChoice('Wenn es passt, antworte mit „los“.')).toBe(true)
+    expect(offersChoice('Antworte mit »weiter«, sobald du so weit bist.')).toBe(true)
+    expect(offersChoice('Antworte "ja" oder "nein".\nStand: Schritt 2 von 3.')).toBe(true)
+    expect(offersChoice('Ich antworte morgen.')).toBe(false)
+  })
+
+  test('nach einer Frage mit Stand-Zeile sagt das Band Braucht dich und zeigt die Frage', async ($, on) => {
+    world(on)
+    await $.turn.start({ text: 'Which database?', turnId: 't1' })
+    await $.turn.complete({ answer: 'Postgres oder SQLite, welche nimmst du?\n\nStand: Schritt 2 von 5.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    const shown = (await texts($, 'terminal')).join('\n')
+    expect(shown).toContain('Braucht dich')
+    expect(shown).toContain('Postgres oder SQLite, welche nimmst du?')
+  })
+
+  test('mit Freigabe-Pflicht gibt eine Antwort auf die Frage vor der Stand-Zeile den Plan frei, den Claude dafür macht', async ($, on) => {
+    world(on)
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await answered($, 't1', 'Die Regel greift zu früh. Soll ich sie nachbessern?\n\nStand: Schritt 4 von 7.')
+    await $.turn.start({ text: 'ja, bessere die Regel nach, sie soll beim dritten Fehler greifen', turnId: 't2' })
+    await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+  })
+
+  test('ein Startwort vorn mit einer weiteren Bitte gibt frei, ein Vorbehalt danach nicht', () => {
+    const yes = [
+      'Los und schau dir auch die neue Version von Clean Code an und integriere diese',
+      'Okay, arbeite bitte alle Punkte ab',
+      'Passt. Danach noch die Doku',
+      'Einverstanden! Und denk an die Tests',
+      'Bitte los und gleich committen',
+      'Freigegeben, und schreib mir am Ende eine Zeile',
+    ]
+    const no = [
+      'Los, aber ändere vorher Schritt 2',
+      'Ja, warte noch kurz',
+      'Okay, erst die Tests',
+      'Los und nimm statt Postgres SQLite',
+      'Ok, und was kostet das?',
+      'Start, doch zuerst die Doku',
+      'Los, aber nicht die Tests',
+      'Lose Enden gibt es noch',
+      'Okay, und wenn es klappt, committen',
+    ]
+    expect(yes.filter(one => !saysDo(one))).toEqual([])
+    expect(no.filter(saysDo)).toEqual([])
+    expect(isStartWords('Los')).toBe(true)
+    expect(isStartWords('ja')).toBe(true)
+    expect(saysDo('ja')).toBe(true)
+  })
+
+  test('mit Freigabe-Pflicht gibt "Los und ..." den wartenden Plan frei', async ($, on) => {
+    await waitingThenSaid($, on, 'Los und schau dir auch die neue Version von Clean Code an und integriere diese')
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
+  })
+
+  test('mit Freigabe-Pflicht lässt "Los, aber ändere vorher Schritt 2" den Plan warten', async ($, on) => {
+    await waitingThenSaid($, on, 'Los, aber ändere vorher Schritt 2')
+    expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toContain('noch nicht freigegeben')
+  })
+
+  const LONG = 'Rewrite the welcome message so that it sounds warmer'
+  const CUT = 'Rewrite the welcome message so that...'
+
+  test('report_progress trifft einen gekürzten Schritt: voll genannt, gekürzt mit Punkten oder mit dem alten Auslassungszeichen', () => {
+    expect(cleanName(LONG)).toBe(CUT)
+    const plan = [planTask('Read the notes', 'done'), planTask(CUT, 'active'), planTask('Check it', 'upcoming')]
+    expect(progressName(plan, LONG)).toBe(CUT)
+    expect(progressName(plan, CUT)).toBe(CUT)
+    expect(progressName(plan, 'rewrite the welcome message so that it reads kinder')).toBe(CUT)
+    // A plan saved before, cut at another length and with the ellipsis.
+    const old = 'Rewrite the welcome message so that it…'
+    const saved = [planTask('Read the notes', 'done'), planTask(old, 'active'), planTask('Check it', 'upcoming')]
+    expect(progressName(saved, LONG)).toBe(old)
+    expect(progressName(saved, old)).toBe(old)
+    expect(progressName(saved, 'Read the notes')).toBe('Read the notes')
+    expect(applyProgress(saved, LONG, 100).map(one => [one.name, one.status])).toEqual([
+      ['Read the notes', 'done'],
+      [old, 'done'],
+      ['Check it', 'active'],
+    ])
+  })
+
+  test('passen zwei gekürzte Schritte zum selben Anfang, trifft der Stamm keinen', () => {
+    const twins = [planTask('Rewrite the welcome text…', 'active'), planTask('Rewrite the welcome...', 'upcoming')]
+    const said = 'Rewrite the welcome text for new visitors'
+    expect(progressName(twins, said)).toBe(cleanName(said))
+    expect(applyProgress(twins, said, 50)).toHaveLength(3)
+    // One of them alone fits.
+    expect(progressName([twins[0]!, planTask('Check it', 'upcoming')], said)).toBe('Rewrite the welcome text…')
+  })
+
+  test('die Aufgabenliste behält einen gekürzten Schritt, der voll wiederkommt', () => {
+    const old = planTask('Rewrite the welcome message so that it…', 'active', 'todo#0')
+    const next = todosToTasks([{ content: LONG, status: 'in_progress' }], [{ ...old, tokens: 7 }])
+    expect(next.map(one => [one.id, one.name, one.tokens])).toEqual([['todo#0', CUT, 7]])
+  })
+
+  test('plan_steps nennt Claude die gekürzten Namen', async ($, on) => {
+    world(on)
+    await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
+    const planned = await callTool($, { tool: PLAN, steps: ['Read your notes', LONG] } as never)
+    expect(planned.result).toBe(`2 Schritte geplant. Der erste hat begonnen. Gekürzt auf 40 Zeichen: "${CUT}".`)
+  })
+
+  test('ein wartender Plan mit gekürztem Namen: der Hinweis steht vorn, der Schlusssatz bleibt am Ende', async ($, on) => {
+    world(on)
+    await $.command.run({ command: 'leitstand', args: 'approve on' } as never)
+    await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
+    const planned = String((await callTool($, { tool: PLAN, steps: ['Lies die Notizen', LONG] })).result)
+    expect(planned.startsWith(`2 Schritte geplant. Gekürzt auf 40 Zeichen: "${CUT}". Die Person gibt Pläne frei`)).toBe(true)
+    expect(planned).toContain(`(1. Lies die Notizen; 2. ${CUT})`)
+    expect(planned.endsWith('was sich ändern soll.')).toBe(true)
   })
 })
