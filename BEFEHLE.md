@@ -74,7 +74,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:vermenschlichen` | Letzte Antwort natürlicher umschreiben |
 | `/leitstand:ausfragen [Thema]` | Grill mich: Claude löchert dich mit Fragen |
 | `/leitstand:sauberer-code` | Code prüfen lassen mit dem Skill clean-code |
-| `/leitstand:skill-menue` | Menü mit allen installierten Skills öffnen und einen starten |
+| `/leitstand:skill-menue` | Klappt die installierten Skills nach Kategorien auf; eine Wahl startet den Skill. |
 | `/leitstand:fernsteuerung-an` | Remote Control einschalten |
 | `/leitstand:fernsteuerung-aus` | Remote Control ausschalten |
 

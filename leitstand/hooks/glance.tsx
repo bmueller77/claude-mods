@@ -10,11 +10,14 @@ import type {
   GlancePhase,
   GlanceTask,
   GlanceUsage,
+  SkillKategorie,
 } from '../types'
 import { gemerkteAntwort, merkeAntwort } from './antwort'
 import { BAND_VERSION, bandBudget, plane, zeilenVon } from './band'
 import type { BandHoehe, BandHoehen, BandPlan } from './band'
 import { DATEIEN_FENSTER } from './filetree/befehle'
+import { KNOPF_SKILLS } from './skills/befehle'
+import { leseWahl, menueStufe } from './skills/kategorien'
 import { terminalHinweis } from './filetree/teil'
 import {
   HISTORY_PREFIX,
@@ -211,7 +214,7 @@ const NIGHTSHIFT = '\u{1F170}\uFE0F'
 const FILETREE = '\u{1F4C2}'
 /** The clean-code skill, right behind Selbstkritik: a broom. */
 const CLEAN_CODE = '\u{1F9F9}'
-/** The skill menu, right behind Sauberer Code: a puzzle piece. Its press lands in the part skills/teil.tsx. */
+/** The skill menu, right behind Sauberer Code: a puzzle piece, in the app a picker that unfolds categories, then skills. */
 const SKILL_MENU = '\u{1F9E9}'
 /** Selbstkritik (once the Reflect mod), right behind Grill mich: a mirror. */
 const REFLECT = '\u{1FA9E}'
@@ -288,7 +291,7 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
       { sign: GRILL, name: 'Grill mich', does: 'Claude löchert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
       { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint im Fenster Selbstkritik.', command: '/leitstand:selbstkritik' },
       { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code aus dem Mod clean-code (ein mitgelieferter Ablauf für Claude), ohne den Mod der ältere Skill clean-code, prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', command: '/leitstand:sauberer-code' },
-      { sign: SKILL_MENU, name: 'Skill-Menü', does: 'Öffnet ein Fenster mit allen installierten Skills; wähle einen, er startet sofort.', command: '/leitstand:skill-menue' },
+      { sign: SKILL_MENU, name: 'Skill-Menü', does: 'Klappt die installierten Skills nach Kategorien auf; eine Wahl startet den Skill.', command: '/leitstand:skill-menue' },
       { sign: FILETREE, name: 'Dateien', does: 'Öffnet das Fenster Dateien: die Dateien des Projekts als Baum.', command: '/leitstand:dateien' },
       {
         sign: REMOTE,
@@ -2044,8 +2047,26 @@ const runCleanCode = ($: $) => runCommand($, 'clean-code', CLEAN_CODE_NAMES)
  * part failed: /selbstkritik waits in the prompt box.
  */
 const runReflect = ($: $) => void $.prompt.fill({ text: '/selbstkritik' }).catch(() => undefined)
-// The skill menu's press is answered by the part's ui.press hook; should that fail, the command waits in the prompt.
+// The skill menu where no picker is drawn (the terminal): its command waits in the prompt and lists the skills.
 const runSkillMenu = ($: $) => void $.prompt.fill({ text: '/skill-menue' }).catch(() => undefined)
+// The skill menu's categories, as the part skills/teil.tsx loads and writes them; null until then.
+const skillMenueAtom = atom({ plugin: 'leitstand', key: 'skillMenue' } as const, null as readonly SkillKategorie[] | null)
+// The category unfolded in the skill menu (stage 2); null in stage 1. Written only by a pick, never while drawing.
+const skillOffenAtom = atom({ plugin: 'leitstand', key: 'skillOffen' } as const, null as string | null)
+// Counts the picks in the skill menu. Read while drawing, so every pick draws the band again with the picker on "".
+const skillPickAtom = atom({ plugin: 'leitstand', key: 'skillWahl' } as const, 0)
+/**
+ * A pick in the skill menu: a category unfolds it (stage 2), "zurück" folds it, a skill folds it and starts as if
+ * typed (a toast while it waits in the queue; should the run fail, it waits in the prompt). Each pick draws the band
+ * again with the picker on "". Not waited for by the pick.
+ */
+const pickSkill = async ($: $, value: string) => {
+  const wahl = leseWahl(value)
+  if (wahl === null) return
+  await update($, skillOffenAtom, () => (wahl.art === 'kategorie' ? wahl.name : null)).catch(() => undefined)
+  await update($, skillPickAtom, count => count + 1).catch(() => undefined)
+  if (wahl.art === 'skill') await runCommand($, wahl.name, [wahl.name])
+}
 
 // Autopilot keeps its run in Leitstand's own state since it became a part of it: the run while there is one, null
 // once it is ended. Its key still says Schicht, from the days as the Nachtschicht.
@@ -5221,6 +5242,11 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const adhd = await read($, adhdAtom)
     // Read only while its button shows, on every surface; off, Autopilot's writes redraw nothing.
     const nightShift = isEnabled && (await isNightShiftOn($))
+    // The skill menu's categories, as the part skills/teil.tsx wrote them, and the stage: never loaded while drawing.
+    // The pick counter is read only so a pick draws the band again.
+    const hasPicker = isEnabled && vector && 'Select' in table && table.Select !== undefined
+    const skillStage = hasPicker ? menueStufe(await read($, skillMenueAtom), await read($, skillOffenAtom), SKILL_MENU) : null
+    if (hasPicker) await read($, skillPickAtom)
     const canShip = isEnabled && (await read($, shipOnGithubAtom)) && (await read($, hasGithubAtom))
     const columns = Math.max(20, e.props.bodyColumns)
     const current = await now($)
@@ -5466,13 +5492,24 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       ) : (
         terminalSign('cleancode', CLEAN_CODE, () => void runCleanCode($).catch(() => undefined))
       )
-    // The puzzle piece right behind the broom: the skill menu, whose pane the part skills/teil.tsx opens on the press.
-    const skillMenuItem =
-      !isEnabled ? null : vector ? (
-        <Button key="skillmenue" variant="secondary" label={SKILL_MENU} onPress={() => runSkillMenu($)} />
-      ) : (
-        terminalSign('skillmenue', SKILL_MENU, () => runSkillMenu($))
-      )
+    // The puzzle piece right behind the broom: the skill menu. In the app a picker on 🧩 in two stages, the categories,
+    // then the skills of the one picked (at most 12 each: the engine refuses a Select of more than 64 options, and the
+    // app does not scroll a long one); a skill starts, and the next drawing shows 🧩 again. No pane. On the terminal
+    // the sign puts /skill-menue into the prompt.
+    const skillMenuItem = !isEnabled ? null : skillStage !== null && 'Select' in table && table.Select ? (
+      <table.Select
+        key={KNOPF_SKILLS}
+        value=""
+        options={skillStage.options}
+        onSelect={value => {
+          if (value !== '') void pickSkill($, value).catch(() => undefined)
+        }}
+      />
+    ) : vector ? (
+      <Button key={KNOPF_SKILLS} variant="secondary" label={SKILL_MENU} onPress={() => runSkillMenu($)} />
+    ) : (
+      terminalSign(KNOPF_SKILLS, SKILL_MENU, () => runSkillMenu($))
+    )
     // The mirror right behind Grill mich: the reflect mod's command, likewise not waited for.
     const reflectItem =
       !isEnabled ? null : vector ? (

@@ -5,6 +5,7 @@ import type { On, RenderElement } from 'claude-code'
 import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE, AUTOPILOT_GRUNDBEFEHL, AUTOPILOT_TUT } from '../hooks/autopilot/befehle'
 import { FERTIG, FRAGE_ABGELEHNT, GRUND_FERTIG, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, fehlerText, istFertig } from '../hooks/autopilot/teil'
 import { ALTE_BEFEHLE, LEITSTAND_BEFEHLE, befehlsHilfe, kurzform } from '../hooks/logic'
+import { geprueft } from './selects'
 
 // Der Autopilot als Teil des Leitstands: Die Test-Engine lädt den ganzen Leitstand. Die meisten Tests schalten seine
 // Ansicht aus (AUS): Dann lässt er jedes Werkzeug durch, und die Tests sehen den Autopiloten allein. Die Tests am Ende
@@ -227,7 +228,7 @@ test('die Antworten von /autopilot stehen in sauberem Deutsch', OHNE_LEITSTAND, 
       'Fragt Claude Code um Erlaubnis für ein Werkzeug, wartet er trotzdem auf dich. Aus geht er mit 🅰️ oder /leitstand:autopilot-aus.',
   )
   expect(await befehl($ as never, 'an')).toBe('Der Autopilot läuft schon. /autopilot aus beendet ihn.')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rückfragen weiter')
 })
 
@@ -239,7 +240,7 @@ test('ohne Schicht passiert nichts', OHNE_LEITSTAND, async ($, on) => {
   await runde($ as never, 't1', 'Soll ich weitermachen?')
   expect(angeschoben(eingang)).toHaveLength(0)
   expect(eingang[0]?.context).toEqual([])
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
   const text = await leiste(ui as never)
   expect(text).toContain('engine')
   expect(text).not.toContain('Autopilot:')
@@ -263,7 +264,7 @@ test('eingeschaltet vor dem Auftrag: Kontext am Auftrag, nach einer offenen Rund
   expect(schub[0]?.text).toBe(WEITER)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     const text = await leiste(ui as never)
     expect(text).toContain('Autopilot:')
     expect(text).toContain('1x angeschoben')
@@ -315,7 +316,7 @@ test('eine Rückfrage beantwortet die Schicht selbst und merkt sie sich', OHNE_L
   const mit = (await $.tool.call(frage as never)) as { result?: unknown; deny?: string }
   expect(mit.deny).toBe(FRAGE_ABGELEHNT)
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('1 Frage selbst entschieden')
   await ui.press({ key: 'ap-fragen' })
   expect(await leiste(ui as never)).toContain('Welche Datenbank?')
@@ -333,7 +334,7 @@ test('mit der Marke endet der Autopilot: Bericht mit Schließen, eine neue Nachr
   expect(await schichtLesen($ as never)).toBeNull()
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_FERTIG}, nach 0 min: 0x angeschoben`)
     expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeUndefined()
@@ -383,7 +384,7 @@ test('an der Rundengrenze endet der Autopilot mit Grund Rundengrenze, die nächs
   expect(angeschoben(eingang)).toHaveLength(2)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}, nach 0 min: 2x angeschoben`)
     expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
   }
@@ -419,7 +420,7 @@ test('nur eine Nachricht der Person setzt den Rundenzähler zurück, auch mitten
 
   await runde($ as never, 't5', 'Teil E steht.')
   expect(angeschoben(eingang)).toHaveLength(4)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}`)
 })
 
@@ -448,7 +449,7 @@ test('zwei angeschobene Runden ohne Werkzeug: die Schicht hält an', OHNE_LEITST
   await runde($ as never, 't3', 'Ich brauche dich wirklich.', { werkzeuge: 0 })
   expect(angeschoben(eingang)).toHaveLength(2)
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
   expect(await leiste(ui as never)).toContain('kommt ohne dich nicht weiter')
 })
 
@@ -466,7 +467,7 @@ test('die Leerlauf-Bremse hängt nicht am eigenen prompt.submit-Hook und steht i
   await runde($ as never, 't2', 'Ich warte.', { werkzeuge: 0 })
   expect((await schichtLesen($ as never))?.leerlauf).toBe(1)
   await runde($ as never, 't3', 'Ich warte weiter.', { werkzeuge: 0 })
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
   expect(await leiste(ui as never)).toContain('kommt ohne dich nicht weiter')
   // Eine Nachricht der Person setzt die Bremse zurück.
   await befehl($ as never, 'an')
@@ -492,7 +493,7 @@ test('solange Hintergrundarbeit läuft, schiebt der Autopilot nicht an; erst nac
   await runde($ as never, 't3', 'Beide fertig, Teil B steht noch aus.')
   expect(angeschoben(eingang)).toHaveLength(1)
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('1x angeschoben')
 })
 
@@ -534,7 +535,7 @@ test('eine von einem Plugin als Person eingereichte Nachricht setzt den Rundenz�
   expect(angeschoben(eingang)).toHaveLength(2)
   await runde($ as never, 't3', 'Teil C steht.')
   expect(angeschoben(eingang)).toHaveLength(2)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}`)
 })
 
@@ -575,7 +576,7 @@ test('wartende Runden zählen nicht gegen die Rundengrenze', grenze(1), async ($
   }
   await runde($ as never, 't4', 'Der Arbeiter ist fertig, Teil B steht aus.')
   expect(angeschoben(eingang)).toHaveLength(1)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rückfragen weiter')
 })
 
@@ -628,13 +629,13 @@ test('wer unterbricht, beendet die Schicht; der Bericht bleibt bis Schließen', 
   await runde($ as never, 't1', '', { reason: 'aborted' })
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     const text = await leiste(ui as never)
     expect(text).toContain('du hast unterbrochen')
     expect(text).toContain('30 min')
     expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
   }
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   await ui.press({ key: 'ap-weg' })
   expect(await leiste(ui as never)).not.toContain('Autopilot:')
 })
@@ -648,7 +649,7 @@ test('/autopilot aus beendet ihn, Beenden in der Leiste auch', OHNE_LEITSTAND, a
   expect(await befehl($ as never, 'aus')).toContain('war nicht an')
 
   await befehl($ as never, 'an')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   await ui.press({ key: 'ap-beenden' })
   expect(await leiste(ui as never)).toContain('du hast ihn beendet')
 })
@@ -658,7 +659,7 @@ test('bei einer Umfrage weicht die Leiste', OHNE_LEITSTAND, async ($, on) => {
   boden(on)
   await start($ as never)
   await befehl($ as never)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ hasSurvey: true }) })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props({ hasSurvey: true }) }))
   expect(await leiste(ui as never)).toBe('engine')
 })
 
@@ -668,7 +669,7 @@ test('die Zeile trägt den Schlüssel autopilot und steht vor allem, was darunte
   await start($ as never)
   await befehl($ as never)
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     const text = await leiste(ui as never)
     expect(text.indexOf('Autopilot:')).toBe(0)
     expect(text.indexOf('Autopilot:')).toBeLessThan(text.indexOf('engine'))
@@ -724,7 +725,7 @@ test('Status und Knöpfe stehen in einer Zeile, die Fragen aufgeklappt darunter'
 
   // Läuft, ohne Fragen: genau eine Zeile mit Beenden.
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     expect((await zeileMit(ui as never, 'ap-beenden'))?.knoepfe).toEqual(['ap-beenden'])
     expect(await teile(ui as never)).toHaveLength(1)
   }
@@ -736,16 +737,16 @@ test('Status und Knöpfe stehen in einer Zeile, die Fragen aufgeklappt darunter'
   }
   await $.tool.call(frage as never)
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     expect((await zeileMit(ui as never, 'ap-beenden'))?.knoepfe).toEqual(['ap-fragen', 'ap-beenden'])
     expect(await teile(ui as never)).toHaveLength(1)
   }
   {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
     await ui.press({ key: 'ap-fragen' })
   }
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     const treffer = await zeileMit(ui as never, 'ap-fragen')
     expect(treffer?.knoepfe).toEqual(['ap-fragen', 'ap-beenden'])
     expect(JSON.stringify(treffer?.zeile)).not.toContain('Welche Datenbank?')
@@ -755,7 +756,7 @@ test('Status und Knöpfe stehen in einer Zeile, die Fragen aufgeklappt darunter'
     expect(JSON.stringify(stuecke[1])).toContain('Welche Datenbank?')
   }
   {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
     await ui.press({ key: 'ap-fragen' })
   }
 
@@ -763,7 +764,7 @@ test('Status und Knöpfe stehen in einer Zeile, die Fragen aufgeklappt darunter'
   await clock.advance(60_000)
   await befehl($ as never, 'aus')
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     // Die Frage aus der Schicht steht im Bericht weiter, daher auch hier Fragen vorn.
     expect((await zeileMit(ui as never, 'ap-weg'))?.knoepfe).toEqual(['ap-fragen', 'ap-weg'])
     expect(await teile(ui as never)).toHaveLength(1)
@@ -777,7 +778,7 @@ test('vorbei ohne Fragen: nur Schließen in der Knopf-Box, eine Zeile', OHNE_LEI
   await befehl($ as never)
   await befehl($ as never, 'aus')
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     expect((await zeileMit(ui as never, 'ap-weg'))?.knoepfe).toEqual(['ap-weg'])
     expect(await teile(ui as never)).toHaveLength(1)
     // Björns Wunsch (2026-10-27): "Schließen", nicht "Weg".
@@ -804,7 +805,7 @@ test('ein Druck auf 🅰️ beendet die Schicht am Ende der Runde, statt anzusch
   expect(angeschoben(eingang)).toHaveLength(1)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_KNOPF}, nach 1 min: 1x angeschoben`)
     expect(await ui.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
   }
@@ -845,7 +846,7 @@ test('kommt das Aus des Knopfs, während die Sitzung still ist, beendet es die S
   await clock.advance(1000)
   druck(1_001_000)
   expect(await befehl$($ as never, 'autopilot-aus')).toBe('Der Autopilot ist aus. Er hat Claude 0-mal angeschoben.')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_KNOPF}`)
 })
 
@@ -861,7 +862,7 @@ test('schreibt die Person nach dem Druck auf 🅰️, geht ihre Nachricht ohne K
   expect(eingang[0]?.context).toEqual([])
   await runde($ as never, 't1', 'Halb fertig.')
   expect(angeschoben(eingang)).toHaveLength(0)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain(GRUND_KNOPF)
 })
 
@@ -877,7 +878,7 @@ test('kam 🅰️ in der Pause nach einem API-Fehler, endet die Schicht, statt a
   druck(1_030_000)
   await clock.advance(30_000)
   expect(angeschoben(eingang)).toHaveLength(0)
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
   expect(await leiste(ui as never)).toContain(GRUND_KNOPF)
 })
 
@@ -897,7 +898,7 @@ test('ein Wunsch, der nicht nach dem Beginn der Schicht liegt, zählt nicht', OH
   druck(1_001_000)
   await runde($ as never, 't2', 'Weiter?')
   expect(angeschoben(eingang)).toHaveLength(2)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('2x angeschoben')
   expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeDefined()
 })
@@ -913,7 +914,7 @@ test('ohne Druck auf 🅰️ schiebt der Autopilot weiter an', OHNE_LEITSTAND, a
   await runde($ as never, 't2', 'Weiter?')
   expect(angeschoben(eingang)).toHaveLength(2)
   expect(await befehl($ as never, 'aus')).toBe('Der Autopilot ist aus. Er hat Claude 2-mal angeschoben.')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('du hast ihn beendet')
 })
 
@@ -1093,7 +1094,7 @@ for (const b of AUTOPILOT_BEFEHLE) {
       }
     }
     // Hilfe ändert nichts: kein Autopilot, keine Zeile.
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
     expect(await leiste(ui as never)).not.toContain('Autopilot:')
   })
 }
@@ -1109,7 +1110,7 @@ test('/autopilot hilfe erklärt den Grundbefehl und schaltet nichts', OHNE_LEITS
     expect(t).toContain('Argumente: an oder aus (freiwillig). Ohne Argument schaltet er um.')
     expect(t).toContain('\nBeispiel: /autopilot an')
   }
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).not.toContain('Autopilot:')
 })
 
@@ -1138,12 +1139,12 @@ test('/leitstand:autopilot-an und -aus wirken wie /autopilot an und der Knopf Be
   ] as const) {
     expect(await befehl$($ as never, an)).toContain('Der Autopilot ist an')
     expect(await befehl$($ as never, an)).toBe('Der Autopilot läuft schon. /autopilot aus beendet ihn.')
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
     expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rückfragen weiter')
     expect(await ui.find({ type: 'Button', key: 'ap-beenden' })).toBeDefined()
 
     expect(await befehl$($ as never, aus)).toBe('Der Autopilot ist aus. Er hat Claude 0-mal angeschoben.')
-    const danach = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+    const danach = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
     expect(await leiste(danach as never)).toContain('vorbei, du hast ihn beendet')
     expect(await danach.find({ type: 'Button', key: 'ap-weg' })).toBeDefined()
     expect(await befehl$($ as never, aus)).toBe('Der Autopilot war nicht an.')
@@ -1177,7 +1178,7 @@ test('/leitstand:autopilot-fragen-zeigen nennt die selbst entschiedenen Fragen a
   expect(await befehl$($ as never, 'leitstand:autopilot-fragen-zeigen')).toBe(zwei)
   expect(await befehl$($ as never, 'autopilot-fragen-zeigen', '', 'bridge')).toBe(zwei)
   // Nur Text: die Liste in der Leiste bleibt zu.
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
   expect(await leiste(ui as never)).not.toContain('Welche Datenbank?')
 })
 
@@ -1190,13 +1191,13 @@ test('/leitstand:autopilot-bericht-weg räumt den Bericht weg wie der Knopf Schl
   expect(await befehl$($ as never, 'autopilot-bericht-weg')).toContain('läuft noch')
   await befehl$($ as never, 'autopilot-aus')
   expect(await befehl$($ as never, 'leitstand:autopilot-bericht-weg')).toBe('Der Bericht des Autopiloten ist weg.')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).not.toContain('Autopilot:')
 
   // Der Knopf: derselbe Zustand.
   await befehl$($ as never, 'autopilot-an')
   await befehl$($ as never, 'autopilot-aus')
-  const knopfUi = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const knopfUi = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   await knopfUi.press({ key: 'ap-weg' })
   expect(await leiste(knopfUi as never)).not.toContain('Autopilot:')
 })
@@ -1211,7 +1212,7 @@ test('alte Namen: /autopilot-hilfe nennt /leitstand:hilfe; /autopilot-an ist heu
     expect(ALTE_BEFEHLE.has(kurz)).toBe(false)
   }
   expect(await befehl$($ as never, 'autopilot-hilfe')).toBe('Der Befehl heißt jetzt /leitstand:hilfe.')
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).not.toContain('Autopilot:')
   expect(await befehl$($ as never, 'autopilot-an')).toContain('Der Autopilot ist an')
 })
@@ -1293,7 +1294,7 @@ test('bei laufender Schicht holt der Leitstand die Zeile des Autopiloten ganz na
   expect(angeschoben(eingang)).toHaveLength(1)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...BAND, surface, props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
     const texte = (await ui.findAll({ type: 'Text' })).map(t => t.text)
     const bei = (wort: string) => texte.findIndex(t => t.includes(wort))
     // Ganz oben, vor der Checkliste des Leitstands und vor allem, was andere Mods darunter zeichnen.
@@ -1311,7 +1312,7 @@ test('bei laufender Schicht holt der Leitstand die Zeile des Autopiloten ganz na
   }
 
   // Beenden wirkt auch, nachdem der Leitstand die Zeile versetzt hat.
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   await ui.press({ key: 'ap-beenden' })
   expect(await leiste(ui as never)).toContain('vorbei, du hast ihn beendet')
 })
@@ -1327,7 +1328,7 @@ test('ein Druck auf 🅰️ schaltet den Autopiloten an, der nächste beendet ih
   const eingang = boden(on, { toasts })
   await start($ as never)
   const druck = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
     await ui.press({ key: 'nightshift' })
     await ui.unmount()
   }
@@ -1349,7 +1350,7 @@ test('ein Druck auf 🅰️ schaltet den Autopiloten an, der nächste beendet ih
   await $.classic.Stop({ stop_hook_active: false, background_tasks: [] } as never)
   await $.turn.complete({ answer: 'Die Tabelle steht.', durationMs: 1000, isAborted: false, turnId: 't2', reason: 'answer' } as never)
   expect(angeschoben(eingang)).toHaveLength(1)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_KNOPF}, nach 0 min: 1x angeschoben`)
   await ui.unmount()
 
@@ -1378,7 +1379,7 @@ test('wartet ein Plan des Leitstands auf Freigabe, schiebt der Autopilot nicht a
   await clock.advance(5000)
   // Kein Anstoß in die Sperre: Den Plan startet der Leitstand (oder die Person mit Start).
   expect(angeschoben(eingang)).toHaveLength(0)
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: props() })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
   expect(await leiste(ui as never)).toContain('Claude arbeitet ohne Rückfragen weiter')
   await ui.press({ key: 'start' })
   await ui.unmount()

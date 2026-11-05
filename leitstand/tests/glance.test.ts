@@ -11,6 +11,7 @@ import { dayEntries, dayFromArgument, dayKey, expiredHistoryKeys, filesNote, his
 import { inBerlin } from '../hooks/berlin'
 import { BAND_VERSION, zeilenVon } from '../hooks/band'
 import { FRAGE_ABGELEHNT } from '../hooks/autopilot/teil'
+import { geprueft } from './selects'
 
 /** A time on Berlin's wall clock as a moment: what the Leitstand shows on every machine, on UTC servers too. */
 const berlinZeit = (year: number, month: number, date: number, hours = 0, minutes = 0, seconds = 0) => {
@@ -72,7 +73,7 @@ async function detailsOn($: Engine) {
 }
 
 async function texts($: Engine, surface: (typeof SURFACES)[number], bodyColumns = 80): Promise<string[]> {
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface }))
   const found = (await ui.findAll({ type: 'Text' })).map(one => one.text)
   const buttons = (await ui.findAll({ type: 'Button' })).map(one => one.text)
   // A menu reads as its label and the option picked, as the desktop draws it; one without a label as the option and
@@ -96,7 +97,7 @@ type Drawn = { type: string; props: Record<string, unknown>; children?: (Drawn |
  * and, after a bar, its color or `dim`. A tag is small (caption) on vector surfaces and has no size on the terminal.
  */
 async function helperTags($: Engine, surface: (typeof SURFACES)[number], bodyColumns = 80, pane = false): Promise<string[][]> {
-  const ui = await $.ui.mount(pane ? { ...PLAN_PANE, props: { ...PLAN_PANE.props, bodyColumns }, surface } : { ...BAND, props: { ...BAND.props, bodyColumns }, surface })
+  const ui = await geprueft(await $.ui.mount(pane ? { ...PLAN_PANE, props: { ...PLAN_PANE.props, bodyColumns }, surface } : { ...BAND, props: { ...BAND.props, bodyColumns }, surface }))
   // A tag is the Text whose first run is its opening bracket.
   const opens = (run: unknown) => typeof run === 'object' && run !== null && (run as Drawn).type === 'Text' && (run as Drawn).children?.join('') === '['
   const small = (await ui.findAll({ type: 'Text' })).filter(one => opens(one.children[0]))
@@ -113,7 +114,7 @@ async function helperTags($: Engine, surface: (typeof SURFACES)[number], bodyCol
 
 /** The terminal band, mounted with these props, as its tree. */
 async function terminalTree($: Engine, props: { bodyColumns?: number; maxRows?: number } = {}): Promise<Drawn> {
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface: 'terminal' }))
   const tree = (await ui.drawn()) as unknown as Drawn
   await ui.unmount()
   return tree
@@ -701,13 +702,13 @@ describe('Passwortschutz nach Herkunft und Freigabe einer zurückgehaltenen Nach
   const submit = ($: Engine, kind: string, text = SECRET_TEXT) => $.prompt.submit({ text, wait: false, origin: { kind } } as never) as Promise<{ drop?: string }>
   /** The band as drawn on one surface: its tree as JSON, and whether the held line shows. */
   const band = async ($: Engine, surface: (typeof SURFACES)[number]) => {
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
     const drawn = JSON.stringify(await ui.drawn())
     await ui.unmount()
     return { drawn, isHeld: drawn.includes('Zurückgehalten') }
   }
   const press = async ($: Engine, key: string, surface: (typeof SURFACES)[number] = 'desktop') => {
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
     await ui.press({ key })
     await ui.unmount()
   }
@@ -935,7 +936,7 @@ test('overall progress, time left and a grown plan show in the header and footer
   expect(shown).toContain('38%')
   expect(shown).toContain('noch etwa 5 Min.')
 
-  const footer = await $.ui.mount({ plugin: 'leitstand', surface: 'terminal', component: 'SessionMode', props: { modes: [] } })
+  const footer = await geprueft(await $.ui.mount({ plugin: 'leitstand', surface: 'terminal', component: 'SessionMode', props: { modes: [] } }))
   expect((await footer.find({ type: 'Text' }))?.text).toContain('◎ 38% · noch etwa 5 Min.')
   await footer.unmount()
 
@@ -1298,7 +1299,7 @@ describe('Modell und Aufwand hinter jedem Helfer', () => {
     await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
     await spawnHelper($, 'a1', 'Find the pricing data', 'medium')
     const drawnTexts = async (surface: (typeof SURFACES)[number], pane: boolean) => {
-      const ui = await $.ui.mount(pane ? { ...PLAN_PANE, surface } : { ...BAND, surface })
+      const ui = await geprueft(await $.ui.mount(pane ? { ...PLAN_PANE, surface } : { ...BAND, surface }))
       const found = await ui.findAll({ type: 'Text' })
       await ui.unmount()
       return found
@@ -1321,7 +1322,7 @@ describe('Modell und Aufwand hinter jedem Helfer', () => {
     await callTool($, { tool: PLAN, steps: ['Look around the project', 'Write the page'] })
     await spawnHelper($, 'a1', 'Find the pricing data', 'medium')
     const rowOf = async (bodyColumns: number) => {
-      const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' }))
       const row = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'helper-a1')
       await ui.unmount()
       const textOf = (node: Drawn | string): string => (typeof node === 'string' ? node : (node.children ?? []).map(textOf).join(''))
@@ -1586,7 +1587,7 @@ test("the simple view hides tokens and low plan usage, not the helper's model; t
     expect(simple).not.toContain('Nutzung')
   }
 
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 120 }, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 120 }, surface: 'terminal' }))
   await ui.press({ key: 'toggle' })
   await ui.unmount()
   const detailed = (await texts($, 'terminal', 120)).join('\n')
@@ -1622,7 +1623,7 @@ test('a quick answer with no plan ends as one plain step', async ($, on) => {
 test('one button cycles Simple, Details and Minimal; from Off it goes back to Simple', async ($, on) => {
   world(on)
   const press = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key: 'toggle' })
     await ui.unmount()
   }
@@ -1755,7 +1756,7 @@ function historyWorld(on: On, project: { cwd: string }) {
 }
 
 async function paneTexts($: Engine): Promise<string[]> {
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   const found = [
     ...(await ui.findAll({ type: 'Text' })),
     ...(await ui.findAll({ type: 'Select' })),
@@ -1931,7 +1932,7 @@ test('Details keeps the tool rows in view; Simple hides them', async ($, on) => 
     return { type: 'Text', props: {}, children: [drawn] } as never
   })
   const hint = async () => {
-    const ui = await $.ui.mount({ ...PROGRESS_ROW, surface: 'terminal' } as never)
+    const ui = await geprueft(await $.ui.mount({ ...PROGRESS_ROW, surface: 'terminal' } as never))
     await ui.unmount()
     return drawn
   }
@@ -1957,12 +1958,12 @@ test('auf dem Handy (mobile, ohne Band) bleiben die Werkzeugzeilen auch in der e
     { component: 'ToolResult', props: { tool_use_id: 'u1', tool: 'Bash', output: { stdout: secret, stderr: '', interrupted: false }, isErrored: false } },
   ]
   for (const { component, props } of rows) {
-    const desk = await $.ui.mount({ plugin: 'leitstand', surface: 'desktop', component, props } as never)
+    const desk = await geprueft(await $.ui.mount({ plugin: 'leitstand', surface: 'desktop', component, props } as never))
     await desk.unmount()
     expect(engineDrew).toHaveLength(0)
   }
   for (const [at, { component, props }] of rows.entries()) {
-    const phone = await $.ui.mount({ plugin: 'leitstand', surface: 'mobile', component, props } as never)
+    const phone = await geprueft(await $.ui.mount({ plugin: 'leitstand', surface: 'mobile', component, props } as never))
     await phone.unmount()
     expect(engineDrew).toHaveLength(at + 1)
     const row = JSON.stringify(engineDrew.at(-1))
@@ -1979,7 +1980,7 @@ test('a long plan says how many steps are out of view', async ($, on) => {
   await callTool($, { tool: PROGRESS, task: 'Three', percent: 100 })
   // Five rows: the line over the band, the header, two for the steps and the row of buttons. 90 columns: at 80 the row
   // of signs wraps since the skill menu joined it.
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 5, bodyColumns: 90 }, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 5, bodyColumns: 90 }, surface: 'terminal' }))
   const shown = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await ui.unmount()
   expect(shown).toContain('… 3 davor · 4 weitere Schritte')
@@ -2031,7 +2032,7 @@ function publishedBandHeights(on: On) {
 
 /** The band's words on `surface`, mounted with these props over the usual ones. */
 async function bandWords($: Engine, surface: (typeof SURFACES)[number], props: object = {}): Promise<string> {
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, ...props }, surface }))
   const found = (await ui.findAll({ type: 'Text' })).map(one => one.text)
   await ui.unmount()
   return found.join('\n')
@@ -2107,7 +2108,12 @@ const APP_ROW = {
       props: { flexDirection: 'row', columnGap: 0.5, rowGap: 1.2, flexWrap: 'wrap' },
       children: [
         ...['\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}', '\u{1F170}️', '|', '\u{1F4D6}', '\u{1F9CD}', '♨️', '\u{1FA9E}', '\u{1F9F9}', '\u{1F9E9}', '|', '\u{1F4C2}', '|', '\u{1F512}', '\u{1F6E1}️', '|', 'Plan', 'Verlauf'].map(label =>
-          label === '|' ? { type: 'Text', props: { dimColor: true }, children: ['|'] } : { type: 'Button', props: { label, variant: 'secondary' } },
+          label === '|'
+            ? { type: 'Text', props: { dimColor: true }, children: ['|'] }
+            : label === '\u{1F9E9}'
+              // The skill menu is a picker on 🧩, with the skills after it.
+              ? { type: 'Select', props: { key: 'skillmenue', value: '', options: [{ value: '', label }, { value: 'grill-me', label: 'grill-me' }] } }
+              : { type: 'Button', props: { label, variant: 'secondary' } },
         ),
       ],
     },
@@ -2115,15 +2121,37 @@ const APP_ROW = {
   ],
 }
 
-test('the desktop row of buttons is counted as the app draws it: one line at 81 columns, where band.ts counts three', () => {
-  // A sign button 1 + 2.5 + 1 ch, the family one glyph; Plan 2 + 3.2, Verlauf 2 + 5.6, a bar 0.8, half a cell between:
-  // the left 73.5 ch (with the skill menu), with Pause (6) and the gap 80.5: at 80 columns Pause wraps.
+test('the desktop row of buttons is counted as the app draws it: one line at 82 columns, where band.ts counts three', () => {
+  // A sign button 1 + 2.5 + 1 ch, the family one glyph; Plan 2 + 3.2, Verlauf 2 + 5.6, a bar 0.8, half a cell between;
+  // the skill menu, a picker, 1 + 2.5 + 1 and its arrow 1.5: the left 75 ch, with Pause (6) and the gap 82: at 81
+  // columns Pause wraps.
   expect(appCells('\u{1F468}‍\u{1F468}‍\u{1F467}‍\u{1F466}')).toBe(2.5)
   expect(appCells('♨️')).toBe(2.5)
   expect(appCells('Verlauf')).toBe(5.6)
   expect(zeilenVon(APP_ROW as never, 'desktop', 80)).toBe(4.8)
+  // A picker is measured by the option it shows, not by its longest one.
+  // A picker and a bar (0.8) half a cell apart: on 🧩 the picker is 6 ch, on Verlauf 9.1.
+  const pickerAndBar = (value: string) => ({
+    type: 'Box',
+    props: { flexDirection: 'row' },
+    children: [
+      {
+        type: 'Box',
+        props: { columnGap: 0.5, flexWrap: 'wrap' },
+        children: [
+          { type: 'Select', props: { key: 'p', value, options: [{ value: '', label: '\u{1F9E9}' }, { value: 'x', label: 'Verlauf' }] } },
+          { type: 'Text', props: {}, children: ['|'] },
+        ],
+      },
+    ],
+  })
+  expect(appButtonRows(pickerAndBar(''), 7.3)).toBe(1)
+  expect(appButtonRows(pickerAndBar(''), 7.2)).toBe(2)
+  expect(appButtonRows(pickerAndBar('x'), 10.4)).toBe(1)
+  expect(appButtonRows(pickerAndBar('x'), 10.3)).toBe(2)
   // Over the row 0.6, a line of buttons 1, between two lines 0.6.
-  expect(appButtonRows(APP_ROW, 81)).toBe(1.6)
+  expect(appButtonRows(APP_ROW, 82)).toBe(1.6)
+  expect(appButtonRows(APP_ROW, 81)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 80)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 75)).toBe(3.2)
   expect(appButtonRows(APP_ROW, 60)).toBe(4.8)
@@ -2133,8 +2161,8 @@ describe('Detailliert im engen Band: Schritte vor Helfern, der Rest in einer Zei
   const EIGHT = ['Finde die Ursache', 'Baue die Seite', 'Schreib die Texte', 'Prüfe die Änderung', 'Schreib Tests', 'Lass Tests laufen', 'Prüfe die Doku', 'Melde das Ergebnis']
   // Statistik a line under its rule, Nächste Schritte three lines (one, small), the summary its head line.
   const USUAL = { statistik: { voll: 1.75, klein: 1.75 }, 'naechste-schritte': { voll: 4.95, klein: 1.75 }, zusammenfassung: { voll: 1.75, klein: 1.75 } }
-  // 81 columns: at 80 the row of buttons wraps before Pause since the skill menu joined it.
-  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 81, scroll: { offset: 0, bodyRows } } })
+  // 82 columns: at 81 the row of buttons wraps before Pause since the skill menu became a picker, with its arrow.
+  const desk = (bodyRows: number) => ({ ...BAND, props: { ...BAND.props, bodyColumns: 82, scroll: { offset: 0, bodyRows } } })
 
   /** Gruppenarbeit in Detailliert with Autopilot on: `steps` planned and started, four helpers at work on the first. */
   const atWork = async ($: Engine, on: On, steps: string[], heights: Record<string, { voll: number; klein: number }>) => {
@@ -2158,7 +2186,7 @@ describe('Detailliert im engen Band: Schritte vor Helfern, der Rest in einer Zei
     return clock
   }
   const shownOn = async ($: Engine, bodyRows: number) => {
-    const ui = await $.ui.mount({ ...desk(bodyRows), surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...desk(bodyRows), surface: 'desktop' }))
     const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
     const counts = (await ui.findAll({ type: 'Svg' })).filter(one => one.props.alt === 'Zusammengefasst').map(one => String(one.props.source))
     await ui.unmount()
@@ -2227,7 +2255,7 @@ test('Leitstand publishes its height in the band once per change, a tick after d
   await callTool($, { tool: PROGRESS, task: 'Seite prüfen', percent: 100 })
   for (const surface of SURFACES) {
     written.length = 0
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
     expect(written).toEqual([])
     await clock.advance(1)
     expect(written).toHaveLength(1)
@@ -2275,7 +2303,7 @@ test('with room for one row, the current step is the one shown', async ($, on) =
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['One', 'Two', 'Three', 'Four'] })
   await callTool($, { tool: PROGRESS, task: 'One', percent: 100 })
-  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 3 }, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 3 }, surface: 'terminal' }))
   const shown = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await ui.unmount()
   expect(shown).toContain('Two')
@@ -2307,7 +2335,7 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   // Claude Code 2.1.295 takes only a tree from a ui.render hook: with no card, the engine's part is an empty Box.
   on('ui.render', { component: 'AbovePrompt' }, () => (beneath ?? { type: 'Box', props: {}, children: [] }) as never)
   const drawn = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const boxes = await ui.findAll({ type: 'Box' })
     const part = (key: string) => JSON.stringify(boxes.find(one => one.props.key === key) ?? null)
     const menus = (await ui.findAll({ type: 'Select' })).map(one => (one.props.options as { label: string }[]).map(option => option.label).join(' / '))
@@ -2319,8 +2347,10 @@ test('in the Desktop app the view is a menu at the top right, and everything tha
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const working = await drawn()
-  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links.
-  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal'])
+  // Die Arbeitsweise ist kein Menü mehr, sondern der Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links. Das Skill-Menü 🧩 ist ein Aufklappmenü
+  // unten links (ohne geladene Liste nur 🧩).
+  expect(working.menus).toEqual(['Detailliert / Einfach / Minimal', '\u{1F9E9}'])
+  expect(working.bottom).toContain('"key":"skillmenue"')
   expect(working.bottom).toContain('"key":"workmode"')
   expect(working.top).toContain('"type":"Select"')
   expect(working.top).not.toContain('Pause')
@@ -2377,7 +2407,7 @@ test('in the Desktop app the welcome cards and the empty band keep that frame: t
   on('command.register', () => ({ value: undefined }) as never)
   await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
   const drawn = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const boxes = await ui.findAll({ type: 'Box' })
     const part = (key: string) => JSON.stringify(boxes.find(one => one.props.key === key) ?? null)
     await ui.unmount()
@@ -2392,7 +2422,7 @@ test('in the Desktop app the welcome cards and the empty band keep that frame: t
   expect(welcome.tour.indexOf('Überspringen')).toBeGreaterThan(welcome.tour.indexOf('Verlauf'))
   expect(welcome.tour.indexOf('"Weiter"')).toBeGreaterThan(welcome.tour.indexOf('Überspringen'))
 
-  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
   await band.press({ key: 'tour-skip' })
   await band.unmount()
   const empty = await drawn()
@@ -2424,7 +2454,7 @@ test('the second welcome card says where the yellow is: in the words on the term
   on('tool.register', () => ({ value: undefined }) as never)
   on('command.register', () => ({ value: undefined }) as never)
   await $.session.start({ cwd: '/work', surface: 'desktop' } as never)
-  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
   await band.press({ key: 'tour-next' })
   await band.unmount()
   expect((await texts($, 'desktop', 120)).join('\n')).toContain('Braucht dich neben einem gelben Fragezeichen')
@@ -2453,7 +2483,7 @@ test('in the details view the Plan panel shows no usage line: the mod Statistik 
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   await $.session.measure({ context: { window: 200_000, tokens: 68_000, percent: 34 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42 }], changed: ['context', 'rateLimits'] } as never)
   for (const surface of SURFACES) {
-    const ui = await $.ui.mount({ ...PLAN_PANE, surface })
+    const ui = await geprueft(await $.ui.mount({ ...PLAN_PANE, surface }))
     const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
     await ui.unmount()
     expect(words).toContain('Write it')
@@ -2474,7 +2504,7 @@ test('in the Desktop app History reads every time one way, as the report does, a
   on('ui.toast', () => ({ value: undefined }) as never)
   on('ui.copy', () => ({ value: { isCopied: true } }) as never)
   await $.command.run({ command: 'leitstand', args: 'history' } as never)
-  const list = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const list = await geprueft(await $.ui.mount({ ...PANE, surface: 'desktop' }))
   const shown = (await list.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   // A job's details sit in empty room under its name: nothing there for a screen reader to say.
   expect((await list.findAll({ type: 'Svg' })).map(one => String(one.props.alt))).not.toContain('Detail')
@@ -2483,7 +2513,7 @@ test('in the Desktop app History reads every time one way, as the report does, a
   expect(shown).toContain('13 Min.')
   expect(shown).not.toContain('12 Min. 30 Sek.')
 
-  const report = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const report = await geprueft(await $.ui.mount({ ...PANE, surface: 'desktop' }))
   const boxes = await report.findAll({ type: 'Box' })
   await report.unmount()
   const actions = JSON.stringify(boxes.find(one => one.props.key === 'report-actions') ?? null)
@@ -2494,14 +2524,14 @@ test('in the Desktop app History reads every time one way, as the report does, a
 test('in the Desktop app the mark beside a state says Status, so a screen reader hears the state once', async ($, on) => {
   world(on)
   const alts = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const found = (await ui.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
     await ui.unmount()
     return found
   }
   // The marks in the header row alone.
   const headerAlts = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const header = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'header')
     await ui.unmount()
     return [...JSON.stringify(header ?? null).matchAll(/"alt":"([^"]*)"/g)].map(match => match[1])
@@ -2550,7 +2580,7 @@ test('in the Desktop app the welcome card says Welcome whole in a narrow band an
   expect(narrow).toContain('Willkommen')
   expect(narrow).not.toContain('Willkommen im Leitstand')
 
-  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
   const words = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'tour-text')
   const alts = (await ui.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
   await ui.unmount()
@@ -2570,7 +2600,7 @@ test('in the Desktop app a line under a step starts in empty room as wide as a m
     tool_use_id: 'tu1', prompt: 'Review it', description: 'Review the page', subagentType: 'general-purpose',
     provider: { plugin: 'engine', tier: 'core' }, parentModel: 'claude-opus-5-5', background: true, fork: false,
   } as never)
-  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
   const boxes = await band.findAll({ type: 'Box' })
   const alts = (await band.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
   await band.unmount()
@@ -2582,7 +2612,7 @@ test('in the Desktop app a line under a step starts in empty room as wide as a m
   expect(alts).not.toContain('Helfer')
 
   await detailsOn($)
-  const plan = await $.ui.mount({ ...PLAN_PANE, surface: 'desktop' })
+  const plan = await geprueft(await $.ui.mount({ ...PLAN_PANE, surface: 'desktop' }))
   const planAlts = (await plan.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
   await plan.unmount()
   expect(planAlts).not.toContain('Detail')
@@ -2593,7 +2623,7 @@ test('in the Desktop app no mark says again what the words beside it say, in the
   historyWorld(on, { cwd: '/work/landing-site' })
   on('session.measure', (_, e) => ({ changed: e.changed }))
   const drawn = async (mount: Parameters<Engine['ui']['mount']>[0]) => {
-    const ui = await $.ui.mount(mount)
+    const ui = await geprueft(await $.ui.mount(mount))
     const boxes = await ui.findAll({ type: 'Box' })
     await ui.unmount()
     return boxes
@@ -2631,7 +2661,7 @@ test('in the Desktop app no mark says again what the words beside it say, in the
 
   // History with nothing saved says so in words; its mark says Notice, History being the panel's title, read just before.
   await $.command.run({ command: 'leitstand', args: 'history' } as never)
-  const history = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const history = await geprueft(await $.ui.mount({ ...PANE, surface: 'desktop' }))
   const alts = (await history.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
   const words = (await history.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await history.unmount()
@@ -2642,7 +2672,7 @@ test('in the Desktop app no mark says again what the words beside it say, in the
 test("in the Desktop app a panel's marks say neither its title nor the words beside them: Settings and an empty Plan", async ($, on) => {
   world(on)
   const read = async (requestId: string, title: string) => {
-    const ui = await $.ui.mount({ ...PANE, requestId, props: { ...PANE.props, title }, surface: 'desktop' } as never)
+    const ui = await geprueft(await $.ui.mount({ ...PANE, requestId, props: { ...PANE.props, title }, surface: 'desktop' } as never))
     const boxes = await ui.findAll({ type: 'Box' })
     const alts = (await ui.findAll({ type: 'Svg' })).map(one => String(one.props.alt))
     await ui.unmount()
@@ -2778,7 +2808,7 @@ test('the band and History draw only symbols every terminal counts as one cell',
   expect(widthOf('❓')).toBe(2)
 
   // The day picker's label has no colon of its own; the terminal draws "Tag: Heute, …".
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   const [day] = await ui.findAll({ type: 'Select' })
   await ui.unmount()
   expect((day?.props as { label?: string } | undefined)?.label).toBe('Tag')
@@ -2797,7 +2827,7 @@ test('on the desktop every mark is an SVG icon, and no text or button carries a 
   await $.command.run({ command: 'leitstand', args: 'history' } as never)
   const SETTINGS = { ...PANE, requestId: 'leitstand-settings' } as const
   for (const target of [BAND, PLAN_PANE, PANE, SETTINGS]) {
-    const ui = await $.ui.mount({ ...target, surface: 'desktop' } as never)
+    const ui = await geprueft(await $.ui.mount({ ...target, surface: 'desktop' } as never))
     const svgs = await ui.findAll({ type: 'Svg' })
     const buttons = await ui.findAll({ type: 'Button' })
     const words = [...(await ui.findAll({ type: 'Text' })), ...buttons].map(one => one.text)
@@ -2818,7 +2848,7 @@ test('on the desktop Needs you and Stuck read in the text colour, with the colou
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write it', 'Check it'] })
   const leadColor = async (lead: string) => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' } as never)
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' } as never))
     const found = (await ui.findAll({ type: 'Text' })).filter(one => one.text === lead)
     await ui.unmount()
     expect(found.length).toBe(1)
@@ -2832,7 +2862,7 @@ test('on the desktop Needs you and Stuck read in the text colour, with the colou
 
 /** What a desktop screen draws, each drawing as its alt and its source. */
 async function drawings($: Engine, target: object = BAND): Promise<{ alt: string; source: string }[]> {
-  const ui = await $.ui.mount({ ...target, surface: 'desktop' } as never)
+  const ui = await geprueft(await $.ui.mount({ ...target, surface: 'desktop' } as never))
   const svgs = (await ui.findAll({ type: 'Svg' })).map(one => ({ alt: String(one.props.alt), source: String(one.props.source) }))
   await ui.unmount()
   return svgs
@@ -2942,7 +2972,7 @@ test('on the desktop every drawing says what it is, in every state of the checkl
   const nameless = async (...targets: object[]) => {
     const found: string[] = []
     for (const target of targets) {
-      const ui = await $.ui.mount({ ...target, surface: 'desktop' } as never)
+      const ui = await geprueft(await $.ui.mount({ ...target, surface: 'desktop' } as never))
       const svgs = await ui.findAll({ type: 'Svg' })
       await ui.unmount()
       found.push(...svgs.filter(one => String(one.props.alt ?? '').trim() === '').map(one => String(one.props.source).slice(0, 80)))
@@ -2983,7 +3013,7 @@ test('the History button opens the panel; the day picker moves between days', as
   on('ui.close', () => ({ value: undefined }) as never)
   on('ui.toast', () => ({ value: undefined }) as never)
 
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
   await band.press({ key: 'history' })
   await band.unmount()
   expect(opened).toBe(1)
@@ -2992,7 +3022,7 @@ test('the History button opens the panel; the day picker moves between days', as
   expect(pane).toContain(`landing-site · ${longDay(dayKey(clock.now()))}`)
   expect(pane).toContain('Für dieses Projekt sind an diesem Tag noch keine Aufgaben gespeichert.')
 
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   await ui.press({ key: 'earlier' })
   await ui.unmount()
   pane = (await paneTexts($)).join('\n')
@@ -3000,7 +3030,7 @@ test('the History button opens the panel; the day picker moves between days', as
   expect(pane).toContain(longDay('2026-10-05'))
   expect(pane).toContain('Später ▶')
 
-  const picker = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const picker = await geprueft(await $.ui.mount({ ...PANE, surface: 'desktop' }))
   await $.ui.select({ plugin: 'leitstand', key: 'day', value: dayKey(clock.now()) })
   await picker.unmount()
   expect((await paneTexts($)).join('\n')).toContain('noch keine Aufgaben gespeichert')
@@ -3024,7 +3054,7 @@ test('Team report shows the report and copies it', async ($, on) => {
   })
   await $.command.run({ command: 'leitstand', args: 'history' } as never)
 
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   await ui.press({ key: 'report' })
   await ui.unmount()
   expect(copied).toContain('Tagesbericht · landing-site')
@@ -3053,7 +3083,7 @@ test('Fresh chat asks for a second press, then clears the chat and sends a hando
   await $.turn.start({ text: 'Fix the menu', turnId: 't1' })
 
   const press = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key: 'handoff' })
     await ui.unmount()
   }
@@ -3150,7 +3180,7 @@ test('Ship it shows on a finished job in a GitHub project once Finish on GitHub 
   expect(await texts($, 'desktop')).toContain('Push')
 
   const press = async () => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key: 'ship' })
     await ui.unmount()
   }
@@ -3753,7 +3783,7 @@ test('askedMergeSha reads the German approval line too, as Ship it now asks for 
 /** Presses ⇡ Ship it twice on the terminal band, the way the person ships. */
 async function pressShip($: Engine) {
   for (let press = 0; press < 2; press++) {
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key: 'ship' })
     await ui.unmount()
   }
@@ -4419,7 +4449,7 @@ test("a timer left from an earlier press never cancels a later one, and only one
   await $.command.run({ command: 'leitstand', args: 'ship on' } as never)
   await finish($)
   const press = async (key: string) => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key })
     await ui.unmount()
   }
@@ -4462,7 +4492,7 @@ test('Pause stops the running turn; Continue picks the same job up without typin
     return { text: e.text }
   })
   const press = async (key: string) => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key })
     await ui.unmount()
   }
@@ -4847,7 +4877,7 @@ test('calm mode: nothing moves, and statuses read in bold', async ($, on) => {
 
   await callTool($, { tool: PROGRESS, task: 'Write copy', percent: 100 })
   await $.turn.complete({ answer: 'Done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
-  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
   const done = (await ui.findAll({ type: 'Text' })).find(one => one.text.includes('✓ Fertig'))
   await ui.unmount()
   expect((done?.props as { bold?: boolean } | undefined)?.bold).toBe(true)
@@ -5106,10 +5136,10 @@ test('the weekly team report covers the 7 days up to the day picked, and This we
   })
   await $.command.run({ command: 'leitstand', args: 'history' } as never)
 
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   await ui.press({ key: 'report' })
   await ui.unmount()
-  const report = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const report = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   await report.press({ key: 'span' })
   await report.unmount()
   expect(copied).toMatch(/Wochenbericht · landing-site · 30\. Sept?\. 2026 bis 6\. Okt\. 2026/)
@@ -5162,11 +5192,11 @@ test('your week sums up every project: steps, tasks, time, the busiest day and t
   expect(shown).not.toContain('Diese Woche')
 
   // From the list, Your week shows it again.
-  const back = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const back = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   await back.press({ key: 'back' })
   await back.unmount()
   copied = ''
-  const list = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const list = await geprueft(await $.ui.mount({ ...PANE, surface: 'terminal' }))
   await list.press({ key: 'mine' })
   await list.unmount()
   expect(copied).toContain('Claude hat 7 Schritte in 3 Aufgaben abgehakt')
@@ -5202,7 +5232,7 @@ test('the Plan shows long step names whole in a narrow panel', async ($, on) => 
   world(on)
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Keep the product profile private', 'Load the social media guide'] })
-  const ui = await $.ui.mount({ ...PLAN_PANE, props: { ...PLAN_PANE.props, bodyColumns: 40 }, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PLAN_PANE, props: { ...PLAN_PANE.props, bodyColumns: 40 }, surface: 'terminal' }))
   const pane = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
   await ui.unmount()
   expect(pane).toContain('Keep the product profile private')
@@ -5225,7 +5255,7 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
   // The view, ❓ and 🔧 at the top right, as in the app: where the last card points.
   expect(await terminalHeaderRight($, { bodyColumns: 120 })).toEqual(['toggle', 'help', 'settings'])
   for (const card of ['2 von 3', '3 von 3']) {
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await band.press({ key: 'tour-next' })
     await band.unmount()
     expect((await texts($, 'terminal', 120)).join('\n')).toContain(card)
@@ -5233,7 +5263,7 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('✓ Verstanden')
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('Oben rechts erklärt das Fragezeichen die Buttons, hinter dem Schraubenschlüssel findest du das Einstellungsfenster.')
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Unten unter Einstellungen')
-  const last = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const last = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
   await last.press({ key: 'tour-next' })
   await last.unmount()
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
@@ -5244,7 +5274,7 @@ test('someone new gets a three-card welcome once; /leitstand tour shows it again
 
   await $.command.run({ command: 'leitstand', args: 'tour' } as never)
   expect((await texts($, 'terminal', 120)).join('\n')).toContain('Willkommen im Leitstand · 1 von 3')
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
   await band.press({ key: 'tour-skip' })
   await band.unmount()
   expect((await texts($, 'terminal', 120)).join('\n')).not.toContain('Willkommen im Leitstand')
@@ -5270,7 +5300,7 @@ test('in der Ansicht Minimal zeigt der erste Start eine Zeile mit /leitstand:tou
   const tour = (await texts($, 'terminal', 120)).join('\n')
   expect(tour).toContain('Willkommen im Leitstand · 1 von 3')
   expect(tour).not.toContain(HINT)
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
   await band.press({ key: 'tour-skip' })
   await band.unmount()
   const after = await texts($, 'terminal', 120)
@@ -5818,7 +5848,7 @@ const PLAN_PANE = {
 } as const
 
 async function planPaneTexts($: Engine): Promise<string> {
-  const ui = await $.ui.mount({ ...PLAN_PANE, surface: 'terminal' })
+  const ui = await geprueft(await $.ui.mount({ ...PLAN_PANE, surface: 'terminal' }))
   const found = [...(await ui.findAll({ type: 'Text' })), ...(await ui.findAll({ type: 'Button' }))].map(one => one.text)
   await ui.unmount()
 
@@ -5848,7 +5878,7 @@ test('▤ Plan opens the whole plan beside the chat: every step, what it got don
   await callTool($, { tool: 'Read', file_path: '/work/copy.md' })
 
   // The band keeps to its rows; the panel has room for every step.
-  const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 6 }, surface: 'terminal' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, maxRows: 6 }, surface: 'terminal' }))
   await band.press({ key: 'plan' })
   await band.unmount()
   expect(opened).toEqual(['leitstand-plan'])
@@ -5882,7 +5912,7 @@ test('▤ Plan opens the whole plan beside the chat: every step, what it got don
   expect(details).toContain(`noch etwa ${bandLeft}`)
   await $.classic.Notification({ message: 'Claude needs your permission', notification_type: 'permission_prompt' } as never)
   expect(await planPaneTexts($)).toContain('Braucht dich: Beantworte Claudes Anfrage im Chat')
-  const desktop = await $.ui.mount({ ...PLAN_PANE, surface: 'desktop' })
+  const desktop = await geprueft(await $.ui.mount({ ...PLAN_PANE, surface: 'desktop' }))
   expect((await desktop.findAll({ type: 'Text' })).map(one => one.text).join('\n')).toContain('Ship it')
   await desktop.unmount()
 
@@ -6158,20 +6188,20 @@ test('⚙ Settings opens one panel for the view, sounds and calm mode, each with
     props: { title: 'Settings', isFocused: true, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
   } as const
   const settingsTexts = async () => {
-    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
     const found = [...(await ui.findAll({ type: 'Text' })), ...(await ui.findAll({ type: 'Button' }))].map(one => one.text).join('\n')
     await ui.unmount()
     return found
   }
   const pick = async (key: string) => {
-    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
     await ui.press({ key })
     await ui.unmount()
   }
 
   await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
-  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
   await band.press({ key: 'settings' })
   await band.unmount()
   expect(opened).toEqual(['leitstand-settings'])
@@ -6298,7 +6328,7 @@ describe('Arbeitsweise und Grill mich', () => {
   test('Auto ist Standard; Einstellung und Befehl schalten auf Dynamisch und zurück', async ($, on) => {
     world(on)
     const settingsTexts = async () => {
-      const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+      const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
       const found = [...(await ui.findAll({ type: 'Text' })), ...(await ui.findAll({ type: 'Button' }))].map(one => one.text).join('\n')
       await ui.unmount()
       return found
@@ -6310,7 +6340,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(shown).toContain('● Auto-Modus')
     expect(shown).toContain('Claude entscheidet selbst, ob und welche Helfer')
 
-    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
     await ui.press({ key: 'mode-dynamisch' })
     await ui.unmount()
     shown = await settingsTexts()
@@ -6487,14 +6517,14 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(shownInTerminal).toContain('\u{1F525}')
     expect(shownInTerminal.some(one => one.includes('Grill mich'))).toBe(false)
     // In der App das Zeichen fuer Dampf, direkt hinter dem Modus-Menue.
-    const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const desktop = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
     expect(row).toContain('"label":"\u2668\uFE0F"')
     expect(row).not.toContain('Grill mich')
     expect(row.indexOf('"key":"grill"')).toBeGreaterThan(row.indexOf('"key":"workmode"'))
     expect(row.indexOf('"key":"grill"')).toBeLessThan(row.indexOf('"key":"plan"'))
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await band.press({ key: 'grill' })
     await band.unmount()
     expect(runs).toHaveLength(1)
@@ -6503,7 +6533,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(runs[0]?.args).toContain('Lies die Markennotizen; Baue die Preistabelle')
 
     commands = []
-    const again = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const again = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await again.press({ key: 'grill' })
     await again.unmount()
     expect(runs).toHaveLength(1)
@@ -6566,7 +6596,7 @@ describe('Arbeitsweise und Grill mich', () => {
     await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
     const press = async (key: string, surface: (typeof SURFACES)[number] = 'desktop') => {
-      const band = await $.ui.mount({ ...BAND, surface })
+      const band = await geprueft(await $.ui.mount({ ...BAND, surface }))
       await band.press({ key })
       await band.unmount()
     }
@@ -6620,7 +6650,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('hinter dem Autopiloten stehen Kurzantworten, Vermenschlichen, Grill mich, Selbstkritik, Sauberer Code, Skill-Menü, Dateien, Autopilot, Verdecken und Tresor, in der App und im Terminal', async ($, on) => {
     await skillWorld($, on)
-    const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const desktop = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const row = JSON.stringify((await desktop.findAll({ type: 'Box' })).find(one => one.props.key === 'actions') ?? null)
     await desktop.unmount()
     const order = ['workmode', 'nightshift', 'adhd', 'humanize', 'grill', 'reflect', 'cleancode', 'skillmenue', 'filetree', 'privacy', 'vault', 'plan', 'history'].map(key => row.indexOf(`"key":"${key}"`))
@@ -6632,7 +6662,7 @@ describe('Arbeitsweise und Grill mich', () => {
     for (const label of ['\u{1F50D}', '\u{1F4C8}']) expect(row).not.toContain(label)
 
     for (const bodyColumns of [50, 80, 140]) {
-      const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' }))
       const keys = (await ui.findAll({ type: 'Button' })).map(one => one.props.key)
       await ui.unmount()
       for (const key of ['cleancode', 'skillmenue', 'reflect', 'humanize', 'adhd', 'filetree', 'nightshift', 'privacy', 'vault']) expect(keys).toContain(key)
@@ -6642,7 +6672,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   /** The bottom left of the band in the app, in order: each button's key, a bar as its dim | (the tree keeps no key of a Text). */
   const leftRow = async ($: Engine) => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const actions = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
     await ui.unmount()
     type Kid = { type: string; props: Record<string, unknown>; children?: unknown[] }
@@ -6668,7 +6698,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('in der App stehen die Knöpfe der unteren Zeile eine halbe Zelle auseinander, damit Neuer Chat mit hineinpasst', async ($, on) => {
     await skillWorld($, on)
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const actions = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
     await ui.unmount()
     type Kid = { props: Record<string, unknown> }
@@ -6680,7 +6710,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('in der App steht über der unteren Zeile und zwischen ihren Umbrüchen so viel Platz, dass sich keine Knöpfe berühren', async ($, on) => {
     await skillWorld($, on)
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const actions = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
     await ui.unmount()
     type Kid = { props: Record<string, unknown> }
@@ -6691,7 +6721,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(left?.props.rowGap).toBe(1.2)
     expect(right?.props.rowGap).toBe(1.2)
     // Im Terminal bleibt es bei einer Zeile Abstand.
-    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const terminal = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     const row = (await terminal.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
     await terminal.unmount()
     expect(row?.props.marginTop).toBeUndefined()
@@ -6704,14 +6734,14 @@ describe('Arbeitsweise und Grill mich', () => {
       return { value: { isPlaced: true } } as never
     })
     await skillWorld($, on)
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const right = JSON.stringify((await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'header-right') ?? null)
     expect((await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'help')?.props.label).toBe('\u2753')
     expect(right.indexOf('"key":"help"')).toBeLessThan(right.indexOf('"key":"settings"'))
     await ui.press({ key: 'help' })
     await ui.unmount()
     expect(opened).toEqual(['leitstand-knoepfe'])
-    const terminal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const terminal = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     const help = (await terminal.findAll({ type: 'Button' })).find(one => one.props.key === 'help')
     expect(help?.props.label).toBe('❓')
     expect(help?.props.plain).toBe(true)
@@ -6724,13 +6754,13 @@ describe('Arbeitsweise und Grill mich', () => {
   test('das Fenster Leitstand-Buttons nennt jeden Button, den das Band zeigt, in beiden Arbeitsweisen', async ($, on) => {
     await skillWorld($, on)
     const labels = async () => {
-      const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
       const found = (await ui.findAll({ type: 'Button' })).map(one => String(one.props.label))
       await ui.unmount()
       return found
     }
     const shown: string[] = [...(await labels())]
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await band.press({ key: 'workmode' })
     await band.press({ key: 'privacy' })
     await band.press({ key: 'adhd' })
@@ -6790,7 +6820,7 @@ describe('Arbeitsweise und Grill mich', () => {
     const row = await leftRow($)
     const at = row.indexOf('filetree')
     expect(row.slice(at - 2, at + 2)).toEqual(['skillmenue', 'dim|', 'filetree', 'dim|'])
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'filetree')
     await ui.unmount()
     expect(button?.props.label).toBe('\u{1F4C2}')
@@ -6830,7 +6860,7 @@ describe('Arbeitsweise und Grill mich', () => {
       return { value: { isPlaced: true } } as never
     })
     const { state, press } = await skillWorld($, on)
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'reflect')
     await ui.unmount()
     expect(button?.props.label).toBe('\u{1FA9E}')
@@ -6876,7 +6906,7 @@ describe('Arbeitsweise und Grill mich', () => {
     on('command.register', () => ({ value: undefined }) as never)
     const world = await skillWorld($, on)
     const button = async () => {
-      const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
       const found = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'adhd')
       await ui.unmount()
       return found
@@ -7021,7 +7051,7 @@ describe('Arbeitsweise und Grill mich', () => {
   }
   /** The Autopilot button's variant in the app. */
   const nightShiftVariant = async ($: Engine) => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'nightshift')
     await ui.unmount()
     return button?.props.variant
@@ -7129,7 +7159,7 @@ describe('Arbeitsweise und Grill mich', () => {
   const NIGHT_NOTE = 'Der Autopilot startet den Plan in 30 Sekunden von selbst.'
   /** Autopilot's hint beside Start as drawn, marked when dim; none while nothing counts down. */
   const nightHint = async ($: Engine, surface: (typeof SURFACES)[number]) => {
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
     const found = (await ui.findAll({ type: 'Text' })).filter(one => one.text.startsWith('startet in'))
     await ui.unmount()
     return found.map(one => `${one.text}${one.props.dimColor ? ' (gedimmt)' : ''}`)
@@ -7179,7 +7209,7 @@ describe('Arbeitsweise und Grill mich', () => {
   test('Plan in den 30 s mit Start freigegeben: der Autopilot schickt nichts dazu, auch vor seiner Runde nicht', async ($, on) => {
     const { clock, sent } = await nightPlan($, on, true)
     await clock.advance(10_000)
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await band.press({ key: 'start' })
     await band.unmount()
     expect(sent).toEqual([START_WORDS])
@@ -7242,7 +7272,7 @@ describe('Arbeitsweise und Grill mich', () => {
       const { clock } = await nightPlan($, on, true)
       expect(await nightHint($, surface)).toEqual(['startet in 30 s (gedimmt)'])
       // Right beside Start, as the row reads: in the app before it, Start staying last; on the terminal after it.
-      const ui = await $.ui.mount({ ...BAND, surface })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
       const row = (await ui.findAll({ type: 'Box' })).find(one => one.props.key === 'actions')
       await ui.unmount()
       expect(row?.text ?? '').toContain(surface === 'terminal' ? '▶ Startstartet in 30 s' : 'startet in 30 sStart')
@@ -7270,7 +7300,7 @@ describe('Arbeitsweise und Grill mich', () => {
   const endTurn = ($: Engine) => $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
   /** The Remote Control button in the app: its variant and label, or null when there is none. */
   const remoteButton = async ($: Engine) => {
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const button = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'remote')
     await ui.unmount()
     return button === undefined ? null : { variant: button.props.variant, label: button.props.label }
@@ -7328,7 +7358,7 @@ describe('Arbeitsweise und Grill mich', () => {
     state.commands = [remoteCommand(true)]
     await endTurn($)
     for (const bodyColumns of [50, 80, 140]) {
-      const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns }, surface: 'terminal' }))
       const remote = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'remote')
       const words = (await ui.findAll({ type: 'Text' })).map(one => one.text).join('\n')
       await ui.unmount()
@@ -7518,7 +7548,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   test('auf dem Desktop steht die Arbeitsweise als Knopf 👨‍💼/👨‍👨‍👧‍👦 unten links vor Verlauf und schaltet um', async ($, on) => {
     world(on)
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const boxes = await ui.findAll({ type: 'Box' })
     const top = JSON.stringify(boxes.find(one => one.props.key === 'header-right') ?? null)
     const bottom = JSON.stringify(boxes.find(one => one.props.key === 'actions') ?? null)
@@ -7546,7 +7576,7 @@ describe('Arbeitsweise und Grill mich', () => {
     for (const bodyColumns of [50, 80, 140]) {
       expect((await terminalRow($, bodyColumns))[0]?.[0]).toBe('workmode')
     }
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     const knopf = async () => (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'workmode')
     expect((await knopf())?.props.label).toBe('\u{1F464}')
     expect((await knopf())?.props.plain).toBe(true)
@@ -7561,7 +7591,7 @@ describe('Arbeitsweise und Grill mich', () => {
     world(on)
     await $.command.run({ command: 'leitstand', args: 'off' } as never)
     for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...BAND, surface })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
       const all = [...(await ui.findAll({ type: 'Button' })), ...(await ui.findAll({ type: 'Select' }))]
       expect(all.some(one => one.props.key === 'workmode')).toBe(false)
       await ui.unmount()
@@ -7571,7 +7601,7 @@ describe('Arbeitsweise und Grill mich', () => {
 
   /** The keys at the top right, in order, as `surface` draws them; the app's menu is its key, view. */
   const headerRightOn = async ($: Engine, surface: (typeof SURFACES)[number]) => {
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
     const tree = (await ui.drawn()) as unknown as Drawn
     await ui.unmount()
     const right = elementsOf(tree).find(one => one.props.key === 'header-right')
@@ -7730,7 +7760,7 @@ describe('Arbeitsweise und Grill mich', () => {
     expect(opened).toEqual(['leitstand-dateien'])
 
     const pressAt = async (viewport: { columns: number; rows: number; isFullscreen: boolean }) => {
-      const band = await $.ui.mount({ ...BAND, surface: 'terminal', viewport })
+      const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', viewport }))
       await band.press({ key: 'filetree' })
       await band.unmount()
     }
@@ -7777,7 +7807,7 @@ test('über dem Band steht ein Trennstrich: in der App eine dünne Linie, im Ter
   world(on)
   await $.turn.start({ text: 'Baue die Preisseite', turnId: 't1' })
   await callTool($, { tool: PLAN, steps: ['Lies die Markennotizen', 'Baue die Preistabelle'] })
-  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
   const svgs = await band.findAll({ type: 'Svg' })
   const alts = svgs.map(one => String(one.props.alt))
   await band.unmount()
@@ -7860,7 +7890,7 @@ describe('Ansicht Minimal', () => {
     await $.turn.complete({ answer: 'Fertig.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     expect((await texts($, 'desktop')).join('\n')).toMatch(/Fertig \(2\/2\) · dauerte /)
 
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const menu = (await band.findAll({ type: 'Select' })).find(one => one.props.key === 'view')
     await band.unmount()
     expect((menu?.props.options as { label: string }[]).map(one => one.label)).toEqual(['Detailliert', 'Einfach', 'Minimal'])
@@ -7891,7 +7921,7 @@ describe('Zahnrad für die Einstellungen', () => {
       return { value: { isPlaced: true } } as never
     })
     const top = async () => {
-      const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
       const boxes = await ui.findAll({ type: 'Box' })
       const right = boxes.find(one => one.props.key === 'header-right')
       const actions = JSON.stringify(boxes.find(one => one.props.key === 'actions') ?? null)
@@ -7929,7 +7959,7 @@ describe('Zahnrad für die Einstellungen', () => {
     await $.command.run({ command: 'leitstand', args: 'off' } as never)
     expect((await top()).order).toEqual(['Select', '\u2753', GEAR_LABEL])
 
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await band.press({ key: 'settings' })
     await band.unmount()
     expect(opened).toEqual(['leitstand-settings'])
@@ -7937,7 +7967,7 @@ describe('Zahnrad für die Einstellungen', () => {
 
   test('in der App ist das Zahnrad ein Emoji (U+FE0F), so breit wie die anderen Knöpfe mit Zeichen', async ($, on) => {
     world(on)
-    const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const gear = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'settings')
     await ui.unmount()
     expect(gear?.props.label).toBe('\u2699\uFE0F')
@@ -7964,7 +7994,7 @@ describe('Zahnrad für die Einstellungen', () => {
     await detailsOn($)
     expect(await terminalHeaderRight($)).toEqual(order)
     expect((await texts($, 'terminal')).join('\n')).toContain('● Detailliert')
-    const toMinimal = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const toMinimal = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await toMinimal.press({ key: 'toggle' })
     await toMinimal.unmount()
     expect(await texts($, 'terminal')).toContain('● Minimal')
@@ -7973,7 +8003,7 @@ describe('Zahnrad für die Einstellungen', () => {
     expect(await terminalHeaderRight($)).toEqual(order)
     expect(await texts($, 'terminal')).toContain('○ Aus')
 
-    const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await band.press({ key: 'settings' })
     await band.press({ key: 'help' })
     await band.unmount()
@@ -8078,7 +8108,7 @@ describe('Verdecken und Tresor', () => {
 
   /** The props a component reaches the engine's own drawing with, as JSON: what shows on screen. */
   const drawn = async ($: Engine, component: string, props: Record<string, unknown>) => {
-    const ui = await $.ui.mount({ plugin: 'leitstand', surface: 'desktop', component, props } as never)
+    const ui = await geprueft(await $.ui.mount({ plugin: 'leitstand', surface: 'desktop', component, props } as never))
     await ui.unmount()
     return JSON.stringify(engineDrew.at(-1) ?? null)
   }
@@ -8090,13 +8120,13 @@ describe('Verdecken und Tresor', () => {
       return { type: 'Box', props: {}, children: [] } as never
     })
   const bandButton = async ($: Engine, key: string) => {
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const found = (await band.findAll({ type: 'Button' })).find(one => one.props.key === key)
     await band.unmount()
     return found?.props.label
   }
   const pressBand = async ($: Engine, key: string) => {
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await band.press({ key })
     await band.unmount()
   }
@@ -8248,7 +8278,7 @@ describe('Verdecken und Tresor', () => {
   test('🔒 ist hervorgehoben, solange Verdecken an ist; 🔓 steht schlicht da, per Knopf und per Befehl', async ($, on) => {
     await vaultWorld($, on)
     const privacy = async () => {
-      const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
       const found = (await band.findAll({ type: 'Button' })).find(one => one.props.key === 'privacy')
       await band.unmount()
       return { label: found?.props.label, variant: found?.props.variant }
@@ -8614,13 +8644,13 @@ for (const surface of SURFACES) {
     await clock.advance(2000)
     expect(await tick()).toBe(before)
 
-    const band = await $.ui.mount({ ...BAND, surface })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface }))
     await band.press({ key: 'start' })
     await band.unmount()
     expect(sent).toEqual(['Der Plan sieht gut aus. Leg bitte los.'])
     await $.turn.start({ text: sent[0]!, turnId: 't2' })
     expect((await callTool($, { tool: 'Bash', command: 'ls' })).deny).toBeUndefined()
-    const after = await $.ui.mount({ ...BAND, surface })
+    const after = await geprueft(await $.ui.mount({ ...BAND, surface }))
     const labels = (await after.findAll({ type: 'Button' })).map(one => one.text)
     await after.unmount()
     expect(labels.filter(label => /(^|\s)Start$/.test(label))).toEqual([])
@@ -8670,7 +8700,7 @@ for (const surface of SURFACES) {
     await clock.advance(2000)
     expect(ticks).toBe(before)
 
-    const band = await $.ui.mount({ ...BAND, surface })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface }))
     await band.press({ key: 'start' })
     await band.unmount()
     await clock.advance(10)
@@ -8691,7 +8721,7 @@ for (const surface of SURFACES) {
     await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await endPlanTurn($)
-    const band = await $.ui.mount({ ...BAND, surface })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface }))
     const first = band.press({ key: 'start' })
     await clock.advance(3000)
     const second = band.press({ key: 'start' })
@@ -8716,19 +8746,19 @@ for (const surface of SURFACES) {
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await endPlanTurn($)
     const startButton = async () => {
-      const ui = await $.ui.mount({ ...BAND, surface })
+      const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
       const found = (await ui.findAll({ type: 'Button' })).find(one => one.props.key === 'start')
       await ui.unmount()
       return found
     }
-    const band = await $.ui.mount({ ...BAND, surface })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface }))
     await band.press({ key: 'start' })
     await band.unmount()
     await clock.advance(10)
     const starting = await startButton()
     expect(starting?.text).toContain('Startet gleich…')
     if (surface === 'desktop') expect(starting?.props.variant).toBe('secondary')
-    const again = await $.ui.mount({ ...BAND, surface })
+    const again = await geprueft(await $.ui.mount({ ...BAND, surface }))
     await again.press({ key: 'start' })
     await again.unmount()
     await clock.advance(10)
@@ -8769,7 +8799,7 @@ for (const surface of SURFACES) {
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     const press = async () => {
-      const band = await $.ui.mount({ ...BAND, surface })
+      const band = await geprueft(await $.ui.mount({ ...BAND, surface }))
       await band.press({ key: 'start' })
       await band.unmount()
       await clock.advance(10)
@@ -8883,7 +8913,7 @@ describe('Verdichtung des Chats', () => {
     let pressed = false
     state.onCompact = async () => {
       state.hidesCompacting = true
-      const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
       state.hidesCompacting = false
       await band.press({ key: 'start' })
       await band.unmount()
@@ -8895,7 +8925,7 @@ describe('Verdichtung des Chats', () => {
     expect(toasts).toContain('Der Chat wird gerade aufgeräumt. Drück gleich noch mal.')
 
     // Once it is through, Start sends again.
-    const again = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const again = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await again.press({ key: 'start' })
     await again.unmount()
     expect(sent).toEqual(['Der Plan sieht gut aus. Leg bitte los.'])
@@ -8916,7 +8946,7 @@ describe('Verdichtung des Chats', () => {
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await $.turn.complete({ answer: 'Der Plan steht.', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     const press = async () => {
-      const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+      const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
       await band.press({ key: 'start' })
       await band.unmount()
       await clock.advance(10)
@@ -9210,7 +9240,7 @@ describe('Einstellungen je Chat', () => {
   /** A setting as this chat has it, read from the settings panel. */
   const stateOf = async ($: Engine, key: string) => {
     const [group, reads] = READS[key]!
-    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
     const buttons = await ui.findAll({ type: 'Button' })
     await ui.unmount()
     const picked = buttons.find(one => String(one.props.key).startsWith(`${group}-`) && one.props.variant === 'primary')
@@ -9222,12 +9252,12 @@ describe('Einstellungen je Chat', () => {
     await $.session.start(START)
   }
   const settingsPress = async ($: Engine, key: string) => {
-    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
     await ui.press({ key })
     await ui.unmount()
   }
   const settingsTexts = async ($: Engine) => {
-    const ui = await $.ui.mount({ ...SETTINGS, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...SETTINGS, surface: 'terminal' }))
     const found = [...(await ui.findAll({ type: 'Text' })), ...(await ui.findAll({ type: 'Button' }))].map(one => one.text).join('\n')
     await ui.unmount()
     return found
@@ -9273,7 +9303,7 @@ describe('Einstellungen je Chat', () => {
     // Past the welcome, so the band shows its buttons.
     const { store, session } = resumeWorld(on, { glanceTour: true })
     await openChat($, session, 'chat-1')
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     await band.press({ key: 'workmode' })
     await band.press({ key: 'privacy' })
     await band.unmount()
@@ -9347,7 +9377,7 @@ describe('Einstellungen je Chat', () => {
   }
   /** The view the desktop band's menu shows picked. */
   const bandView = async ($: Engine) => {
-    const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+    const band = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop' }))
     const menu = (await band.findAll({ type: 'Select' })).find(one => one.props.key === 'view')
     await band.unmount()
     const props = menu?.props as { value?: string; options?: { value: string; label: string }[] } | undefined
@@ -10754,7 +10784,7 @@ test('die Zeile der Modellwahl steht oben im Band; ihre Knöpfe bleiben bei ihr'
     expect(at('Modellwahl schlägt')).toBe(0)
     expect(at('Modellwahl schlägt')).toBeLessThan(at('Write it'))
     expect(at('Write it')).toBeLessThan(at('A card from another mod'))
-    const ui = await $.ui.mount({ ...BAND, surface })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface }))
     const boxes = await ui.findAll({ type: 'Box' })
     const line = JSON.stringify(boxes.find(one => one.props.key === 'modellwahl') ?? null)
     const actions = JSON.stringify(boxes.find(one => one.props.key === 'actions') ?? null)
@@ -11157,7 +11187,7 @@ describe('Autopilot, Zeitgeber, Berichte und Pause neben laufenden Helfern', () 
     await $.turn.start({ text: 'Build my landing page', turnId: 't1' })
     await callTool($, { tool: PLAN, steps: ['Write the page', 'Check it'] })
     await $.turn.start({ text: 'Prüf die Seite', turnId: 'h1', agentId: 'a1' } as never)
-    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal' }))
     await ui.press({ key: 'pause' })
     await ui.unmount()
     expect(aborted).toBe('t1')

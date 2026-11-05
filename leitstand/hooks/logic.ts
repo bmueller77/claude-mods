@@ -1784,12 +1784,26 @@ export function appCells(text: string): number {
   return Math.round(cells * 100) / 100
 }
 
-/** The width of a part of the button row in the desktop app's cells: a Button, a Text, or a row of them. */
+/**
+ * The width of a Select in the desktop app's cells, as it draws one in the band ("Minimal ⌄"): padded as a button, its
+ * label and the selected option's text, then the arrow. Estimated: the arrow with the gap before it 1.5 ch.
+ */
+const APP_SELECT_ARROW = 1.5
+function appSelectWidth(props: Record<string, unknown> | undefined): number {
+  const options = Array.isArray(props?.options) ? (props.options as { value?: unknown; label?: unknown }[]) : []
+  const chosen = options.find(one => one?.value === props?.value) ?? options[0]
+  const shown = chosen === undefined ? '' : String(chosen.label ?? chosen.value ?? '')
+  const label = typeof props?.label === 'string' && props.label !== '' ? appCells(props.label) + APP_LETTER : 0
+  return Math.round((2 * APP_PAD + label + appCells(shown) + APP_SELECT_ARROW) * 100) / 100
+}
+
+/** The width of a part of the button row in the desktop app's cells: a Button, a Select, a Text, or a row of them. */
 function appWidthOf(element: unknown): number {
   if (typeof element === 'string' || typeof element === 'number') return appCells(String(element))
   if (element === null || typeof element !== 'object') return 0
   const { type, props, children } = element as { type?: unknown; props?: Record<string, unknown>; children?: unknown }
   if (type === 'Button') return 2 * APP_PAD + appCells(String(props?.label ?? ''))
+  if (type === 'Select') return appSelectWidth(props)
   const kids = childrenOf(Array.isArray(children) ? children.flat(Infinity) : children)
   const gap = Number(props?.columnGap ?? props?.gap ?? 0) || 0
   return kids.reduce<number>((sum, kid) => sum + appWidthOf(kid), 0) + (type === 'Box' ? gap * Math.max(0, kids.length - 1) : 0)

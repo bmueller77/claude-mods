@@ -1,5 +1,5 @@
 ---
-description: "Menü mit allen installierten Skills öffnen und einen starten"
+description: "Klappt die installierten Skills nach Kategorien auf; eine Wahl startet den Skill."
 disable-model-invocation: true
 ---
 

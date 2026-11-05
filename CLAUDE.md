@@ -282,19 +282,26 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   trifft auch den vollen Namen (`stemStep`, nur bei genau einem Treffer). 🧹 startet `clean-code:clean-code` aus
   dem Mod clean-code, ohne ihn den älteren Skill `clean-code` (`CLEAN_CODE_NAMES`). Kurzfassen 0.1.2.1 sagt
   dazu: die Frage immer als letzte Zeile, der Stand davor.
-- Leitstand seit 0.63.7.0, Skill-Menü als Test (Björns Wunsch): 🧩 hinter 🧹 und `/leitstand:skill-menue`
-  öffnen das Fenster Skills mit einem `Select` aller Skills. Live blieb das Fenster leer ("leitstand has not drawn
-  in this pane"), Ursache offen. Björn will statt des Fensters ein Menü direkt am Button; das kennt die API nicht,
-  am nächsten kommt ein `Select` in der Button-Zeile, den die App wie "Minimal ⌄" als Aufklappmenü zeichnet.
-  So gebaut in 0.63.7.1 (Liste per `$.clock.after(0)` bei `session.start` und nach jeder Runde mit 10 s Frist ins
-  Atom `skillListe`, Zeichnen holt nichts); damit lud das Band live gar nicht mehr. 0.63.7.2 setzt glance.tsx,
-  logic.ts und den Teil `skills` auf den Stand von 0.63.7.0 zurück, die Schloss-Regel aus 0.63.7.1 bleibt.
-  Verdächtig, nicht bewiesen: ein `Select` mit vielen Optionen (die Ansichtswahl mit 3 Optionen geht) und das
-  Laden über `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`; die
-  Befehlsliste unterscheidet Skills nicht von anderen Befehlen). Weiter nur mit kleinen Versuchen in einem eigenen
-  Probe-Mod, nie im Band des Leitstands. Ein importiertes Atom lehnt `claude plugin validate` ab. Am 2026-11-05
-  stellte ein Commit nach `git switch` mit `core.autocrlf=true` und `add` mit `core.autocrlf=false` BEFEHLE.md,
-  CLAUDE.md und leitstand/plugin.json auf CRLF um; nach einem Zweigwechsel die Zeilenenden prüfen.
+- `Select` (geprüft 2026-11-05 mit dem Probe-Mod `skill-probe` im Mod-Ordner der Sitzung f08ea4af, Engine
+  2.1.317): Mehr als 64 Optionen lehnt die Engine ab ("Select "<key>" options must be 1 to 64 entries") und
+  überspringt den ganzen Hook; das Test-Kit prüft das nicht. In der Desktop-App scrollt ein aufgeklapptes Select
+  mit 20 Einträgen nicht. Deshalb: höchstens 12 Einträge plus Kopf je Select; die Leitstand-Tests prüfen jeden
+  gezeichneten Baum mit `tests/selects.ts` (`geprueft`, höchstens 64 Optionen, keine doppelten Werte). Ein
+  hot-reload-Probe-Mod schreibt abgelehnte Bäume mit Grund ins Protokoll: so findet man solche Grenzen.
+- Leitstand, Skill-Menü (Björns Wunsch, kein Seitenfenster): 0.63.7.0 öffnete ein Fenster Skills mit allen 82
+  Skills in einem `Select` (blieb leer), 0.63.7.1 setzte denselben `Select` in die Button-Zeile (das ganze Band
+  fehlte), 0.63.7.2 nahm das zurück; Ursache war beide Male die 64er-Grenze. Seit 0.63.8.0 ist 🧩 in App und VS
+  Code ein `Select` in zwei Stufen: erst höchstens 12 Kategorien ("Code (11)"), nach der Wahl "🧩 Code", "← zurück"
+  und höchstens 12 Skills; eine Wahl startet den Skill per `runCommand`, danach wieder 🧩 (`skillWahl`). Kein Weg
+  öffnet ein Fenster. Im Terminal legt 🧩 `/skill-menue` ins Eingabefeld; der Befehl antwortet mit Text nach
+  Kategorien. Die Liste lädt der Teil `skills` bei `session.start` und nach jeder Runde (22 ms live) über
+  `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`, ohne Beschreibungen;
+  die kommen aus `$.command.list()`). Kategorien: sofort `nachPlugin` (Teil vor dem Doppelpunkt), dann einmal je
+  Skill-Bestand Haiku (`$.model.complete`, 60 s Frist), Ergebnis in `$.store` `skillKategorien` mit Hash; ein
+  neuer Prompt erneuert gespeicherte Kategorien nicht. Reine Logik in `hooks/skills/kategorien.ts`. Ein
+  importiertes Atom lehnt `claude plugin validate` ab. Am 2026-11-05 stellte ein Commit nach `git switch` mit
+  `core.autocrlf=true` und `add` mit `core.autocrlf=false` BEFEHLE.md, CLAUDE.md und leitstand/plugin.json auf
+  CRLF um; nach einem Zweigwechsel die Zeilenenden prüfen.
 - Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
   Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
   zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung
@@ -397,8 +404,9 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    endeten auf U+2026. Die gesperrten langen Pausen sind kein Mod-Fehler (siehe Arbeitsweise).
    Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
    im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
-14. Live-Test ausstehend (2026-11-05, leitstand 0.63.7.2): das Band lädt wieder; die App-Liste zählt richtig,
-   auch nach einem Chatwechsel (die Ursache ist nur aus Verlauf und Engine-Code erschlossen; `claude --debug`
-   sollte "left out for re-entry" zeigen); "Los und ..." gibt frei; 🧹 startet Clean Code 1.4.0.0; "bleibt auf
-   1.4.0.0" im Schloss. Offen: das leere Fenster Skills und das Menü am Button (siehe Fachliches). Bestanden am 2026-11-05: Die Bash-Sperre in Lese-Plänen hielt einen Befehl an, der eine Datei
-   schreiben wollte (Offen 12).
+14. Live-Test ausstehend (2026-11-05, leitstand 0.63.8.0): das Skill-Menü in zwei Stufen (klappt es am Button
+   auf, wie gut sortiert Haiku, springt es nach der Wahl auf 🧩 zurück, wie breit wird "🧩 <Kategorie>" in der
+   Button-Zeile); die App-Liste zählt richtig, auch nach einem Chatwechsel (die Ursache ist nur aus Verlauf und
+   Engine-Code erschlossen; `claude --debug` sollte "left out for re-entry" zeigen); "Los und ..." gibt frei; 🧹
+   startet Clean Code 1.4.0.0; "bleibt auf 1.4.0.0" im Schloss. Bestanden am 2026-11-05: Das Band lädt mit
+   0.63.7.2 wieder; die Bash-Sperre in Lese-Plänen hielt einen Befehl an, der eine Datei schreiben wollte (Offen 12).
