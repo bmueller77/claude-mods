@@ -80,6 +80,8 @@ Zwischen zwei Nachrichten behält niemand "wir sind bei Schritt 3 von 5". Sag es
 Schlecht: "Erledigt. Bereit für den nächsten Teil?"
 Gut: "Schritt 3 von 5 ist fertig: Die Tabelle hat die neue Spalte. Als Nächstes wird sie befüllt. Soll das Skript laufen?"
 
+Endet die Antwort mit einer Frage, kommt der Stand davor. Die Frage ist immer die letzte Zeile: Steht danach noch etwas, erkennen Werkzeuge wie der Leitstand oder Nächste Schritte die Frage nicht, und ein "ja" gibt nichts frei.
+
 Hat die Umgebung eine Aufgabenliste oder ein Plan-Werkzeug, nutze es bei mehreren Schritten: ein Eintrag je
 Schritt, immer nur einer in Arbeit. Dann sagt die Liste den Stand, und der Text muss den Plan nicht noch einmal
 erzählen.

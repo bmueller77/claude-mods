@@ -1,6 +1,6 @@
 {
   "name": "kurzfassen",
-  "version": "0.1.2.0",
+  "version": "0.1.2.1",
   "description": "Kurze Antworten, nach denen du sofort handeln kannst: zuerst die nächste Handlung, nummerierte Schritte, keine Abschweifungen. An mit /kurzfassen:kurzfassen oder im Leitstand mit dem Button 📖 (Kurzantworten), aus mit \"Kurzfassen aus\". Hilfe: /kurzfassen:hilfe. Grundlage: i-have-adhd von Ayoub Ghriss (MIT).",
   "author": { "name": "Björn Müller" },
   "license": "MIT"
