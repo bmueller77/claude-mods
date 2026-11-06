@@ -2,47 +2,44 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   BESCHREIBUNG_MAX,
-  MAX_EINTRAEGE,
-  POPOVER_PX,
+  KURZ_PAECKCHEN,
+  MAX_KATEGORIEN,
+  MAX_SKILLS,
   PROMPT_VERSION,
   WEITERE,
-  ausModellAntwort,
   ersterSatz,
+  fertig,
   haikuPrompt,
-  imBand,
+  istSammel,
+  jsonAus,
   kategorienHash,
   kategorienText,
-  knopfPx,
   kurzAusBeschreibungen,
+  kurzPrompt,
+  ladeGespeichert,
   lesbar,
+  leseHauptantwort,
+  leseKurzAntwort,
+  leseNachtrag,
   menueHash,
-  menueMasse,
   nachPlugin,
-  passtNicht,
-  pruefeGespeichert,
+  nachtragPrompt,
+  paeckchen,
   skillLabel,
+  skillsText,
 } from '../hooks/skills/kategorien'
-import type { SkillMenue } from '../hooks/skills/kategorien'
+import type { Gelesen, Lesefehler } from '../hooks/skills/kategorien'
 
-// Die Kategorien des Skill-Menüs, ohne Engine: nach Plugin, aus Haikus Antwort, Kurzbeschreibungen und die Maße des
-// Hover-Menüs.
-
-/** Jeder Skill genau einmal (oder weggelassen), höchstens 12 Kategorien zu je höchstens 12, Namen eindeutig. */
-function pruefeGrenzen(menue: SkillMenue, namen: readonly string[]) {
-  const alle = [...menue.kategorien.flatMap(kategorie => kategorie.skills), ...menue.weggelassen]
-  expect(alle.length).toBe(new Set(alle).size)
-  expect([...alle].sort()).toEqual([...new Set(namen)].sort())
-  expect(menue.kategorien.length).toBeLessThanOrEqual(MAX_EINTRAEGE)
-  for (const kategorie of menue.kategorien) {
-    expect(kategorie.skills.length).toBeGreaterThan(0)
-    expect(kategorie.skills.length).toBeLessThanOrEqual(MAX_EINTRAEGE)
-    expect([...kategorie.skills]).toEqual([...kategorie.skills].sort((a, b) => a.localeCompare(b, 'de')))
-  }
-  const namenDerKategorien = menue.kategorien.map(kategorie => kategorie.name.toLowerCase())
-  expect(namenDerKategorien.length).toBe(new Set(namenDerKategorien).size)
-}
+// Die Kategorien des Fensters Skills, ohne Engine: Haikus Antworten lesen (aus dem Probe-Mod skill-probe übernommen),
+// der Rückfall nach Plugin, der Speicher, Kurzbeschreibungen und der Text des Befehls.
 
 const reihe = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${String(i + 1).padStart(3, '0')}`)
+const NAMEN = ['engineering:debug', 'engineering:review', 'pdf', 'design:critique', 'docx', 'grill-me']
+const gelesen = (r: Gelesen | Lesefehler): Gelesen => {
+  if ('fehler' in r) throw new Error(r.fehler)
+  return r
+}
+const alsObjekt = (gruppen: ReadonlyMap<string, readonly string[]>) => Object.fromEntries(gruppen)
 
 test('lesbar macht aus dem Plugin einen Namen', () => {
   expect(lesbar('anthropic-skills')).toBe('Anthropic')
@@ -52,158 +49,149 @@ test('lesbar macht aus dem Plugin einen Namen', () => {
   expect(lesbar('')).toBe(WEITERE)
 })
 
-test('nachPlugin gruppiert nach dem Teil vor dem Doppelpunkt, Namen ohne kommen in Weitere (keine Gruppe Eigene), sortiert', () => {
+test('nachPlugin gruppiert nach dem Teil vor dem Doppelpunkt, sortiert, Namen ohne Plugin in Weitere am Ende; keine Grenzen, keine Teilung', () => {
   const namen = ['sorgfalt:debuggen', 'anthropic-skills:grill-me', 'engineering:review', 'engineering:debug', 'solo', 'sorgfalt:belegen']
-  const menue = nachPlugin(namen)
-  expect(menue).toEqual({
-    kategorien: [
-      { name: 'Anthropic', skills: ['anthropic-skills:grill-me'] },
-      { name: 'Engineering', skills: ['engineering:debug', 'engineering:review'] },
-      { name: 'Sorgfalt', skills: ['sorgfalt:belegen', 'sorgfalt:debuggen'] },
-      { name: WEITERE, skills: ['solo'] },
-    ],
-    weggelassen: [],
-  })
-  expect(menue.kategorien.map(kategorie => kategorie.name)).not.toContain('Eigene')
-  expect(nachPlugin([])).toEqual({ kategorien: [], weggelassen: [] })
-})
-
-test('nachPlugin teilt große Gruppen: Engineering 1, Engineering 2, Engineering 3', () => {
-  const namen = reihe('engineering:s', 30)
-  const menue = nachPlugin(namen)
-  expect(menue.kategorien.map(kategorie => [kategorie.name, kategorie.skills.length])).toEqual([
-    ['Engineering 1', 10],
-    ['Engineering 2', 10],
-    ['Engineering 3', 10],
+  expect(nachPlugin(namen)).toEqual([
+    { name: 'Anthropic', skills: ['anthropic-skills:grill-me'] },
+    { name: 'Engineering', skills: ['engineering:debug', 'engineering:review'] },
+    { name: 'Sorgfalt', skills: ['sorgfalt:belegen', 'sorgfalt:debuggen'] },
+    { name: WEITERE, skills: ['solo'] },
   ])
-  pruefeGrenzen(menue, namen)
+  expect(nachPlugin([])).toEqual([])
+  // 30 Skills eines Plugins bleiben eine Kategorie; 150 Skills auf 40 Plugins kommen alle vor, jeder einmal.
+  expect(nachPlugin(reihe('engineering:s', 30))).toEqual([{ name: 'Engineering', skills: reihe('engineering:s', 30) }])
+  const viele = Array.from({ length: 150 }, (_, i) => `plugin-${i % 40}:skill-${i}`)
+  const kategorien = nachPlugin(viele)
+  expect(kategorien).toHaveLength(40)
+  expect(kategorien.flatMap(k => k.skills).sort()).toEqual([...viele].sort())
 })
 
-test('mehr als 12 Gruppen: kleine Gruppen (höchstens 2 Skills) kommen in Weitere, am Ende', () => {
-  const kleine = Array.from({ length: 15 }, (_, i) => `p${String(i).padStart(2, '0')}:einzeln`)
-  const namen = [...kleine, ...reihe('engineering:s', 5), 'zwei:a', 'zwei:b', ...reihe('design:d', 3)]
-  const menue = nachPlugin(namen)
-  expect(menue.kategorien.map(kategorie => kategorie.name)).toEqual(['Design', 'Engineering', `${WEITERE} 1`, `${WEITERE} 2`])
-  expect(menue.kategorien.slice(2).flatMap(kategorie => kategorie.skills).sort()).toEqual([...kleine, 'zwei:a', 'zwei:b'].sort())
-  pruefeGrenzen(menue, namen)
+test('jsonAus liest einen ```json-Block mit Text drumherum, einen Block ohne schließende Zäune und rohes JSON im Text', () => {
+  const objekt = { kategorien: { A: ['x'] } }
+  expect(jsonAus(`Hier ist die Sortierung:\n\n\`\`\`json\n${JSON.stringify(objekt)}\n\`\`\`\n\nViel Erfolg {damit}!`)).toEqual({ wert: objekt })
+  expect(jsonAus(`\`\`\`json\n${JSON.stringify(objekt)}\n`)).toEqual({ wert: objekt })
+  expect(jsonAus(`Gern: ${JSON.stringify(objekt)} Und noch {etwas}.`)).toEqual({ wert: objekt })
 })
 
-test('notfalls kommen auch größere Gruppen in Weitere, bis höchstens 12 bleiben', () => {
-  const namen = Array.from({ length: 14 }, (_, i) => reihe(`g${String.fromCharCode(97 + i)}:s`, 3)).flat()
-  const menue = nachPlugin(namen)
-  expect(menue.kategorien.length).toBeLessThanOrEqual(12)
-  expect(menue.kategorien.at(-1)?.name).toBe(WEITERE)
-  pruefeGrenzen(menue, namen)
+test('jsonAus sagt, warum nichts zu lesen war: kein JSON, abgeschnitten, kaputt', () => {
+  expect(jsonAus('Das kann ich nicht.')).toEqual({ fehler: 'kein JSON gefunden (keine "{" in der Antwort)' })
+  const abgeschnitten = jsonAus(JSON.stringify({ kategorien: { 'Fehler finden': ['a', 'b'] } }).slice(0, 25))
+  expect('fehler' in abgeschnitten && abgeschnitten.fehler).toMatch(/^JSON endet nicht \(keine schließende Klammer, vermutlich abgeschnitten\)/)
+  const kaputt = jsonAus('{ kaputt }')
+  expect('fehler' in kaputt && kaputt.fehler).toMatch(/^JSON\.parse: /)
 })
 
-test('150 Skills: höchstens 144 im Menü, der Rest wird zurückgemeldet', () => {
-  for (const namen of [reihe('engineering:s', 150), Array.from({ length: 150 }, (_, i) => `p${i % 20}:skill-${i}`), reihe('ohne-', 150)]) {
-    const menue = nachPlugin(namen)
-    expect(menue.kategorien.flatMap(kategorie => kategorie.skills)).toHaveLength(144)
-    expect(menue.weggelassen).toHaveLength(6)
-    pruefeGrenzen(menue, namen)
-  }
-})
-
-test('nachPlugin hält die Grenzen für viele Mischungen ein', () => {
-  for (let plugins = 1; plugins <= 30; plugins += 3) {
-    for (const je of [1, 2, 3, 5, 13]) {
-      const namen = Array.from({ length: plugins * je }, (_, i) => (i % 7 === 0 ? `eigen-${i}` : `plugin-${i % plugins}:s${i}`))
-      pruefeGrenzen(nachPlugin(namen), namen)
-    }
-  }
-})
-
-const NAMEN = ['engineering:debug', 'engineering:review', 'pdf', 'design:critique', 'docx', 'grill-me']
-
-test('ausModellAntwort liest die neue Form mit kategorien und kurz, auch aus einem ```json-Block', () => {
-  const antwort = {
-    kategorien: { Fehlersuche: ['engineering:debug', 'engineering:review'], Dokumente: ['pdf', 'docx'] },
-    kurz: {
-      'engineering:debug': '  Fehler   Schritt für Schritt finden. ',
-      '/pdf': 'PDF-Dateien lesen und erstellen.',
-      'gibt-es-nicht': 'Verworfen.',
-      docx: 42,
-      'grill-me': '',
+test('leseHauptantwort: unbekannte Namen fallen weg, doppelte zählen beim ersten Mal, Sammelkategorien und Fehlende gehen in den Rest, Namen ungekürzt', () => {
+  const lang = 'Konfiguration und Erweiterung aller Werkzeuge'
+  const antwort = JSON.stringify({
+    kategorien: {
+      'Fehler finden': ['engineering:debug', '/engineering:review', 'gibt-es-nicht'],
+      'fehler finden': ['pdf'],
+      [lang]: ['docx', 'pdf'],
+      Sonstiges: ['design:critique'],
+      Leer: ['unbekannt'],
     },
-  }
-  const menue = ausModellAntwort(['Bitte:', '```json', JSON.stringify(antwort), '```'].join('\n'), NAMEN)
-  expect(menue).toEqual({
-    kategorien: [
-      { name: 'Dokumente', skills: ['docx', 'pdf'] },
-      { name: 'Fehlersuche', skills: ['engineering:debug', 'engineering:review'] },
-      { name: WEITERE, skills: ['design:critique', 'grill-me'] },
-    ],
-    weggelassen: [],
-    kurz: { 'engineering:debug': 'Fehler Schritt für Schritt finden.', pdf: 'PDF-Dateien lesen und erstellen.' },
   })
-  // kurz ist freiwillig.
-  expect(ausModellAntwort(JSON.stringify({ kategorien: { Dokumente: ['pdf'] } }), NAMEN)?.kurz).toEqual({})
+  const r = gelesen(leseHauptantwort(antwort, NAMEN))
+  expect(alsObjekt(r.gruppen)).toEqual({ 'Fehler finden': ['engineering:debug', 'engineering:review', 'pdf'], [lang]: ['docx'] })
+  expect(r.rest).toEqual(['design:critique', 'grill-me'])
+  expect(r.kurz).toEqual({})
+  for (const name of ['Weitere', 'sonstiges', 'Allgemein', 'Diverses']) expect(istSammel(name)).toBe(true)
+  expect(istSammel('Code prüfen')).toBe(false)
 })
 
-test('ausModellAntwort liest auch die alte Form, verwirft Unbekanntes, Fehlendes kommt in Weitere', () => {
-  const text = [
-    'Hier die Kategorien:',
-    '```json',
-    JSON.stringify({ 'Code prüfen': ['engineering:review', '/engineering:debug', 'gibt-es-nicht'], Dokumente: ['pdf', 'docx', 'pdf'], Leer: ['unbekannt'] }),
-    '```',
-  ].join('\n')
-  expect(ausModellAntwort(text, NAMEN)).toEqual({
-    kategorien: [
-      { name: 'Code prüfen', skills: ['engineering:debug', 'engineering:review'] },
-      { name: 'Dokumente', skills: ['docx', 'pdf'] },
-      { name: WEITERE, skills: ['design:critique', 'grill-me'] },
-    ],
-    weggelassen: [],
-    kurz: {},
+test('leseHauptantwort: höchstens 15 Skills je Kategorie und 12 Kategorien, der Überhang geht in den Rest, ohne Teilung', () => {
+  const viele = reihe('test:skill-', 17)
+  const r = gelesen(leseHauptantwort(JSON.stringify({ kategorien: { 'Code prüfen': viele } }), viele))
+  expect(r.gruppen.get('Code prüfen')).toHaveLength(MAX_SKILLS)
+  expect(r.rest).toEqual(viele.slice(MAX_SKILLS))
+  const namen = reihe('s', 14)
+  const zuViele = Object.fromEntries(namen.map((name, i) => [`Kategorie ${String.fromCharCode(65 + i)}`, [name]]))
+  const r2 = gelesen(leseHauptantwort(JSON.stringify({ kategorien: zuViele }), namen))
+  expect(r2.gruppen.size).toBe(MAX_KATEGORIEN)
+  expect(r2.rest).toEqual(namen.slice(MAX_KATEGORIEN))
+})
+
+test('leseHauptantwort sagt, woran es scheiterte: kein Objekt kategorien, 0 bekannte Skills', () => {
+  expect(leseHauptantwort('{"liste": ["pdf"]}', NAMEN)).toEqual({ fehler: 'JSON gelesen, aber ohne Objekt "kategorien" (Schlüssel: liste)' })
+  expect(leseHauptantwort(JSON.stringify({ A: ['pdf'] }), NAMEN)).toEqual({ fehler: 'JSON gelesen, aber ohne Objekt "kategorien" (Schlüssel: A)' })
+  expect(leseHauptantwort(JSON.stringify({ kategorien: { 'Code prüfen': ['/debuggen', 'belegen', 'ux'] } }), NAMEN)).toEqual({
+    fehler: 'JSON gelesen, aber 0 bekannte Skills (1 Kategorien; genannt: /debuggen, belegen, ux; erwartet: engineering:debug, engineering:review, pdf)',
   })
-  // Ohne Block: vom ersten { bis zum letzten }; ein Skill zählt dort, wo er zuerst steht; "Weitere" des Modells geht in Weitere.
-  const roh = `Gern: ${JSON.stringify({ Planen: ['grill-me', 'pdf'], Dokumente: ['pdf', 'docx'], weitere: ['design:critique'] })} Fertig.`
-  const menue = ausModellAntwort(roh, NAMEN)
-  expect(menue?.kategorien).toEqual([
-    { name: 'Dokumente', skills: ['docx'] },
-    { name: 'Planen', skills: ['grill-me', 'pdf'] },
-    { name: WEITERE, skills: ['design:critique', 'engineering:debug', 'engineering:review'] },
+  const kaputt = leseHauptantwort('Hier sind die Kategorien: keine', NAMEN)
+  expect('fehler' in kaputt && kaputt.fehler).toBe('kein JSON gefunden (keine "{" in der Antwort)')
+})
+
+test('leseNachtrag ordnet nur in vorhandene Kategorien ein (Groß- und Kleinschreibung egal), höchstens 15 je Kategorie; null ohne zuordnung', () => {
+  const gruppen = new Map([
+    ['Fehler finden', ['engineering:debug']],
+    ['Texte gestalten', reihe('t', MAX_SKILLS)],
   ])
+  const antwort = JSON.stringify({ zuordnung: { pdf: 'fehler finden', docx: 'Gibt es nicht', 'grill-me': 'Texte gestalten', fremd: 'Fehler finden' } })
+  const r = leseNachtrag(antwort, ['pdf', 'docx', 'grill-me'], gruppen)
+  expect(r).not.toBeNull()
+  expect(r!.gruppen.get('Fehler finden')).toEqual(['engineering:debug', 'pdf'])
+  expect(r!.gruppen.get('Texte gestalten')).toHaveLength(MAX_SKILLS)
+  expect(r!.rest).toEqual(['docx', 'grill-me'])
+  // Die Gruppen davor bleiben unverändert.
+  expect(gruppen.get('Fehler finden')).toEqual(['engineering:debug'])
+  expect(leseNachtrag('{"kategorien": {}}', ['pdf'], gruppen)).toBeNull()
+  expect(leseNachtrag('kein JSON', ['pdf'], gruppen)).toBeNull()
 })
 
-test('ausModellAntwort teilt zu große Kategorien und hält dieselben Grenzen', () => {
-  const namen = reihe('s', 100)
-  const zuViel = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`Kategorie ${String.fromCharCode(65 + i)}`, namen.slice(i * 5, i * 5 + 5)]))
-  const menue = ausModellAntwort(JSON.stringify({ kategorien: zuViel }), namen)
-  expect(menue).not.toBeNull()
-  pruefeGrenzen(menue!, namen)
-  const gross = ausModellAntwort(JSON.stringify({ kategorien: { Alles: namen.slice(0, 30) } }), namen.slice(0, 30))
-  expect(gross?.kategorien.map(kategorie => kategorie.name)).toEqual(['Alles 1', 'Alles 2', 'Alles 3'])
+test('fertig: Skills sortiert, Kategorien in Haikus Reihenfolge, der Rest als genau eine Gruppe Weitere am Ende', () => {
+  const gruppen = new Map([
+    ['Texte', ['b', 'a']],
+    ['Code', ['c']],
+    ['Leer', []],
+  ])
+  expect(fertig(gruppen, ['z', 'y'])).toEqual([
+    { name: 'Texte', skills: ['a', 'b'] },
+    { name: 'Code', skills: ['c'] },
+    { name: WEITERE, skills: ['y', 'z'] },
+  ])
+  expect(fertig(gruppen, []).map(k => k.name)).toEqual(['Texte', 'Code'])
 })
 
-test('ausModellAntwort ist null bei ungültiger Antwort', () => {
-  expect(ausModellAntwort('Das kann ich nicht.', NAMEN)).toBeNull()
-  expect(ausModellAntwort('{ kaputt', NAMEN)).toBeNull()
-  expect(ausModellAntwort('["pdf"]', NAMEN)).toBeNull()
-  expect(ausModellAntwort(JSON.stringify({ A: ['unbekannt'], B: 'pdf' }), NAMEN)).toBeNull()
-  expect(ausModellAntwort(JSON.stringify({ kategorien: { A: ['unbekannt'] }, kurz: { pdf: 'Satz.' } }), NAMEN)).toBeNull()
-})
-
-test('kategorienHash ist kurz, stabil und hängt nicht von der Reihenfolge ab; menueHash nennt die Prompt-Version', () => {
+test('kategorienHash ist kurz, stabil und hängt nicht von der Reihenfolge ab; menueHash nennt die Prompt-Version 5', () => {
   expect(kategorienHash(NAMEN)).toBe(kategorienHash([...NAMEN].reverse()))
   expect(kategorienHash(NAMEN)).not.toBe(kategorienHash(NAMEN.slice(1)))
   expect(kategorienHash(NAMEN)).toMatch(/^6-[0-9a-z]{1,7}$/)
-  expect(PROMPT_VERSION).toBe(3)
-  expect(menueHash(NAMEN)).toBe(`p3-${kategorienHash(NAMEN)}`)
+  expect(PROMPT_VERSION).toBe(5)
+  expect(menueHash(NAMEN)).toBe(`p5-${kategorienHash(NAMEN)}`)
 })
 
-test('pruefeGespeichert nimmt nur Kategorien für denselben Hash mit bekannten Skills, dazu die Kurzbeschreibungen bekannter Skills', () => {
-  const hash = menueHash(NAMEN)
+test('ladeGespeichert: gleicher Bestand ohne Nachfrage, Weitere bleibt; neuer Bestand: entfallene gestrichen, neue und bisherige Weitere offen', () => {
+  const kategorien = [
+    { name: 'Dokumente', skills: ['docx', 'pdf'] },
+    { name: 'Fehler finden', skills: ['engineering:debug', 'engineering:review'] },
+    { name: WEITERE, skills: ['design:critique', 'grill-me'] },
+  ]
+  const kurz = { pdf: 'PDF lesen.', fremd: 'Weg.', docx: 3 }
+  const gleich = ladeGespeichert({ hash: menueHash(NAMEN), kategorien, kurz }, NAMEN)
+  expect(gleich).not.toBeNull()
+  expect(gleich!.gleich).toBe(true)
+  expect(alsObjekt(gleich!.gruppen)).toEqual({ Dokumente: ['docx', 'pdf'], 'Fehler finden': ['engineering:debug', 'engineering:review'] })
+  expect(gleich!.weitere).toEqual(['design:critique', 'grill-me'])
+  expect(gleich!.neu).toEqual([])
+  expect(gleich!.kurz).toEqual({ pdf: 'PDF lesen.' })
+  // pdf entfällt, neu kommt dazu.
+  const jetzt = [...NAMEN.filter(n => n !== 'pdf'), 'neu']
+  const anders = ladeGespeichert({ hash: menueHash(NAMEN), kategorien, kurz }, jetzt)
+  expect(anders!.gleich).toBe(false)
+  expect(alsObjekt(anders!.gruppen)).toEqual({ Dokumente: ['docx'], 'Fehler finden': ['engineering:debug', 'engineering:review'] })
+  expect(anders!.neu).toEqual(['design:critique', 'grill-me', 'neu'])
+  expect(anders!.weitere).toEqual([])
+})
+
+test('ladeGespeichert nimmt nichts nach einem anderen Prompt und nichts Kaputtes', () => {
   const kategorien = [{ name: 'Dokumente', skills: ['docx', 'pdf'] }]
-  expect(pruefeGespeichert({ hash, kategorien }, hash, NAMEN)).toEqual({ kategorien, kurz: {} })
-  expect(pruefeGespeichert({ hash, kategorien, kurz: { pdf: 'PDF lesen.', fremd: 'Weg.', docx: 3 } }, hash, NAMEN)).toEqual({ kategorien, kurz: { pdf: 'PDF lesen.' } })
-  expect(pruefeGespeichert({ hash: 'anders', kategorien }, hash, NAMEN)).toBeNull()
-  // Ein Ergebnis nach dem alten Prompt (Hash ohne Version) gilt nicht.
-  expect(pruefeGespeichert({ hash: kategorienHash(NAMEN), kategorien }, hash, NAMEN)).toBeNull()
-  expect(pruefeGespeichert({ hash, kategorien: [{ name: 'X', skills: ['unbekannt'] }] }, hash, NAMEN)).toBeNull()
-  expect(pruefeGespeichert({ hash, kategorien: [{ name: 'X', skills: ['pdf'] }, { name: 'x', skills: ['docx'] }] }, hash, NAMEN)).toBeNull()
-  expect(pruefeGespeichert(undefined, hash, NAMEN)).toBeNull()
+  expect(ladeGespeichert({ hash: `p3-${kategorienHash(NAMEN)}`, kategorien }, NAMEN)).toBeNull()
+  expect(ladeGespeichert({ hash: kategorienHash(NAMEN), kategorien }, NAMEN)).toBeNull()
+  expect(ladeGespeichert({ hash: menueHash(NAMEN), kategorien: [{ name: 'X', skills: ['unbekannt'] }] }, NAMEN)).toBeNull()
+  expect(ladeGespeichert({ hash: menueHash(NAMEN), kategorien: [{ name: WEITERE, skills: ['pdf'] }] }, NAMEN)).toBeNull()
+  expect(ladeGespeichert({ hash: menueHash(NAMEN), kategorien: [{ skills: ['pdf'] }] }, NAMEN)).toBeNull()
+  expect(ladeGespeichert(undefined, NAMEN)).toBeNull()
 })
 
 test('ersterSatz nimmt den ersten ganzen Satz, ungekürzt, und übergeht Abkürzungen', () => {
@@ -218,60 +206,51 @@ test('ersterSatz nimmt den ersten ganzen Satz, ungekürzt, und übergeht Abkürz
   expect(kurzAusBeschreibungen(['a', 'b', 'c'], new Map([['a', 'Erster. Zweiter.'], ['c', '   ']]))).toEqual({ a: 'Erster.' })
 })
 
-test('haikuPrompt nennt jeden Skill, mit höchstens 100 Zeichen Beschreibung, und verlangt Kategorien und Kurzbeschreibungen', () => {
+test('haikuPrompt fragt nur nach Kategorien: sprechende Namen aus zwei bis drei Wörtern, keine Sammelkategorie, bis 15 je Kategorie, ohne kurz', () => {
   const lang = 'x'.repeat(150)
   const prompt = haikuPrompt(['pdf', 'docx'], new Map([['pdf', `PDF lesen ${lang}`]]))
-  expect(prompt).toContain('Skills von Claude Code')
-  expect(prompt).toContain('4 bis 12 Kategorien')
+  expect(prompt).toContain('Ordne die folgenden Skills von Claude Code in 4 bis 12 Kategorien nach ihrem Zweck.')
   expect(prompt).toContain('Ordne nach dem Anwendungsfall, nicht nach Herkunft oder Plugin')
-  expect(prompt).toContain('aus EINEM Wort')
-  expect(prompt).toContain('höchstens 14 Zeichen, ohne "&" und ohne "und"')
-  expect(prompt).toContain('deutsche Kurzbeschreibung in einem Satz, höchstens 90 Zeichen')
+  expect(prompt).toContain('sprechenden deutschen Namen aus zwei bis drei Wörtern')
+  expect(prompt).toContain('höchstens 24 Zeichen')
+  expect(prompt).toContain('Keine Sammelkategorie wie "Weitere", "Sonstiges", "Allgemein" oder "Diverses"')
+  expect(prompt).toContain('höchstens 15 Skills je Kategorie')
   expect(prompt).toContain('{"kategorien": {"Kategorie": ["skill-a", "skill-b"]')
-  expect(prompt).toContain('"kurz": {"skill-a": "Satz."')
-  expect(prompt).toContain('- docx\n')
+  expect(prompt).not.toContain('Kurzbeschreibung')
+  expect(prompt).not.toContain('"kurz"')
+  expect(prompt).toContain('Skills:\n- docx\n')
   expect(prompt).toContain(`- pdf: ${`PDF lesen ${lang}`.slice(0, BESCHREIBUNG_MAX)}`)
   expect(prompt).not.toContain('x'.repeat(100))
 })
 
-test('Labels ohne Präfix und ungekürzt; Maße wie im Probe-Mod: 6,2 px je Zeichen, 24 px Rand, W in ch, H in Zeilen', () => {
+test('nachtragPrompt nennt nur die vorhandenen Kategorien und nur die fehlenden Skills; kurzPrompt verlangt je Skill einen Satz', () => {
+  const nach = nachtragPrompt(['loop', 'init'], ['Fehler finden', 'Texte gestalten'], new Map([['loop', 'Wiederholt einen Befehl. Mehr Text.']]))
+  expect(nach).toContain('Ordne jeden dieser Skills von Claude Code genau einer der vorhandenen Kategorien zu')
+  expect(nach).toContain('erfinde keine neue und keine Sammelkategorie')
+  expect(nach).toContain('Kategorien:\n- Fehler finden\n- Texte gestalten\n')
+  expect(nach).toContain('Skills:\n- init\n- loop: Wiederholt einen Befehl. Mehr Text.')
+  expect(nach).toContain('{"zuordnung": {')
+  expect(nach).not.toContain('"kurz"')
+  const kurz = kurzPrompt(['b', 'a'])
+  expect(kurz).toContain('Schreib zu jedem dieser Skills von Claude Code eine deutsche Kurzbeschreibung in einem Satz, höchstens 90 Zeichen: was man damit tut.')
+  expect(kurz).toContain('{"kurz": {')
+  expect(kurz).toContain('Skills:\n- a\n- b')
+})
+
+test('paeckchen zu höchstens 20; leseKurzAntwort nimmt nur Skills des Päckchens, null ohne Objekt kurz', () => {
+  expect(KURZ_PAECKCHEN).toBe(20)
+  expect(paeckchen(reihe('s', 45), KURZ_PAECKCHEN).map(p => p.length)).toEqual([20, 20, 5])
+  expect(paeckchen([], KURZ_PAECKCHEN)).toEqual([])
+  expect(leseKurzAntwort(JSON.stringify({ kurz: { a: '  Ein   Satz. ', '/b': 'Zwei.', fremd: 'Weg.', c: 3, d: '' } }), ['a', 'b', 'c', 'd'])).toEqual({ a: 'Ein Satz.', b: 'Zwei.' })
+  expect(leseKurzAntwort(JSON.stringify({ kurz: 'kaputt' }), ['a'])).toBeNull()
+  expect(leseKurzAntwort('Leider nicht.', ['a'])).toBeNull()
+})
+
+test('Labels ohne Präfix und ungekürzt; der Text des Befehls: Kategorien als Überschrift, je Skill /name: Kurzbeschreibung, Neue unter "Noch ohne Kategorie"', () => {
   expect(skillLabel('cowork-plugin-management:cowork-plugin-customizer')).toBe('cowork-plugin-customizer')
   expect(skillLabel('grill-me')).toBe('grill-me')
-  expect(Math.round(knopfPx('abc') * 100) / 100).toBe(42.6)
-  const kategorien = [
-    { name: 'Fehlersuche', skills: ['sorgfalt:debuggen', 'sorgfalt:belegen', 'loop'] },
-    { name: 'Gestaltung', skills: ['cowork-plugin-management:cowork-plugin-customizer'] },
-  ]
-  const masse = menueMasse(kategorien)
-  // "cowork-plugin-customizer": 24 * 6,2 + 24 = 172,8 px, + 8 = 180,8 px, / 8 = 22,6, also 23 ch; H: 3 Skills, ceil(3 + 2 * 0,6) = 5.
-  expect(masse.breite).toBe(23)
-  expect(masse.hoehe).toBe(5)
-  // "Fehlersuche ›": 13 * 6,2 + 24 + 8 = 112,6 px; dazu 23 ch = 184 px.
-  expect(masse.gesamtPx).toBe(Math.round(112.6 + 184))
-  expect(passtNicht(kategorien)).toBeNull()
-  expect(menueMasse([])).toEqual({ linksPx: 8, rechtsPx: 8, breite: 1, hoehe: 0, gesamtPx: 16 })
-  // imBand: höchstens 12 zu je höchstens 12.
-  const viele = Array.from({ length: 14 }, (_, i) => ({ name: `K${i}`, skills: reihe(`s${i}-`, 14) }))
-  expect(imBand(viele).length).toBe(12)
-  expect(imBand(viele).every(kategorie => kategorie.skills.length === 12)).toBe(true)
-})
-
-test('passtNicht meldet, was das Menü über etwa 340 px breit macht, ohne zu kürzen', () => {
-  const lang = 'ein-sehr-langer-skill-name-der-nicht-passt'
-  const zuBreit = passtNicht([{ name: 'Konfiguration & Erweiterung', skills: ['kurz', `plugin:${lang}`] }])
-  expect(zuBreit).not.toBeNull()
-  expect(zuBreit!.gesamtPx).toBeGreaterThan(POPOVER_PX)
-  expect(zuBreit!.kategorien).toEqual(['Konfiguration & Erweiterung'])
-  expect(zuBreit!.skills).toEqual([`plugin:${lang}`])
-})
-
-test('kategorienText: Kategorien als Überschrift, je Skill /name: Kurzbeschreibung, was nicht passt darunter', () => {
+  expect(skillsText(1)).toBe('1 Skill')
+  expect(skillsText(3)).toBe('3 Skills')
   const text = kategorienText(['pdf', 'docx', 'grill-me'], [{ name: 'Dokumente', skills: ['docx', 'pdf'] }], { pdf: 'PDF lesen.', 'grill-me': 'Fragt dich aus.' })
-  expect(text).toBe(['3 Skills in dieser Sitzung:', 'Dokumente\n/docx\n/pdf: PDF lesen.', 'Nicht im Menü\n/grill-me: Fragt dich aus.'].join('\n\n'))
-  const lang = 'plugin:ein-sehr-langer-skill-name-der-nicht-passt'
-  const breit = kategorienText([lang], [{ name: 'Konfiguration & Erweiterung', skills: [lang] }])
-  const zuBreit = passtNicht([{ name: 'Konfiguration & Erweiterung', skills: [lang] }])!
-  expect(breit.split('\n\n').at(-1)).toBe(
-    ['Passt nicht in das Menü', `Das Menü wäre etwa ${zuBreit.gesamtPx} px breit, Platz ist für etwa 340 px. Zu breit:`, 'Kategorie Konfiguration & Erweiterung', `/${lang}`].join('\n'),
-  )
+  expect(text).toBe(['3 Skills in dieser Sitzung:', 'Dokumente\n/docx\n/pdf: PDF lesen.', 'Noch ohne Kategorie\n/grill-me: Fragt dich aus.'].join('\n\n'))
 })

@@ -10,14 +10,12 @@ import type {
   GlancePhase,
   GlanceTask,
   GlanceUsage,
-  SkillKategorie,
 } from '../types'
 import { gemerkteAntwort, merkeAntwort } from './antwort'
 import { BAND_VERSION, bandBudget, plane, zeilenVon } from './band'
 import type { BandHoehe, BandHoehen, BandPlan } from './band'
 import { DATEIEN_FENSTER } from './filetree/befehle'
 import { KNOPF_SKILLS } from './skills/befehle'
-import { imBand, kategorieLabel, menueMasse, skillLabel } from './skills/kategorien'
 import { terminalHinweis } from './filetree/teil'
 import {
   HISTORY_PREFIX,
@@ -214,7 +212,7 @@ const NIGHTSHIFT = '\u{1F170}\uFE0F'
 const FILETREE = '\u{1F4C2}'
 /** The clean-code skill, right behind Selbstkritik: a broom. */
 const CLEAN_CODE = '\u{1F9F9}'
-/** The skill menu, right behind Sauberer Code: a puzzle piece, in the app a hover menu of categories and their skills. */
+/** The skill menu, right behind Sauberer Code: a puzzle piece that opens the pane Skills. */
 const SKILL_MENU = '\u{1F9E9}'
 /** Selbstkritik (once the Reflect mod), right behind Grill mich: a mirror. */
 const REFLECT = '\u{1FA9E}'
@@ -291,7 +289,7 @@ export const BUTTON_HELP: readonly { place: string; buttons: readonly ButtonHelp
       { sign: GRILL, name: 'Grill mich', does: 'Claude löchert dich mit Fragen, bis ein Plan oder eine Idee steht.', command: '/leitstand:ausfragen' },
       { sign: REFLECT, name: 'Selbstkritik', does: 'Claude sieht seine bisherige Arbeit in diesem Chat kritisch durch. Das Ergebnis erscheint im Fenster Selbstkritik.', command: '/leitstand:selbstkritik' },
       { sign: CLEAN_CODE, name: 'Sauberer Code', does: 'Der Skill clean-code aus dem Mod clean-code (ein mitgelieferter Ablauf für Claude), ohne den Mod der ältere Skill clean-code, prüft den Code auf lange Funktionen, unklare Namen, tiefe Verschachtelung und verschluckte Fehler.', command: '/leitstand:sauberer-code' },
-      { sign: SKILL_MENU, name: 'Skill-Menü', does: 'Zeigt beim Darüberfahren die Skills nach Anwendungsfall; ein Klick startet einen.', command: '/leitstand:skill-menue' },
+      { sign: SKILL_MENU, name: 'Skill-Menü', does: 'Öffnet das Fenster Skills: alle Skills nach Anwendungsfall mit Kurzbeschreibung; ein Klick startet einen.', command: '/leitstand:skill-menue' },
       { sign: FILETREE, name: 'Dateien', does: 'Öffnet das Fenster Dateien: die Dateien des Projekts als Baum.', command: '/leitstand:dateien' },
       {
         sign: REMOTE,
@@ -2047,22 +2045,11 @@ const runCleanCode = ($: $) => runCommand($, 'clean-code', CLEAN_CODE_NAMES)
  * part failed: /selbstkritik waits in the prompt box.
  */
 const runReflect = ($: $) => void $.prompt.fill({ text: '/selbstkritik' }).catch(() => undefined)
-// The skill menu where no hover menu is drawn (the terminal, or no list yet): its command waits in the prompt and
-// lists the skills.
-const runSkillMenu = ($: $) => void $.prompt.fill({ text: '/skill-menue' }).catch(() => undefined)
-// The skill menu's categories, as the part skills/teil.tsx loads and writes them; null until then.
-const skillMenueAtom = atom({ plugin: 'leitstand', key: 'skillMenue' } as const, null as readonly SkillKategorie[] | null)
-// The skill menu's short descriptions by the skill's full name, its tooltips; null until the part wrote them.
-const skillKurzAtom = atom({ plugin: 'leitstand', key: 'skillKurz' } as const, null as Readonly<Record<string, string>> | null)
 /**
- * A click on a skill in the hover menu: it starts as if typed (a toast while it waits in the queue; should the run
- * fail, it waits in the prompt). Not waited for by the click.
+ * The skill menu: its part (hooks/skills) answers a press of 🧩 itself and opens the pane Skills. This runs only if
+ * that part failed: /skill-menue waits in the prompt box.
  */
-const startSkill = ($: $, name: string) => void runCommand($, name, [name]).catch(() => undefined)
-// The hover groups of the skill menu: one a category, lit over its button and revealing its column of skills.
-const skillGroup = (at: number) => `${KNOPF_SKILLS}-g-${at}`
-// A category's background under the pointer; also the style without which the app never lights its group.
-const SKILL_GROUP_HOVER = 'userMessageBackgroundHover'
+const runSkillMenu = ($: $) => void $.prompt.fill({ text: '/skill-menue' }).catch(() => undefined)
 
 // Autopilot keeps its run in Leitstand's own state since it became a part of it: the run while there is one, null
 // once it is ended. Its key still says Schicht, from the days as the Nachtschicht.
@@ -5238,10 +5225,6 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
     const adhd = await read($, adhdAtom)
     // Read only while its button shows, on every surface; off, Autopilot's writes redraw nothing.
     const nightShift = isEnabled && (await isNightShiftOn($))
-    // The skill menu's categories and short descriptions, as the part skills/teil.tsx wrote them: never loaded while
-    // drawing. Only in the app and VS Code, where 🧩 is a hover menu.
-    const skillKats = isEnabled && vector ? imBand((await read($, skillMenueAtom)) ?? []) : []
-    const skillKurz = skillKats.length > 0 ? ((await read($, skillKurzAtom)) ?? {}) : {}
     const canShip = isEnabled && (await read($, shipOnGithubAtom)) && (await read($, hasGithubAtom))
     const columns = Math.max(20, e.props.bodyColumns)
     const current = await now($)
@@ -5487,47 +5470,9 @@ export function registerGlance(on: On, options: PluginOptions = {}): void {
       ) : (
         terminalSign('cleancode', CLEAN_CODE, () => void runCleanCode($).catch(() => undefined))
       )
-    // The puzzle piece right behind the broom: the skill menu. In the app and VS Code a hover menu over 🧩: a hidden,
-    // absolutely placed Box under the keyed Box, which the app draws as its popover. On the left the categories (at
-    // most 12), each a hover group that lights its button and reveals its column on the right (W wide and H high, for
-    // the widest label and the largest category, so the popover keeps its size); in each column the skills (at most
-    // 12), labelled without the part before the colon and never cut, each in a keyed Box whose hidden Box is its
-    // tooltip with the short description. A click on a skill starts it; on 🧩 or a category it does nothing, the
-    // pointer does the showing. Every key in the band its own: a key twice names no hover group. No pane. Without a
-    // list yet 🧩 is a button, and on the terminal a sign, that puts /skill-menue into the prompt.
-    const skillSize = menueMasse(skillKats)
-    const skillMenuItem = !isEnabled ? null : skillKats.length > 0 ? (
-      <Box key={KNOPF_SKILLS}>
-        <Button key={`${KNOPF_SKILLS}-knopf`} variant="secondary" label={SKILL_MENU} onPress={() => undefined} />
-        <Box position="absolute" display="none" hover={{ display: 'flex' }}>
-          <Box flexDirection="row" columnGap={0}>
-            <Box flexDirection="column" rowGap={0}>
-              {skillKats.map((kategorie, at) => (
-                <Box paddingY={0.6} paddingRight={1} hover={{ scope: skillGroup(at), backgroundColor: SKILL_GROUP_HOVER }}>
-                  <Button key={`${KNOPF_SKILLS}-k-${at}`} label={kategorieLabel(kategorie.name)} onPress={() => undefined} />
-                </Box>
-              ))}
-            </Box>
-            <Box flexDirection="row" width={skillSize.breite} minHeight={skillSize.hoehe}>
-              {skillKats.map((kategorie, at) => (
-                <Box flexGrow={1} flexDirection="column" rowGap={1.2} paddingLeft={1} display="none" hover={{ scope: skillGroup(at), display: 'flex' }}>
-                  {kategorie.skills.map((skill, nr) => (
-                    <Box key={`${KNOPF_SKILLS}-s-${at}-${nr}`}>
-                      <Button key={`${KNOPF_SKILLS}-b-${at}-${nr}`} label={skillLabel(skill)} onPress={() => startSkill($, skill)} />
-                      {Object.hasOwn(skillKurz, skill) && skillKurz[skill] !== '' ? (
-                        <Box position="absolute" display="none" hover={{ display: 'flex' }}>
-                          <Text wrap="wrap">{skillKurz[skill]}</Text>
-                        </Box>
-                      ) : null}
-                    </Box>
-                  ))}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        </Box>
-      </Box>
-    ) : vector ? (
+    // The puzzle piece right behind the broom: the skill menu. Its part (hooks/skills) answers the press and opens the
+    // pane Skills, in the app and on the terminal; the button's own onPress runs only if that part failed.
+    const skillMenuItem = !isEnabled ? null : vector ? (
       <Button key={KNOPF_SKILLS} variant="secondary" label={SKILL_MENU} onPress={() => runSkillMenu($)} />
     ) : (
       terminalSign(KNOPF_SKILLS, SKILL_MENU, () => runSkillMenu($))

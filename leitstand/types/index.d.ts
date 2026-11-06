@@ -294,7 +294,7 @@ export type AutopilotSchicht = {
     fragen: string[]
 }
 
-/** Skill-Menü: eine Kategorie im Hover-Menü 🧩, ihr Name und ihre Skills (höchstens 12), sortiert. */
+/** Skill-Menü: eine Kategorie im Fenster Skills, ihr Name und ihre Skills (von Haiku höchstens 15, "Weitere" ohne Grenze), sortiert. */
 export type SkillKategorie = {
   name: string
   skills: string[]
@@ -490,10 +490,12 @@ declare module 'claude-code' {
       autopilotZeigeFragen: boolean
       /** Skill-Menü: die Namen der Skills dieser Sitzung, sortiert; null, bis der Teil skills sie geladen hat. */
       skillListe: readonly string[] | null
-      /** Skill-Menü: die Kategorien des Hover-Menüs 🧩 (nach Plugin oder von Haiku); null, bis der Teil skills sie kennt. */
+      /** Skill-Menü: die Kategorien des Fensters Skills (von Haiku, vorläufig nach Plugin, wenn Haiku scheiterte); null, solange Haiku sortiert und keine frühere Sortierung bekannt ist. */
       skillMenue: readonly SkillKategorie[] | null
       /** Skill-Menü: die Kurzbeschreibungen je vollem Skill-Namen (von Haiku, sonst der erste Satz der Beschreibung); null, bis der Teil skills sie kennt. */
       skillKurz: Readonly<Record<string, string>> | null
+      /** Skill-Menü: ob die Kategorien vorläufig nach Plugin geordnet sind, weil Haiku scheiterte und keine frühere Sortierung bekannt ist. */
+      skillVorlaeufig: boolean
       /**
        * This chat's own settings: the chat they belong to, whether they move to the next chat id (after /clear), and
        * the values the person changed in it; anything left out follows the defaults from the config menu.

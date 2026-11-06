@@ -1,6 +1,6 @@
 {
   "name": "leitstand",
-  "version": "0.63.9.0",
+  "version": "0.63.10.0",
   "description": "Zeigt in der Leiste über dem Eingabefeld, woran Claude arbeitet: den Plan als Checkliste, den Fortschritt und wann Claude dich braucht. Dazu Buttons für Pause und Weiter, Auto-Modus oder Gruppenarbeit, Autopilot, Kurzantworten, Selbstkritik, Dateien und den Schutz von Passwörtern; aus deinen Korrekturen schlägt er Regeln vor. Hilfe: /leitstand:hilfe. Grundlage: GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"

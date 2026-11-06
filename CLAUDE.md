@@ -298,23 +298,32 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   keyed Box oder im Popover ist (150 ms Nachlauf). Eine Hover-Gruppe (`hover.scope`) leuchtet nur über Elementen,
   deren `hover` außer `scope` einen Stilwert hat (etwa `backgroundColor`); Zwischenräume gehören nicht dazu. Ohne
   Popover gilt normales CSS: `top`/`bottom` in lh, `left`/`right` in ch. Gemessen: etwa 6,2 px je Buchstabe und
-  24 px Innenabstand je Button. Buttons haben keinen Tooltip-Prop.
-- Leitstand, Skill-Menü (Björns Wunsch, kein Seitenfenster): 0.63.7.0 öffnete ein Fenster Skills mit allen 82
-  Skills in einem `Select` (blieb leer), 0.63.7.1 setzte denselben `Select` in die Button-Zeile (das ganze Band
-  fehlte), 0.63.7.2 nahm das zurück; Ursache war beide Male die 64er-Grenze. 0.63.8.0 war ein `Select` in zwei
-  Stufen (Björn: niedriger als die Buttons, kein Untermenü beim Darüberfahren). Seit 0.63.9.0 ist 🧩 ein Button,
-  über dem beim Darüberfahren ein Popover aufgeht: links höchstens 12 Kategorien (jede eine Hover-Gruppe mit
-  Hintergrund), rechts die Skills der gerade gezeigten Kategorie (höchstens 12, ohne den Teil vor dem Doppelpunkt,
-  nie gekürzt), über jedem Skill ein Tooltip mit Kurzbeschreibung; ein Klick startet den Skill per `runCommand`.
-  Kein Weg öffnet ein Fenster. Im Terminal und ohne Liste legt 🧩 `/skill-menue` ins Eingabefeld; der Befehl
-  antwortet mit Text nach Kategorien (`/name: Kurzbeschreibung`). Die Liste lädt der Teil `skills` bei
-  `session.start` und nach jeder Runde (22 ms live) über `$.session.usage({ breakdown: 'summary' })`
-  (`context.breakdown.skills.skillFrontmatter`, ohne Beschreibungen; die kommen aus `$.command.list()`).
-  Kategorien und Kurzbeschreibungen: sofort nach dem Teil vor dem Doppelpunkt (ohne "Eigene", Rest "Weitere") und
-  erster Satz der Beschreibung, dann einmal je Skill-Bestand und Prompt-Version (`PROMPT_VERSION`, Hash `p3-`)
-  Haiku nach Anwendungsfall mit Kategorienamen aus einem Wort bis 14 Zeichen (`$.model.complete`, 60 s,
-  `maxTokens` 8192), Ergebnis in `$.store`. Reine Logik in `hooks/skills/kategorien.ts`. Der Probe-Mod
-  `skill-probe` (Sitzung f08ea4af) war das Testfeld dafür. Ein
+  24 px Innenabstand je Button. Buttons haben keinen Tooltip-Prop. Live am 2026-11-06 mit dem Probe-Mod: Ein
+  Popover im Popover (Untermenü am Pfeil, Tooltip) schließt die App nicht, wenn die Maus weiterwandert, erst mit
+  dem ganzen Menü; Untermenüs stapeln sich. Ein Reveal (`display:'flex'` über eine Gruppe) schiebt Geschwister
+  nicht weg, sondern legt sich über sie; ein Akkordeon klappt so beim Weiterfahren die nächste Kategorie auf.
+  Sauber auf und zu ging nur ein Reveal in einer zweiten Spalte desselben Popovers.
+- Haiku per `$.model.complete` (live 2026-11-06): `ModelCompleteRequest` kennt `model`, `prompt`, `system`,
+  `maxTokens`, `effort` und `timeoutMs`, `ModelCompleteResult` keinen Stoppgrund, nur `usage`. Ohne `effort: 'low'`
+  gingen bei einer großen Antwort über 7.000 der 10.240 Ausgabe-Tokens ins Denken, und das JSON brach ab. Große
+  Aufgaben teilen (Kategorien in einem Aufruf, Kurzbeschreibungen in Päckchen zu 20).
+- Leitstand, Skill-Menü 🧩 (Björns Wunsch): 0.63.7.0 öffnete ein Fenster Skills mit allen 82 Skills in einem
+  `Select` (blieb leer), 0.63.7.1 setzte denselben `Select` in die Button-Zeile (das ganze Band fehlte), 0.63.7.2
+  nahm das zurück; Ursache war beide Male die 64er-Grenze. 0.63.8.0 war ein `Select` in zwei Stufen, 0.63.9.0 ein
+  Hover-Popover mit zwei Spalten; danach testete der Probe-Mod Untermenüs, Tooltips und ein Akkordeon (siehe
+  Hover). Björns Entscheidung am 2026-11-06: Seit 0.63.10.0 öffnet ein Klick auf 🧩 das Fenster `leitstand-skills`
+  ("Skills", per `ui.press`-Hook im Teil, `void $.ui.open`): je Kategorie eine Überschrift, je Skill ein Button
+  (Name ohne den Teil vor dem Doppelpunkt, nie gekürzt) mit der Kurzbeschreibung dahinter; ein Klick startet den
+  Skill wie getippt, das Fenster bleibt offen. `/skill-menue` öffnet es am Rechner und antwortet vom Handy mit
+  Text (`/name: Kurzbeschreibung`). Die Liste lädt der Teil `skills` bei `session.start` und nach jeder Runde
+  (22 ms live) über `$.session.usage({ breakdown: 'summary' })` (`context.breakdown.skills.skillFrontmatter`,
+  ohne Beschreibungen; die kommen aus `$.command.list()`); gezeichnet wird nur aus Atomen. Sortierung
+  (Prompt-Version 5, Hash `p5-`): Haiku vergibt sprechende Kategorien aus zwei bis drei Wörtern bis 24 Zeichen,
+  ohne Sammelkategorie, bis 15 Skills je Kategorie; ausgelassene Skills ordnet eine Nachfrage ein, erst danach
+  höchstens ein "Weitere"; Kurzbeschreibungen in Päckchen; alles mit `effort: 'low'`, gespeichert in `$.store`;
+  neue Skills werden in die bestehende Sortierung eingeordnet. Ohne jede Sortierung steht im Fenster "Haiku
+  sortiert die Skills ...". Reine Logik in `hooks/skills/kategorien.ts`. Der Probe-Mod `skill-probe` (Sitzung
+  f08ea4af, 0.7.1.0) war das Testfeld. Ein
   importiertes Atom lehnt `claude plugin validate` ab. Am 2026-11-05 stellte ein Commit nach `git switch` mit
   `core.autocrlf=true` und `add` mit `core.autocrlf=false` BEFEHLE.md, CLAUDE.md und leitstand/plugin.json auf
   CRLF um; nach einem Zweigwechsel die Zeilenenden prüfen.
@@ -420,8 +429,8 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
    endeten auf U+2026. Die gesperrten langen Pausen sind kein Mod-Fehler (siehe Arbeitsweise).
    Noch nicht gesehen: das Fenster Zusammenfassung von statistik 0.19.6.1 live, Vorschlag "Alle Projekte"
    im Fenster Regeln, `belegen` von selbst, Breite der Kürzung `knopfText` bei langen Vorschlägen.
-14. Live-Test ausstehend (2026-11-05, leitstand 0.63.9.0): das Hover-Menü 🧩 im Leitstand (wie im Probe-Mod?
-   passen die Breiten bei allen Kategorien, erscheinen die Tooltips über den Skills, startet ein Klick den Skill);
+14. Live-Test ausstehend (2026-11-06, leitstand 0.63.10.0): das Fenster Skills (Überschriften, Buttons mit
+   Beschreibung daneben, Umbruch, Start per Klick, Sortierung von Haiku im Leitstand);
    die App-Liste zählt richtig, auch nach einem Chatwechsel (die Ursache ist nur aus Verlauf und
    Engine-Code erschlossen; `claude --debug` sollte "left out for re-entry" zeigen); "Los und ..." gibt frei; 🧹
    startet Clean Code 1.4.0.0; "bleibt auf 1.4.0.0" im Schloss. Bestanden am 2026-11-05: Das Band lädt mit

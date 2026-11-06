@@ -1,5 +1,5 @@
 ---
-description: "Zeigt beim Darüberfahren die Skills nach Anwendungsfall; ein Klick startet einen. (Leitstand)"
+description: "Öffnet das Fenster Skills: alle Skills nach Anwendungsfall mit Kurzbeschreibung; ein Klick startet einen. (Leitstand)"
 disable-model-invocation: true
 ---
 

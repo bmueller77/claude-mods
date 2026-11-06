@@ -2,17 +2,17 @@ import type { LeitstandBefehl } from '../logic'
 
 const GRUPPE = 'Werkzeuge'
 
-/** The key of the band's skill menu 🧩, drawn by the Leitstand (a hover menu in the app, a sign on the terminal). */
+/** The key of the band's button 🧩, drawn by the Leitstand; the part skills answers its press with the pane Skills. */
 export const KNOPF_SKILLS = 'skillmenue'
 
 /** The commands of the skill menu, in the order of the overview. */
 export const SKILLS_BEFEHLE: readonly LeitstandBefehl[] = [
   {
     name: 'leitstand:skill-menue',
-    description: 'Zeigt beim Darüberfahren die Skills nach Anwendungsfall; ein Klick startet einen.',
+    description: 'Öffnet das Fenster Skills: alle Skills nach Anwendungsfall mit Kurzbeschreibung; ein Klick startet einen.',
     gruppe: GRUPPE,
-    tut: 'Zeigt alle Skills, die diese Sitzung kennt, nach Anwendungsfall mit ihren Befehlen und je einem Satz, was man damit tut. Am Rechner zeigt 🧩 dieselbe Liste, wenn du mit der Maus darüberfährst: links die Kategorien, rechts die Skills der Kategorie unter der Maus, über jedem Skill sein Satz; ein Klick startet den Skill, als hättest du ihn getippt.',
-    knopf: 'Button: 🧩 hinter 🧹, zeigt die Kategorien, wenn du mit der Maus darüberfährst',
+    tut: 'Öffnet das Fenster Skills: alle Skills, die diese Sitzung kennt, nach Anwendungsfall, je Skill ein Button mit seinem Namen und dahinter ein Satz, was man damit tut. Ein Klick auf einen Skill startet ihn, als hättest du ihn getippt; das Fenster bleibt offen. Vom Handy oder ohne Fenster antwortet der Befehl mit derselben Liste als Text, je Skill sein Befehl und sein Satz.',
+    knopf: 'Button: 🧩 hinter 🧹, öffnet das Fenster Skills',
     gilt: 'einmal',
     argumente: '',
     beispiel: '/leitstand:skill-menue',
