@@ -53,6 +53,17 @@ export const AUTOPILOT_BEFEHLE: readonly LeitstandBefehl[] = [
     argumente: '',
     beispiel: '/leitstand:autopilot-bericht-weg',
   },
+  {
+    name: 'leitstand:autopilot-runden',
+    description: 'Wie oft der Autopilot in diesem Chat höchstens in Folge anschiebt',
+    argumentHint: '[Zahl]',
+    gruppe: GRUPPE,
+    tut: 'Stellt ein, wie oft der Autopilot Claude in diesem Chat höchstens in Folge anschiebt, bevor er endet; eine Nachricht von dir zählt von vorn. Gilt auch, wenn der Autopilot gerade aus ist, für den nächsten in diesem Chat. Den Standard für neue Chats hält die Option Autopilot: Höchstzahl angeschobener Runden.',
+    knopf: 'Button: keiner; solange der Autopilot läuft, die Auswahl der Anstöße in seiner Zeile.',
+    gilt: 'chat',
+    argumente: 'Zahl von 1 bis 200; ohne Zahl nennt er die aktuelle Grenze',
+    beispiel: '/leitstand:autopilot-runden 30',
+  },
 ]
 
 /**

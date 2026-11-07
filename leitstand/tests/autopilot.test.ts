@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On, RenderElement } from 'claude-code'
 
 import { AUTOPILOT_ALTE, AUTOPILOT_BEFEHLE, AUTOPILOT_GRUNDBEFEHL, AUTOPILOT_TUT } from '../hooks/autopilot/befehle'
-import { FERTIG, FRAGE_ABGELEHNT, GRUND_FERTIG, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, fehlerText, istFertig } from '../hooks/autopilot/teil'
+import { FERTIG, FRAGE_ABGELEHNT, GRUND_FERTIG, GRUND_GRENZE, GRUND_KNOPF, KONTEXT, WEITER, fehlerText, grenzeOptionen, grenzeSatz, istFertig } from '../hooks/autopilot/teil'
 import { ALTE_BEFEHLE, LEITSTAND_BEFEHLE, befehlsHilfe, kurzform } from '../hooks/logic'
 import { geprueft } from './selects'
 
@@ -1028,8 +1028,10 @@ test('eine lange Runde vor dem wartenden Anstoß lässt ihn nicht verfallen', OH
 
 // --- Die Befehle ---
 
-const NAMEN = ['leitstand:autopilot-an', 'leitstand:autopilot-aus', 'leitstand:autopilot-fragen-zeigen', 'leitstand:autopilot-bericht-weg']
-const KURZ = ['autopilot-an', 'autopilot-aus', 'autopilot-fragen-zeigen', 'autopilot-bericht-weg']
+const NAMEN = ['leitstand:autopilot-an', 'leitstand:autopilot-aus', 'leitstand:autopilot-fragen-zeigen', 'leitstand:autopilot-bericht-weg', 'leitstand:autopilot-runden']
+const KURZ = ['autopilot-an', 'autopilot-aus', 'autopilot-fragen-zeigen', 'autopilot-bericht-weg', 'autopilot-runden']
+/** Die Kurzformen, die schon zur Zeit als eigener Mod Befehle waren; /autopilot-runden kam erst mit leitstand 0.63.11.0. */
+const KURZ_ALT = KURZ.slice(0, 4)
 
 test('die Tabelle der Befehle ist vollständig und steht in der Übersicht des Leitstands, Gruppe Autopilot', () => {
   expect(AUTOPILOT_BEFEHLE.map(b => b.name)).toEqual(NAMEN)
@@ -1088,7 +1090,8 @@ for (const b of AUTOPILOT_BEFEHLE) {
       for (const arg of ['hilfe', '?', ' Hilfe ']) {
         const t = await befehl$($ as never, name, arg)
         expect(t).toBe(befehlsHilfe(b))
-        for (const teil of [`/${b.name} · `, '\nWas: ', '\nButton: ', '\nGilt: ', '\nArgumente: keine.', `\nKurzform: /${kurzform(b.name)}`]) {
+        const argumente = b.argumente === '' ? '\nArgumente: keine.' : `\nArgumente: ${b.argumente}`
+        for (const teil of [`/${b.name} · `, '\nWas: ', '\nButton: ', '\nGilt: ', argumente, `\nKurzform: /${kurzform(b.name)}`]) {
           expect(t).toContain(teil)
         }
       }
@@ -1124,7 +1127,7 @@ test('/leitstand:hilfe nennt die Befehle des Autopiloten unter Autopilot, je mit
   // Unter dem Namen der Gruppe ein Satz, was der Autopilot tut; dann die Befehle und der Grundbefehl /autopilot.
   expect(zeilen[gruppe + 1]).toBe(AUTOPILOT_TUT)
   for (const [i, b] of AUTOPILOT_BEFEHLE.entries()) {
-    expect(zeilen[gruppe + 2 + i]).toBe(`/${b.name} · ${b.description}`)
+    expect(zeilen[gruppe + 2 + i]).toBe(`/${b.name}${b.argumentHint ? ` ${b.argumentHint}` : ''} · ${b.description}`)
   }
   expect(zeilen[gruppe + 2 + AUTOPILOT_BEFEHLE.length]).toBe(`/autopilot [an|aus] · ${AUTOPILOT_GRUNDBEFEHL.description}`)
 })
@@ -1206,7 +1209,7 @@ test('alte Namen: /autopilot-hilfe nennt /leitstand:hilfe; /autopilot-an ist heu
   mock.clock(on, { now: 1_000_000 })
   boden(on)
   await start($ as never)
-  expect(Object.keys(AUTOPILOT_ALTE)).toEqual(['autopilot-hilfe', ...KURZ])
+  expect(Object.keys(AUTOPILOT_ALTE)).toEqual(['autopilot-hilfe', ...KURZ_ALT])
   expect(ALTE_BEFEHLE.get('autopilot-hilfe')).toBe('leitstand:hilfe')
   for (const kurz of KURZ) {
     expect(ALTE_BEFEHLE.has(kurz)).toBe(false)
@@ -1390,4 +1393,136 @@ test('wartet ein Plan des Leitstands auf Freigabe, schiebt der Autopilot nicht a
   await $.classic.Stop({ stop_hook_active: false, background_tasks: [] } as never)
   await $.turn.complete({ answer: 'Die Notizen sind gelesen.', durationMs: 1000, isAborted: false, turnId: 't2', reason: 'answer' } as never)
   expect(angeschoben(eingang)).toHaveLength(1)
+})
+
+// --- Die Grenze je Chat: Auswahl in der Zeile und /leitstand:autopilot-runden (0.63.11.0) ---
+
+/** Liest die Grenze dieses Chats wie jeder Mod. */
+const GRENZE_LESER = {
+  name: 'grenze-leser',
+  register(on: On) {
+    on('command.run', { command: 'grenze-lesen' }, async $ => {
+      const { value } = (await $.state.get({ plugin: 'leitstand', key: 'autopilotGrenze' } as never)) as { value?: unknown }
+      return { text: JSON.stringify(value ?? null) }
+    })
+  },
+}
+
+async function grenzeImZustand($: Test$) {
+  const r = await $.command.run({ command: 'grenze-lesen', args: '' } as never)
+  return JSON.parse(String(r.text)) as number | null
+}
+
+test('die Grenze dieses Chats gilt vor der Einstellung: nach zwei Anstößen Rundengrenze', grenze(10), async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const eingang = boden(on)
+  await start($ as never)
+  expect(await befehl$($ as never, 'leitstand:autopilot-runden', '2')).toBe(grenzeSatz(2))
+  await befehl($ as never)
+  await person($ as never, 'Bau das.')
+  await runde($ as never, 't1', 'Weiter?')
+  await runde($ as never, 't2', 'Weiter?')
+  await runde($ as never, 't3', 'Weiter?')
+  expect(angeschoben(eingang)).toHaveLength(2)
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
+  expect(await leiste(ui as never)).toContain(`vorbei, ${GRUND_GRENZE}, nach 0 min: 2x angeschoben`)
+})
+
+test('die Zeile zeigt in der App eine Auswahl der Grenze mit Zehnern und den Stand x von y', { plugins: [GRENZE_LESER], options: { ...AUS, autopilotMaxRunden: 15 } }, async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const toasts: string[] = []
+  boden(on, { toasts })
+  await start($ as never)
+  await befehl($ as never)
+  await person($ as never, 'Bau das.')
+  await runde($ as never, 't1', 'Weiter?')
+
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
+  const auswahl = await ui.find({ type: 'Select', key: 'ap-grenze' })
+  expect(auswahl).toBeDefined()
+  // 15 aus der Einstellung liegt auf keinem Zehner: Sie steht zusätzlich an ihrer Stelle.
+  const optionen = auswahl?.props.options as { value: string; label: string }[]
+  expect(optionen.map(o => o.value)).toEqual(['10', '15', '20', '30', '40', '50', '60', '70', '80', '90', '100'])
+  expect(optionen[1]?.label).toBe('15 Anstöße')
+  expect(optionen.length).toBeLessThanOrEqual(12)
+  expect(auswahl?.props.value).toBe('15')
+  expect(grenzeOptionen(30)).toHaveLength(10)
+  expect(await leiste(ui as never)).toContain('1 von 15')
+  // Die Auswahl steht nicht in der Knopf-Box, und die Zeile bleibt eine Zeile.
+  expect((await zeileMit(ui as never, 'ap-beenden'))?.knoepfe).toEqual(['ap-beenden'])
+  expect(await teile(ui as never)).toHaveLength(1)
+
+  // Eine Wahl schreibt die Grenze dieses Chats und sagt es per Toast.
+  expect(await grenzeImZustand($ as never)).toBeNull()
+  await ui.select({ key: 'ap-grenze', value: '40' })
+  expect(await grenzeImZustand($ as never)).toBe(40)
+  expect(toasts).toContain(grenzeSatz(40))
+  const danach = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
+  const neu = await danach.find({ type: 'Select', key: 'ap-grenze' })
+  expect(neu?.props.value).toBe('40')
+  expect((neu?.props.options as unknown[]).length).toBe(10)
+  expect(await leiste(danach as never)).toContain('1 von 40')
+})
+
+test('im Terminal keine Auswahl, nur der Stand x von y; vorbei weder Stand noch Auswahl', grenze(10), async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  boden(on)
+  await start($ as never)
+  await befehl($ as never)
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
+  expect(await ui.find({ type: 'Select', key: 'ap-grenze' })).toBeUndefined()
+  expect(await leiste(ui as never)).toContain('0 von 10')
+  await befehl$($ as never, 'autopilot-runden', '25')
+  const neu = await geprueft(await $.ui.mount({ ...BAND, surface: 'terminal', props: props() }))
+  expect(await leiste(neu as never)).toContain('0 von 25')
+  // Vorbei: der Bericht ohne Stand und ohne Auswahl.
+  await befehl($ as never, 'aus')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const vorbei = await geprueft(await $.ui.mount({ ...BAND, surface, props: props() }))
+    expect(await leiste(vorbei as never)).not.toContain('von 25')
+    expect(await vorbei.find({ type: 'Select', key: 'ap-grenze' })).toBeUndefined()
+  }
+})
+
+test('/leitstand:autopilot-runden setzt mit 1 bis 200, nennt ohne Zahl die Grenze und lehnt anderes ab, auch ohne Autopilot', { plugins: [GRENZE_LESER], options: { ...AUS, autopilotMaxRunden: 10 } }, async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  boden(on)
+  await start($ as never)
+  const nennt = (n: number) => `Der Autopilot schiebt in diesem Chat höchstens ${n} Runden in Folge an (Standard für neue Chats: 10, Einstellung autopilotMaxRunden).`
+  const erlaubt = 'Erlaubt ist eine ganze Zahl von 1 bis 200, etwa /leitstand:autopilot-runden 30; ohne Zahl nennt der Befehl die aktuelle Grenze.'
+  expect(await befehl$($ as never, 'leitstand:autopilot-runden')).toBe(nennt(10))
+  expect(await befehl$($ as never, 'leitstand:autopilot-runden', ' 30 ')).toBe('Der Autopilot schiebt in diesem Chat höchstens 30 Runden in Folge an.')
+  expect(await grenzeImZustand($ as never)).toBe(30)
+  expect(await befehl$($ as never, 'autopilot-runden', '', 'bridge')).toBe(nennt(30))
+  for (const falsch of ['0', '500', '201', '2.5', '-3', 'viel']) {
+    expect(await befehl$($ as never, 'leitstand:autopilot-runden', falsch)).toBe(erlaubt)
+  }
+  expect(await grenzeImZustand($ as never)).toBe(30)
+  expect(await befehl$($ as never, 'autopilot-runden', '1')).toBe('Der Autopilot schiebt in diesem Chat höchstens 1 Runde in Folge an.')
+  expect(await befehl$($ as never, 'autopilot-runden', '200')).toBe(grenzeSatz(200))
+  // Der Befehl schaltet den Autopiloten nicht ein.
+  const ui = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
+  expect(await leiste(ui as never)).not.toContain('Autopilot:')
+  // Die nächste Schicht in diesem Chat zeigt die gesetzte Grenze.
+  await befehl($ as never)
+  const an = await geprueft(await $.ui.mount({ ...BAND, surface: 'desktop', props: props() }))
+  const auswahl = await an.find({ type: 'Select', key: 'ap-grenze' })
+  expect(auswahl?.props.value).toBe('200')
+  expect((auswahl?.props.options as unknown[]).length).toBe(11)
+})
+
+test('/leitstand:autopilot-runden hilfe erklärt den Befehl mit Argument und Beispiel und setzt nichts', { plugins: [GRENZE_LESER], options: AUS }, async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  boden(on)
+  await start($ as never)
+  const eintrag = AUTOPILOT_BEFEHLE.find(b => b.name === 'leitstand:autopilot-runden')
+  expect(eintrag).toBeDefined()
+  for (const name of ['leitstand:autopilot-runden', 'autopilot-runden']) {
+    const t = await befehl$($ as never, name, 'hilfe')
+    expect(t).toBe(befehlsHilfe(eintrag as never))
+    expect(t).toContain('\nArgumente: Zahl von 1 bis 200; ohne Zahl nennt er die aktuelle Grenze')
+    expect(t).toContain('\nBeispiel: /leitstand:autopilot-runden 30')
+    expect(t).toContain('\nGilt: nur in diesem Chat.')
+  }
+  expect(await grenzeImZustand($ as never)).toBeNull()
 })

@@ -327,6 +327,13 @@ Mit Björn immer Deutsch, kurz, Ergebnis zuerst.
   importiertes Atom lehnt `claude plugin validate` ab. Am 2026-11-05 stellte ein Commit nach `git switch` mit
   `core.autocrlf=true` und `add` mit `core.autocrlf=false` BEFEHLE.md, CLAUDE.md und leitstand/plugin.json auf
   CRLF um; nach einem Zweigwechsel die Zeilenenden prüfen.
+- Autopilot (Teil des Leitstands): Er endet bei `AUTOPILOT-FERTIG` in den letzten drei Zeilen einer Antwort, an
+  der Rundengrenze (Anstöße in Folge ohne Nachricht der Person), wenn die Person unterbricht oder 🅰️/Beenden
+  drückt; er hält an nach zwei angeschobenen Runden ohne Werkzeug ("Claude kommt ohne dich nicht weiter"), nach
+  einer Ablehnung oder nach mehreren API-Fehlern. Seit leitstand 0.63.11.0 gilt die Rundengrenze je Chat: Auswahl
+  in seiner Zeile (10 bis 100, Atom `autopilotGrenze`) oder `/leitstand:autopilot-runden <1 bis 200>`; Standard
+  für neue Chats bleibt `autopilotMaxRunden`. `autopilot/teil.tsx` und `befehle.ts` liegen im Index als LF, im
+  Arbeitsbaum durch `core.autocrlf=true` als CRLF: vor dem Commit auf LF zurückstellen.
 - Platz im Band (seit leitstand 0.63.5.0 u. a.): Die App gibt `maxRows` fest 12, sichtbar sind etwa 13
   Zeilen (`scroll.bodyRows`, gelesen im App-Code). `hooks/band.ts` ist in leitstand, statistik,
   zusammenfassung, naechste-schritte und modellwahl wortgleich (nur Zeilenenden verschieden; jede Änderung

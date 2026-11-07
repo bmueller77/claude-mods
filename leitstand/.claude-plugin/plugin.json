@@ -1,6 +1,6 @@
 {
   "name": "leitstand",
-  "version": "0.63.10.0",
+  "version": "0.63.11.0",
   "description": "Zeigt in der Leiste über dem Eingabefeld, woran Claude arbeitet: den Plan als Checkliste, den Fortschritt und wann Claude dich braucht. Dazu Buttons für Pause und Weiter, Auto-Modus oder Gruppenarbeit, Autopilot, Kurzantworten, Selbstkritik, Dateien und den Schutz von Passwörtern; aus deinen Korrekturen schlägt er Regeln vor. Hilfe: /leitstand:hilfe. Grundlage: GlanceFlow von Antreas-Strb (MIT), mit Teilen von claude-reflect (BayramAnnakov, MIT) und claude-code-filetree (Kurt Buhler, MIT).",
   "author": {
     "name": "Antreas-Strb"
@@ -126,7 +126,7 @@
     "autopilotMaxRunden": {
       "type": "number",
       "title": "Autopilot: Höchstzahl angeschobener Runden",
-      "description": "So oft schiebt der Autopilot Claude höchstens in Folge an: Bleibt Claude nach einer Runde unfertig stehen, schickt der Autopilot eine neue Nachricht, weiterzumachen. Danach endet er. Jede angeschobene Runde kostet Tokens wie eine eigene Nachricht; eine Nachricht von dir zählt von vorn. Solange Helfer im Hintergrund laufen, schiebt er nicht an. Gilt für neue Chats.",
+      "description": "So oft schiebt der Autopilot Claude höchstens in Folge an: Bleibt Claude nach einer Runde unfertig stehen, schickt der Autopilot eine neue Nachricht, weiterzumachen. Danach endet er. Jede angeschobene Runde kostet Tokens wie eine eigene Nachricht; eine Nachricht von dir zählt von vorn. Solange Helfer im Hintergrund laufen, schiebt er nicht an. Gilt für neue Chats; in einem Chat stellst du sie in der Zeile des Autopiloten oder mit /leitstand:autopilot-runden um.",
       "default": 10
     }
   }

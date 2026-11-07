@@ -122,6 +122,7 @@ Die Checkliste über der Eingabe: Plan, Fortschritt, Helfer, Verlauf und Teamber
 | `/leitstand:autopilot-aus` | Autopilot ausschalten; danach steht sein Bericht in der Leiste |
 | `/leitstand:autopilot-fragen-zeigen` | Die Fragen, die Claude im Autopiloten selbst entschieden hat, als Text |
 | `/leitstand:autopilot-bericht-weg` | Den Bericht des beendeten Autopiloten aus der Leiste wegräumen |
+| `/leitstand:autopilot-runden [Zahl]` | Wie oft der Autopilot in diesem Chat höchstens in Folge anschiebt |
 
 ### Schutz
 

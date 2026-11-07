@@ -74,6 +74,11 @@ const zeigeFragen = atom({ plugin: 'leitstand', key: 'autopilotZeigeFragen' } as
  */
 const stopp = atom({ plugin: 'leitstand', key: 'autopilotStop' } as const, null as number | null)
 /** Ob der Leitstand an ist und was seine Checkliste hält: Wartet ihr Plan auf Freigabe, schiebt die Schicht nicht an. */
+/**
+ * Die Grenze der Anstöße in diesem Chat, gesetzt in der Zeile des Autopiloten oder mit /leitstand:autopilot-runden;
+ * null heißt: der Wert aus der Einstellung autopilotMaxRunden.
+ */
+const grenzeAtom = atom({ plugin: 'leitstand', key: 'autopilotGrenze' } as const, null as number | null)
 const leitstandAn = atom({ plugin: 'leitstand', key: 'glanceEnabled' } as const, true)
 const checkliste = atom({ plugin: 'leitstand', key: 'checklist' } as const, null as GlanceChecklist | null)
 
@@ -138,6 +143,32 @@ const STATUS: Record<AutopilotPhase, string> = {
   laeuft: 'Claude arbeitet ohne Rückfragen weiter',
   fertig: 'Claude meldet: alles erledigt',
   angehalten: 'angehalten',
+}
+
+/** Die kleinste und die größte Grenze, die /leitstand:autopilot-runden annimmt. */
+const GRENZE_MIN = 1
+const GRENZE_MAX = 200
+
+/** Die Zehner, die die Auswahl in der Zeile des Autopiloten anbietet. */
+const GRENZE_STUFEN: readonly number[] = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
+/** Der Satz, wenn die Grenze in diesem Chat neu gesetzt ist (Toast der Auswahl und Antwort des Befehls). */
+export function grenzeSatz(n: number): string {
+  return `Der Autopilot schiebt in diesem Chat höchstens ${rundenText(n)} in Folge an.`
+}
+
+/** "1 Runde", "10 Runden". */
+function rundenText(n: number): string {
+  return n === 1 ? '1 Runde' : `${n} Runden`
+}
+
+/**
+ * Die Optionen der Auswahl: die Zehner von 10 bis 100; liegt die aktuelle Grenze nicht darauf (etwa 15), steht sie
+ * zusätzlich an ihrer Stelle. Höchstens 11 Optionen.
+ */
+export function grenzeOptionen(aktuell: number): { value: string; label: string }[] {
+  const werte = GRENZE_STUFEN.includes(aktuell) ? [...GRENZE_STUFEN] : [...GRENZE_STUFEN, aktuell].sort((a, b) => a - b)
+  return werte.map(n => ({ value: String(n), label: n === 1 ? '1 Anstoß' : `${n} Anstöße` }))
 }
 
 /** Was ein Befehl des Autopiloten sagt, wenn er scheitert. */
@@ -260,6 +291,39 @@ async function planWartet($: $): Promise<boolean> {
   }
 }
 
+/** Ob ein Wert als Grenze taugt: eine ganze Zahl ab 1. */
+function istGrenze(n: unknown): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n >= GRENZE_MIN
+}
+
+/** Die Grenze dieses Chats: die gesetzte, sonst die aus der Einstellung. Scheitert das Lesen, gilt die Einstellung. */
+async function grenzeLesen($: $): Promise<number> {
+  try {
+    const n: unknown = await read($, grenzeAtom)
+    return istGrenze(n) ? n : maxRunden
+  } catch {
+    return maxRunden
+  }
+}
+
+async function grenzeSetzen($: $, n: number): Promise<void> {
+  await update($, grenzeAtom, () => n)
+}
+
+/** /leitstand:autopilot-runden [Zahl]: setzt die Grenze dieses Chats oder nennt sie. */
+async function rundenBefehl($: $, args: string): Promise<string> {
+  const arg = args.trim()
+  if (arg === '') {
+    return `Der Autopilot schiebt in diesem Chat höchstens ${rundenText(await grenzeLesen($))} in Folge an (Standard für neue Chats: ${maxRunden}, Einstellung autopilotMaxRunden).`
+  }
+  const n = /^\d+$/.test(arg) ? Number(arg) : NaN
+  if (!Number.isInteger(n) || n < GRENZE_MIN || n > GRENZE_MAX) {
+    return `Erlaubt ist eine ganze Zahl von ${GRENZE_MIN} bis ${GRENZE_MAX}, etwa /leitstand:autopilot-runden 30; ohne Zahl nennt der Befehl die aktuelle Grenze.`
+  }
+  await grenzeSetzen($, n)
+  return grenzeSatz(n)
+}
+
 /**
  * Vor jedem Anstoß: Läuft Hintergrundarbeit oder wartet ein Plan auf Freigabe, wartet die Schicht ('warten'), ohne zu
  * zählen. Hat sie so oft angeschoben, wie autopilotMaxRunden erlaubt, endet sie mit dem Grund Rundengrenze ('ende').
@@ -269,7 +333,7 @@ async function vorDemAnstoss($: $, s: AutopilotSchicht): Promise<'warten' | 'end
   if ((await hintergrundLaeuft($)) || (await planWartet($))) {
     return 'warten'
   }
-  if ((s.runden ?? 0) >= maxRunden) {
+  if ((s.runden ?? 0) >= (await grenzeLesen($))) {
     await beenden($, GRUND_GRENZE)
     return 'ende'
   }
@@ -414,8 +478,10 @@ async function berichtWegText($: $): Promise<string> {
 }
 
 /** Was ein Befehl tut, nach seinem vollen Namen; zurück kommt die Antwort. */
-async function wirke($: $, name: string, handy: boolean): Promise<string> {
+async function wirke($: $, name: string, handy: boolean, args: string): Promise<string> {
   switch (name) {
+    case 'leitstand:autopilot-runden':
+      return rundenBefehl($, args)
     case 'leitstand:autopilot-an':
       return schalte($, true)
     case 'leitstand:autopilot-aus':
@@ -486,7 +552,7 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
       return antwort(befehlsHilfe(eintrag))
     }
     try {
-      return antwort(await wirke($, eintrag.name, e.origin?.kind === 'bridge'))
+      return antwort(await wirke($, eintrag.name, e.origin?.kind === 'bridge', e.args ?? ''))
     } catch {
       return antwort(fehlerText(eintrag.name))
     }
@@ -660,7 +726,33 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
     const rest = await next(e).catch(() => null)
     const offen = await read($, zeigeFragen)
     const fragen = s ? s.fragen : (b?.fragen ?? [])
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const table = $.ui.resolve(e)
+    const { Box, Button, Text } = table
+    // Die Grenze dieses Chats und der Stand seit der letzten Nachricht der Person, solange eine Schicht läuft (auch
+    // angehalten). In App und VS Code dazu eine Auswahl. Im Terminal nur der Stand: Ein Hinweis auf /autopilot-runden
+    // passte bei 75 bis 80 Spalten nicht mehr in die Zeile (die Leitstand-Tests zum Terminal prüfen das).
+    const grenze = s ? await grenzeLesen($) : 0
+    const Select = (e.surface === 'desktop' || e.surface === 'vscode') && 'Select' in table ? table.Select : undefined
+    const grenzeTeil = s ? (
+      <Box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+        <Text dimColor>{`${s.runden ?? 0} von ${grenze}`}</Text>
+        {Select ? (
+          <Select
+            key="ap-grenze"
+            value={String(grenze)}
+            options={grenzeOptionen(grenze)}
+            onSelect={wert => {
+              const n = Number(wert)
+              if (istGrenze(n)) {
+                void grenzeSetzen($, n)
+                  .then(() => $.ui.toast(grenzeSatz(n)))
+                  .catch(() => {})
+              }
+            }}
+          />
+        ) : null}
+      </Box>
+    ) : null
 
     const zeile = s ? (
       <Text wrap="wrap">
@@ -685,6 +777,7 @@ export function registerAutopilot(on: On, options: PluginOptions): void {
           <Box flexGrow={1} flexShrink={1} minWidth={0}>
             {zeile}
           </Box>
+          {grenzeTeil}
           <Box flexDirection="row" gap={2} flexShrink={0}>
             {fragen.length > 0 ? <Button key="ap-fragen" label={offen ? 'Fragen zu' : `Fragen (${fragen.length})`} onPress={() => void fragenUmschalten($)} /> : null}
             {s ? (

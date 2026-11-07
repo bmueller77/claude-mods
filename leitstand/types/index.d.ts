@@ -488,6 +488,8 @@ declare module 'claude-code' {
       autopilotBericht: AutopilotBericht | null
       /** Autopilot: ob die Liste der selbst entschiedenen Fragen aufgeklappt ist. */
       autopilotZeigeFragen: boolean
+      /** Autopilot: die Grenze der Anstöße in diesem Chat (Zeile des Autopiloten, /leitstand:autopilot-runden); null: der Wert aus autopilotMaxRunden. */
+      autopilotGrenze: number | null
       /** Skill-Menü: die Namen der Skills dieser Sitzung, sortiert; null, bis der Teil skills sie geladen hat. */
       skillListe: readonly string[] | null
       /** Skill-Menü: die Kategorien des Fensters Skills (von Haiku, vorläufig nach Plugin, wenn Haiku scheiterte); null, solange Haiku sortiert und keine frühere Sortierung bekannt ist. */
